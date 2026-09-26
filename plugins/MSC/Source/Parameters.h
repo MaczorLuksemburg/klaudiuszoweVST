@@ -22,7 +22,10 @@ namespace msc
         inline constexpr const char* dpShape  = "dp_shape";
         inline constexpr const char* dpCutoff = "dp_cutoff";
         inline constexpr const char* dpSlope  = "dp_slope";
-        inline constexpr const char* dpClip   = "dp_clip";
+        inline constexpr const char* dpClip   = "dp_clip";    // clips the modulation (pan position), not the audio
+        inline constexpr const char* dpSource = "dp_src";
+        inline constexpr const char* dpComp   = "dp_comp";
+        inline constexpr const char* dpThresh = "dp_thresh";
 
         // Module 2: Haas delay and polarity.
         inline constexpr const char* hsOn    = "hs_on";
@@ -47,7 +50,11 @@ namespace msc
     }
 
     enum Source   { sourceStereo, sourceMono, sourceLeft, sourceRight };
-    enum ClipMode { clipOff, clipHard, clipSoft, clipExtreme };
+    enum ClipMode  { clipOff, clipHard, clipSoft, clipExtreme };
+    enum ModSource { modSum, modLeft, modRight };
+
+    // Compressor ratios for the dynamic-pan modulator, matching the "Comp" choices.
+    inline constexpr float modCompRatios[] { 1.0f, 2.0f, 4.0f, 8.0f };
 
     juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 

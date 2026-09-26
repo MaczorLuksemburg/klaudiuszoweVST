@@ -178,19 +178,64 @@ namespace
             expect (diff > 0.01f && allFinite (out), "chorus creates stereo from a mono source");
         }
 
-        // Dynamic pan: stays finite, and hard clip keeps it within 0 dBFS.
+        // Dynamic pan: with any mod clip the balance law only turns a side down, never up.
+        for (int clipMode : { msc::clipHard, msc::clipSoft, msc::clipExtreme })
         {
             resetAll (p);
             setParam (p, msc::ids::dpOn, 1.0f);
             setParam (p, msc::ids::dpAmount, 1.0f);
             setParam (p, msc::ids::dpMax, 1000.0f);
-            setParam (p, msc::ids::dpClip, (float) msc::clipHard);
+            setParam (p, msc::ids::dpComp, 3.0f);
+            setParam (p, msc::ids::dpClip, (float) clipMode);
             const auto out = run (p, noise);
-            expect (allFinite (out, 1.0f), "dynamic pan at 1000 % with hard clip stays within +-1");
 
-            setParam (p, msc::ids::dpAmount, 0.0f);
+            bool neverLouder = allFinite (out);
+            for (int ch = 0; ch < 2; ++ch)
+                for (int i = 0; i < out.getNumSamples(); ++i)
+                    neverLouder = neverLouder && std::abs (out.getSample (ch, i)) <= std::abs (noise.getSample (ch, i)) + 1.0e-6f;
+
+            expect (neverLouder, "dynamic pan at 1000 % + 8:1 comp, mod clip " + juce::String (clipMode) + ": no sample gets louder");
+        }
+
+        {
+            resetAll (p);
+            setParam (p, msc::ids::dpOn, 1.0f);
             setParam (p, msc::ids::dpClip, (float) msc::clipOff);
-            expect (maxDifference (run (p, noise), noise) < 1.0e-6f, "dynamic pan at 0 % with clip off is transparent");
+            expect (maxDifference (run (p, noise), noise) < 1.0e-6f, "dynamic pan at 0 % is transparent");
+        }
+
+        // Mod source: a silent right channel as the modulator leaves the audio untouched.
+        {
+            auto leftOnly = noise;
+            leftOnly.clear (1, 0, leftOnly.getNumSamples());
+
+            resetAll (p);
+            setParam (p, msc::ids::dpOn, 1.0f);
+            setParam (p, msc::ids::dpAmount, 0.5f);
+            setParam (p, msc::ids::dpSource, (float) msc::modRight);
+            expect (maxDifference (run (p, leftOnly), leftOnly) < 1.0e-6f, "mod source Right with a silent right channel does nothing");
+
+            setParam (p, msc::ids::dpSource, (float) msc::modLeft);
+            expect (maxDifference (run (p, leftOnly), leftOnly) > 0.01f, "mod source Left with the same input pans");
+        }
+
+        // Comp lifts quiet modulators: a -40 dB signal pans much harder with 8:1.
+        {
+            juce::AudioBuffer<float> quiet (noise);
+            quiet.applyGain (0.02f);
+
+            auto panAmount = [&] (float compIndex)
+            {
+                resetAll (p);
+                setParam (p, msc::ids::dpOn, 1.0f);
+                setParam (p, msc::ids::dpAmount, 0.5f);
+                setParam (p, msc::ids::dpComp, compIndex);
+                return maxDifference (run (p, quiet), quiet, 4800);
+            };
+
+            const float without = panAmount (0.0f), with = panAmount (3.0f);
+            expect (with > without * 10.0f, "8:1 mod comp makes a quiet signal pan harder (" + juce::String (without, 5)
+                                                + " -> " + juce::String (with, 5) + ")");
         }
 
         // Every factory preset, odd block sizes, mono-compatible input: finite output.
@@ -278,7 +323,8 @@ namespace
         p.presets.loadPreset (1);
         for (const char* id : { msc::ids::dpOn, msc::ids::hsOn, msc::ids::chOn })
             setParam (p, id, 1.0f);
-        setParam (p, msc::ids::dpAmount, 0.4f);
+        setParam (p, msc::ids::dpAmount, 0.6f);
+        setParam (p, msc::ids::dpComp, 2.0f);
         setParam (p, msc::ids::dpShape, 0.25f);
         setParam (p, msc::ids::dpCutoff, 600.0f);
         setParam (p, msc::ids::hsRight, 12.0f);
@@ -293,6 +339,7 @@ namespace
             p.processBlock (block, midi);
             p.inputAnalyzer.process();    // what the displays' timers would do
             p.dynPanAnalyzer.process();
+            p.modScope.process();
         }
 
         saveSnapshot (*editor, folder.getChildFile ("msc-active.png"));

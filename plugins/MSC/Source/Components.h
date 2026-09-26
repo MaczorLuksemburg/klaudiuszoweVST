@@ -116,6 +116,26 @@ namespace msc::ui
     };
 
     //==============================================================================
+    // FreeClip-style view of the dynamic-pan modulation: scrolling waveform before (dim)
+    // and after (accent) the mod clipper, plus the clipper's transfer curve.
+    class ModScopeDisplay : public juce::Component, public juce::SettableTooltipClient, private juce::Timer
+    {
+    public:
+        ModScopeDisplay (APVTS&, ModScope&, juce::Colour accent);
+        ~ModScopeDisplay() override;
+
+        void paint (juce::Graphics&) override;
+
+    private:
+        void timerCallback() override;
+
+        ModScope& scope;
+        juce::Colour accent;
+        std::atomic<float>* clipMode;
+        float lastClipMode = -1.0f;
+    };
+
+    //==============================================================================
     // Shape slider (LP / BP / HP), slope menu, display and cutoff slider.
     class FilterSection : public juce::Component
     {
@@ -154,21 +174,25 @@ namespace msc::ui
     class DynamicPanModule : public ModulePanel
     {
     public:
-        DynamicPanModule (APVTS&, SpectrumAnalyzer&);
+        DynamicPanModule (APVTS&, SpectrumAnalyzer&, ModScope&);
 
     private:
         void layoutContent (juce::Rectangle<int>) override;
         void paintContent (juce::Graphics&) override;
         float maxPercent() const;
+        void setUpNumberBox (juce::Slider&, const juce::String& tooltip);
+        void setUpCombo (juce::ComboBox&, const char* paramId, const juce::String& tooltip);
 
         Knob amount;
-        juce::Slider maxBox;
-        juce::ComboBox clip;
-        std::unique_ptr<APVTS::SliderAttachment> maxAttachment;
-        std::unique_ptr<APVTS::ComboBoxAttachment> clipAttachment;
+        juce::Slider maxBox, thresholdBox;
+        juce::ComboBox source, comp, clip;
+        std::vector<std::unique_ptr<APVTS::SliderAttachment>> sliderAttachments;
+        std::vector<std::unique_ptr<APVTS::ComboBoxAttachment>> comboAttachments;
         std::unique_ptr<juce::ParameterAttachment> maxWatcher;
+        ModScopeDisplay scope;
         FilterSection filter;
-        juce::Rectangle<int> maxCaption, clipCaption, filterCaption;
+        juce::Rectangle<int> sourceCaption, compCaption, thresholdCaption, maxCaption, clipCaption,
+                             scopeCaption, filterCaption;
     };
 
     class HaasModule : public ModulePanel

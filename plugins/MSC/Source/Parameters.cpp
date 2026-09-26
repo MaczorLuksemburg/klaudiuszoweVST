@@ -144,7 +144,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
                       shapeParam (ids::dpShape, "Dyn Pan Filter Shape", 0.0f),
                       hzParam (ids::dpCutoff, "Dyn Pan Cutoff", 20.0f, 22000.0f, 22000.0f),
                       choiceParam (ids::dpSlope, "Dyn Pan Slope", slopes, 0),
-                      choiceParam (ids::dpClip, "Dyn Pan Clip", { "Off", "Hard", "Soft", "Extreme" }, clipSoft));
+                      choiceParam (ids::dpClip, "Dyn Pan Mod Clip", { "Off", "Hard", "Soft", "Extreme" }, clipSoft),
+                      choiceParam (ids::dpSource, "Dyn Pan Mod Source", { "Sum", "Left", "Right" }, modSum),
+                      choiceParam (ids::dpComp, "Dyn Pan Mod Comp", { "Off", "2:1", "4:1", "8:1" }, 0),
+                      floatParam (ids::dpThresh, "Dyn Pan Mod Threshold", Range (-60.0f, 0.0f, 0.1f), -30.0f,
+                                  [] (float v, int) { return juce::String (v, 1) + " dB"; }));
 
     auto haas = std::make_unique<juce::AudioProcessorParameterGroup> ("haas", "Haas", " | ");
     haas->addChild (boolParam (ids::hsOn, "Haas On"),

@@ -121,4 +121,81 @@ namespace msc
         std::atomic<bool> enabled { false };
         std::atomic<double> sampleRate { 44100.0 };
     };
+
+    // Scrolling min/max history of the dynamic-pan modulation before and after the mod clipper.
+    class ModScope
+    {
+    public:
+        struct Column { float preMin = 0, preMax = 0, postMin = 0, postMax = 0; };
+
+        static constexpr int numColumns = 320;
+        static constexpr double secondsPerColumn = 0.008;   // ~2.5 s of history
+
+        ModScope() { fifoColumns.resize ((size_t) fifo.getTotalSize()); }
+
+        void setEnabled (bool shouldBeEnabled) { enabled.store (shouldBeEnabled); }
+        bool isEnabled() const                 { return enabled.load (std::memory_order_relaxed); }
+
+        // Audio thread.
+        void prepare (double sampleRate)
+        {
+            samplesPerColumn = juce::jmax (1, (int) (sampleRate * secondsPerColumn));
+            counter = 0;
+            current = {};
+        }
+
+        void push (float pre, float post)
+        {
+            if (counter == 0)
+                current = { pre, pre, post, post };
+
+            current.preMin  = juce::jmin (current.preMin, pre);
+            current.preMax  = juce::jmax (current.preMax, pre);
+            current.postMin = juce::jmin (current.postMin, post);
+            current.postMax = juce::jmax (current.postMax, post);
+
+            if (++counter >= samplesPerColumn)
+            {
+                counter = 0;
+                const auto scope = fifo.write (1);
+                if (scope.blockSize1 > 0)
+                    fifoColumns[(size_t) scope.startIndex1] = current;
+            }
+        }
+
+        // Message thread. Returns true when new columns arrived.
+        bool process()
+        {
+            const int ready = fifo.getNumReady();
+            if (ready == 0)
+                return false;
+
+            const auto scope = fifo.read (ready);
+            auto append = [this] (int start, int size)
+            {
+                for (int i = 0; i < size; ++i)
+                {
+                    history[(size_t) writeIndex] = fifoColumns[(size_t) (start + i)];
+                    writeIndex = (writeIndex + 1) % numColumns;
+                }
+            };
+
+            append (scope.startIndex1, scope.blockSize1);
+            append (scope.startIndex2, scope.blockSize2);
+            return true;
+        }
+
+        // 0 = oldest, numColumns - 1 = newest.
+        const Column& getColumn (int index) const { return history[(size_t) ((writeIndex + index) % numColumns)]; }
+
+    private:
+        juce::AbstractFifo fifo { 512 };
+        std::vector<Column> fifoColumns;
+        std::array<Column, numColumns> history {};
+        int writeIndex = 0;
+
+        int samplesPerColumn = 384, counter = 0;
+        Column current;
+        std::atomic<bool> enabled { false };
+    };
 }

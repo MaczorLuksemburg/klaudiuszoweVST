@@ -288,7 +288,9 @@ void FilterDisplay::paint (juce::Graphics& g)
     const float fc = cutoff->load(), sh = shape->load();
     const int slopeIndex = (int) std::lround (slope->load());
 
-    auto yForDb = [h] (float db) { return juce::jmap (juce::jlimit (-48.0f, 6.0f, db), -48.0f, 6.0f, h - 1.0f, 4.0f); };
+    // Not clamped at the bottom: where the response falls below -48 dB the curve leaves the
+    // display (and is clipped away) instead of lying flat along the floor like a shelf.
+    auto yForDb = [h] (float db) { return juce::jmap (juce::jmin (6.0f, db), -48.0f, 6.0f, h - 1.0f, 4.0f); };
 
     juce::Path curve;
 
@@ -302,8 +304,8 @@ void FilterDisplay::paint (juce::Graphics& g)
     }
 
     juce::Path fill (curve);
-    fill.lineTo (w, h);
-    fill.lineTo (0.0f, h);
+    fill.lineTo (w, h + 100.0f);
+    fill.lineTo (0.0f, h + 100.0f);
     fill.closeSubPath();
 
     g.setGradientFill (juce::ColourGradient (accent.withAlpha (0.28f), 0.0f, 0.0f, accent.withAlpha (0.04f), 0.0f, h, false));
@@ -313,7 +315,7 @@ void FilterDisplay::paint (juce::Graphics& g)
 
     // Cutoff handle.
     const float cx = xForFreq (juce::jlimit (minFreq, maxFreq, fc));
-    const float cy = yForDb (juce::Decibels::gainToDecibels (dsp::filterMagnitude (fc, fc, sh, slopeIndex), -60.0f));
+    const float cy = juce::jmin (h - 7.0f, yForDb (juce::Decibels::gainToDecibels (dsp::filterMagnitude (fc, fc, sh, slopeIndex), -60.0f)));
     g.setColour (accent.withAlpha (0.25f));
     g.drawVerticalLine (juce::roundToInt (cx), 0.0f, h);
     g.setColour (pal.background);
@@ -459,9 +461,134 @@ void InputModule::paintContent (juce::Graphics& g)
 }
 
 //==============================================================================
-DynamicPanModule::DynamicPanModule (APVTS& state, SpectrumAnalyzer& analyzer)
+ModScopeDisplay::ModScopeDisplay (APVTS& state, ModScope& modScope, juce::Colour accentColour)
+    : scope (modScope), accent (accentColour), clipMode (state.getRawParameterValue (ids::dpClip))
+{
+    setTooltip ("Pan movement before (dim) and after (bright) the mod clipper. Up = right, down = left.");
+    scope.setEnabled (true);
+    startTimerHz (30);
+}
+
+ModScopeDisplay::~ModScopeDisplay()
+{
+    scope.setEnabled (false);
+}
+
+void ModScopeDisplay::timerCallback()
+{
+    const float mode = clipMode->load();
+
+    if (scope.process() || mode != lastClipMode)
+    {
+        lastClipMode = mode;
+        repaint();
+    }
+}
+
+void ModScopeDisplay::paint (juce::Graphics& g)
+{
+    const auto& pal = palette();
+    auto area = getLocalBounds().toFloat();
+
+    constexpr float range = 1.6f;   // +-1 is a hard pan; the rest shows how far the modulation overshoots
+    const int mode = (int) std::lround (clipMode->load());
+
+    auto panel = [&] (juce::Rectangle<float> r)
+    {
+        g.setColour (pal.background.withAlpha (0.85f));
+        g.fillRoundedRectangle (r, 5.0f);
+    };
+
+    // ---- transfer curve (square, right) ----
+    const auto transfer = area.removeFromRight (area.getHeight());
+    area.removeFromRight (8.0f);
+    const auto wave = area;
+
+    panel (transfer);
+    {
+        juce::Graphics::ScopedSaveState saved (g);
+        g.reduceClipRegion (transfer.toNearestInt());
+
+        const auto t = transfer.reduced (6.0f);
+        auto toPoint = [&] (float in, float out)
+        {
+            return juce::Point<float> (juce::jmap (in, -range, range, t.getX(), t.getRight()),
+                                       juce::jmap (out, -range, range, t.getBottom(), t.getY()));
+        };
+
+        g.setColour (juce::Colours::white.withAlpha (0.06f));
+        g.drawLine ({ toPoint (-range, 0.0f), toPoint (range, 0.0f) });
+        g.drawLine ({ toPoint (0.0f, -range), toPoint (0.0f, range) });
+
+        const float dashes[] { 3.0f, 3.0f };
+        g.setColour (pal.textDim.withAlpha (0.35f));
+        g.drawDashedLine ({ toPoint (-range, 1.0f), toPoint (range, 1.0f) }, dashes, 2);
+        g.drawDashedLine ({ toPoint (-range, -1.0f), toPoint (range, -1.0f) }, dashes, 2);
+        g.drawLine ({ toPoint (-range, -range), toPoint (range, range) }, 0.8f);
+
+        juce::Path curve;
+        for (int i = 0; i <= 64; ++i)
+        {
+            const float in = juce::jmap ((float) i, 0.0f, 64.0f, -range, range);
+            const auto point = toPoint (in, dsp::clip (in, mode));
+            if (i == 0) curve.startNewSubPath (point);
+            else        curve.lineTo (point);
+        }
+
+        g.setColour (accent);
+        g.strokePath (curve, juce::PathStrokeType (1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+        // Where the latest peak sits on the curve.
+        const auto& latest = scope.getColumn (ModScope::numColumns - 1);
+        const float peak = std::abs (latest.preMax) > std::abs (latest.preMin) ? latest.preMax : latest.preMin;
+        const auto dot = toPoint (juce::jlimit (-range, range, peak), juce::jlimit (-range, range, dsp::clip (peak, mode)));
+        g.setColour (pal.background);
+        g.fillEllipse (juce::Rectangle<float> (9.0f, 9.0f).withCentre (dot));
+        g.setColour (accent);
+        g.drawEllipse (juce::Rectangle<float> (9.0f, 9.0f).withCentre (dot), 1.6f);
+    }
+
+    // ---- scrolling waveform (left) ----
+    panel (wave);
+    juce::Graphics::ScopedSaveState saved (g);
+    g.reduceClipRegion (wave.toNearestInt());
+
+    const float cy = wave.getCentreY();
+    const float halfHeight = wave.getHeight() * 0.5f - 4.0f;
+    auto yFor = [&] (float v) { return cy - juce::jlimit (-range, range, v) / range * halfHeight; };
+
+    g.setColour (juce::Colours::white.withAlpha (0.06f));
+    g.drawHorizontalLine (juce::roundToInt (cy), wave.getX(), wave.getRight());
+
+    const float dashes[] { 3.0f, 3.0f };
+    g.setColour (pal.textDim.withAlpha (0.35f));
+    g.drawDashedLine ({ wave.getX(), yFor (1.0f), wave.getRight(), yFor (1.0f) }, dashes, 2);
+    g.drawDashedLine ({ wave.getX(), yFor (-1.0f), wave.getRight(), yFor (-1.0f) }, dashes, 2);
+
+    const int columns = juce::jmin (ModScope::numColumns, (int) wave.getWidth());
+
+    for (int i = 0; i < columns; ++i)
+    {
+        const auto& column = scope.getColumn (ModScope::numColumns - columns + i);
+        const float x = wave.getX() + (float) i + 0.5f;
+
+        g.setColour (pal.textDim.withAlpha (0.35f));
+        g.drawLine (x, yFor (column.preMax), x, yFor (column.preMin) + 0.5f, 1.0f);
+        g.setColour (accent.withAlpha (0.9f));
+        g.drawLine (x, yFor (column.postMax), x, yFor (column.postMin) + 0.5f, 1.0f);
+    }
+
+    g.setFont (klaud::font (9.5f, true));
+    g.setColour (pal.textDim.withAlpha (0.7f));
+    g.drawText ("R", juce::Rectangle<float> (wave.getX() + 5.0f, yFor (1.0f) - 12.0f, 12.0f, 11.0f), juce::Justification::centredLeft, false);
+    g.drawText ("L", juce::Rectangle<float> (wave.getX() + 5.0f, yFor (-1.0f) + 1.0f, 12.0f, 11.0f), juce::Justification::centredLeft, false);
+}
+
+//==============================================================================
+DynamicPanModule::DynamicPanModule (APVTS& state, SpectrumAnalyzer& analyzer, ModScope& modScope)
     : ModulePanel (state, ids::dpOn, "DYNAMIC PAN", "the signal pans itself", colours::dynPan),
       amount (state, ids::dpAmount, "AMOUNT", colours::dynPan),
+      scope (state, modScope, colours::dynPan),
       filter (state, ids::dpShape, ids::dpCutoff, ids::dpSlope, analyzer, colours::dynPan)
 {
     amount.slider.textFromValueFunction = [this] (double v) { return juce::String (juce::roundToInt (v * maxPercent())) + " %"; };
@@ -471,26 +598,41 @@ DynamicPanModule::DynamicPanModule (APVTS& state, SpectrumAnalyzer& analyzer)
     };
     addAndMakeVisible (amount);
 
-    maxBox.setSliderStyle (juce::Slider::LinearBar);
-    maxBox.setTextBoxStyle (juce::Slider::TextBoxLeft, false, 60, 24);
-    maxBox.setColour (juce::Slider::trackColourId, colours::dynPan);
-    maxBox.setSliderSnapsToMousePosition (false);
-    maxBox.setMouseDragSensitivity (400);
-    maxBox.setTooltip ("Maximum of the Amount knob. Drag or double-click to type.");
-    addAndMakeVisible (maxBox);
-    maxAttachment = std::make_unique<APVTS::SliderAttachment> (state, ids::dpMax, maxBox);
-    maxBox.setDoubleClickReturnValue (false, 0.0);
+    setUpNumberBox (maxBox, "Maximum of the Amount knob. Drag or double-click to type.");
+    sliderAttachments.push_back (std::make_unique<APVTS::SliderAttachment> (state, ids::dpMax, maxBox));
 
-    fillChoices (clip, getParam (state, ids::dpClip));
-    clip.setTooltip ("Clipper after the panning, for when the modulation pushes the level too high");
-    addAndMakeVisible (clip);
-    clipAttachment = std::make_unique<APVTS::ComboBoxAttachment> (state, ids::dpClip, clip);
+    setUpNumberBox (thresholdBox, "Compressor threshold. Everything below it is lifted by the ratio.");
+    sliderAttachments.push_back (std::make_unique<APVTS::SliderAttachment> (state, ids::dpThresh, thresholdBox));
 
+    setUpCombo (source, ids::dpSource, "Which channel drives the panning: the sum of both, left or right");
+    setUpCombo (comp, ids::dpComp, "Compresses the modulator (10 ms attack, 150 ms release, auto makeup) so quiet parts pan as hard as loud ones");
+    setUpCombo (clip, ids::dpClip, "Limits the pan movement to hard left/right. Shapes the modulation, not the audio.");
+
+    addAndMakeVisible (scope);
     addAndMakeVisible (filter);
 
     maxWatcher = std::make_unique<juce::ParameterAttachment> (getParam (state, ids::dpMax),
                                                               [this] (float) { amount.slider.updateText(); });
     maxWatcher->sendInitialUpdate();
+}
+
+void DynamicPanModule::setUpNumberBox (juce::Slider& box, const juce::String& tooltip)
+{
+    box.setSliderStyle (juce::Slider::LinearBar);
+    box.setTextBoxStyle (juce::Slider::TextBoxLeft, false, 60, 24);
+    box.setColour (juce::Slider::trackColourId, colours::dynPan);
+    box.setSliderSnapsToMousePosition (false);
+    box.setMouseDragSensitivity (400);
+    box.setTooltip (tooltip);
+    addAndMakeVisible (box);
+}
+
+void DynamicPanModule::setUpCombo (juce::ComboBox& box, const char* paramId, const juce::String& tooltip)
+{
+    fillChoices (box, getParam (apvts, paramId));
+    box.setTooltip (tooltip);
+    addAndMakeVisible (box);
+    comboAttachments.push_back (std::make_unique<APVTS::ComboBoxAttachment> (apvts, paramId, box));
 }
 
 float DynamicPanModule::maxPercent() const
@@ -500,27 +642,49 @@ float DynamicPanModule::maxPercent() const
 
 void DynamicPanModule::layoutContent (juce::Rectangle<int> area)
 {
-    auto top = area.removeFromTop (150);
-    amount.setBounds (top.removeFromLeft (150));
-    top.removeFromLeft (14);
+    constexpr int row = 40, rowGap = 8, captionHeight = 16, columnGap = 8;
 
-    top.removeFromTop (18);
-    maxCaption = top.removeFromTop (16);
-    maxBox.setBounds (top.removeFromTop (24));
-    top.removeFromTop (14);
-    clipCaption = top.removeFromTop (16);
-    clip.setBounds (top.removeFromTop (24));
+    auto top = area.removeFromTop (3 * row + 2 * rowGap);
+    amount.setBounds (top.removeFromLeft (top.getHeight()));
+    top.removeFromLeft (12);
 
-    area.removeFromTop (8);
-    filterCaption = area.removeFromTop (16);
-    area.removeFromTop (4);
+    auto placePair = [&] (juce::Rectangle<int> r, juce::Rectangle<int>& captionA, juce::Component& a,
+                          juce::Rectangle<int>& captionB, juce::Component& b)
+    {
+        auto left = r.removeFromLeft ((r.getWidth() - columnGap) / 2);
+        r.removeFromLeft (columnGap);
+        captionA = left.removeFromTop (captionHeight);
+        a.setBounds (left);
+        captionB = r.removeFromTop (captionHeight);
+        b.setBounds (r);
+    };
+
+    placePair (top.removeFromTop (row), sourceCaption, source, compCaption, comp);
+    top.removeFromTop (rowGap);
+    placePair (top.removeFromTop (row), thresholdCaption, thresholdBox, maxCaption, maxBox);
+    top.removeFromTop (rowGap);
+    clipCaption = top.removeFromTop (captionHeight);
+    clip.setBounds (top.removeFromTop (row - captionHeight).removeFromLeft ((top.getWidth() - columnGap) / 2));
+
+    area.removeFromTop (10);
+    scopeCaption = area.removeFromTop (captionHeight);
+    area.removeFromTop (2);
+    scope.setBounds (area.removeFromTop (84));
+
+    area.removeFromTop (10);
+    filterCaption = area.removeFromTop (captionHeight);
+    area.removeFromTop (2);
     filter.setBounds (area);
 }
 
 void DynamicPanModule::paintContent (juce::Graphics& g)
 {
+    drawCaption (g, "MOD SOURCE", sourceCaption, juce::Justification::centredLeft);
+    drawCaption (g, "COMP", compCaption, juce::Justification::centredLeft);
+    drawCaption (g, "THRESHOLD", thresholdCaption, juce::Justification::centredLeft);
     drawCaption (g, "MAX", maxCaption, juce::Justification::centredLeft);
-    drawCaption (g, "CLIP", clipCaption, juce::Justification::centredLeft);
+    drawCaption (g, "MOD CLIP", clipCaption, juce::Justification::centredLeft);
+    drawCaption (g, "MODULATION", scopeCaption, juce::Justification::centredLeft);
     drawCaption (g, "MODULATOR FILTER", filterCaption, juce::Justification::centredLeft);
 }
 

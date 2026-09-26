@@ -40,6 +40,7 @@ public:
     juce::AudioProcessorValueTreeState apvts;
     msc::PresetManager presets;
     msc::SpectrumAnalyzer inputAnalyzer, dynPanAnalyzer;
+    msc::ModScope modScope;
 
 private:
     static constexpr int maxChunk = 256;
@@ -60,7 +61,7 @@ private:
     struct Params
     {
         std::atomic<float> *inOn, *inShape, *inCutoff, *inSlope, *inWetSrc, *inDrySrc;
-        std::atomic<float> *dpOn, *dpAmount, *dpMax, *dpShape, *dpCutoff, *dpSlope, *dpClip;
+        std::atomic<float> *dpOn, *dpAmount, *dpMax, *dpShape, *dpCutoff, *dpSlope, *dpClip, *dpSource, *dpComp, *dpThresh;
         std::atomic<float> *hsOn, *hsLeft, *hsRight, *hsInvL, *hsInvR;
         std::atomic<float> *chOn, *chMode, *chDepth, *chWidth, *chTone, *chMix;
         std::atomic<float> *imOn, *imBalance, *imMid, *imSide;
@@ -79,8 +80,9 @@ private:
     // Dynamic pan
     msc::dsp::MorphFilter<1> dynPanFilter;
     Multiplicative dpCutoff;
-    Linear dpShape, dpDepth;
-    int dpSlope = 0, clipMode = msc::clipSoft;
+    Linear dpShape, dpDepth, dpThreshold;
+    int dpSlope = 0, clipMode = msc::clipSoft, modSource = msc::modSum;
+    float compRatio = 1.0f, compEnvelope = 0.0f, compAttack = 0.0f, compRelease = 0.0f;
 
     // Haas
     msc::dsp::DelayLine haasLeft, haasRight;

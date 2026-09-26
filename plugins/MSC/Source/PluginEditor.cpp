@@ -7,7 +7,7 @@ namespace
     constexpr int gap = 10;
 
     // Module widths in chain order: input, dynamic pan, Haas, chorus, image.
-    constexpr int moduleWidths[] { 290, 292, 190, 206, 138 };
+    constexpr int moduleWidths[] { 300, 350, 180, 206, 140 };
 
     const juce::Identifier uiWidthId { "uiWidth" };
 }
@@ -17,7 +17,7 @@ MscMainView::MscMainView (MscProcessor& p, klaud::LookAndFeel& lookAndFeel)
     : lookAndFeelSetter (*this, lookAndFeel),
       presetBar (p.presets),
       inputModule (p.apvts, p.inputAnalyzer),
-      dynPanModule (p.apvts, p.dynPanAnalyzer),
+      dynPanModule (p.apvts, p.dynPanAnalyzer, p.modScope),
       haasModule (p.apvts),
       chorusModule (p.apvts),
       imageModule (p.apvts)
@@ -75,7 +75,7 @@ void MscMainView::paint (juce::Graphics& g)
 
 void MscMainView::resized()
 {
-    presetBar.setBounds (560, 17, 460, 28);
+    presetBar.setBounds (600, 17, 460, 28);
 
     auto area = getLocalBounds().withTrimmedTop (headerHeight + margin).reduced (margin, 0).withTrimmedBottom (margin);
     juce::Component* modules[] { &inputModule, &dynPanModule, &haasModule, &chorusModule, &imageModule };
