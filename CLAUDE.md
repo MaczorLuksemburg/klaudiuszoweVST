@@ -46,6 +46,8 @@ AI-made VST plugins for testing and fun.
 ## Releases
 - Pushing a `v*` tag (e.g. `v1.0.0`) on `main` builds all three systems and publishes a GitHub Release with
   `MakiPlugins-<OS>.zip` files (plugins + INSTALL.md + LICENSE.txt); `docs/INSTALL.md` is the release notes.
+  Publishing a release from GitHub's Releases page (which creates the tag) also works: the job then attaches
+  the zips to that release and appends the install guide under the notes written there.
   Keep it up to date when plugins are added. Bump each plugin's `VERSION` in its CMakeLists before tagging.
 - Licence: AGPLv3 (`LICENSE`), required because JUCE is used under its open-source licence.
 
