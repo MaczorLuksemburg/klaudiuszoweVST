@@ -8,8 +8,19 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Vendor name shown in DAWs and in each plugin header.
 set(KLAUD_COMPANY_NAME "Maki plugins")
 
-# Finished plugins are copied here after every build.
-set(KLAUD_PLUGIN_OUTPUT_DIR "C:/gen plugins" CACHE PATH "Where built plugins are copied")
+# Formats every plugin is built in. JUCE skips the ones the current OS can't build
+# (AU is macOS only), so Windows and Linux get VST3, macOS gets VST3 + AU for Logic.
+set(KLAUD_PLUGIN_FORMATS VST3 AU)
+
+# On Windows, finished plugins are copied here after every build.
+# macOS and Linux use the system plugin folders (~/Library/Audio/Plug-Ins, ~/.vst3).
+set(KLAUD_PLUGIN_OUTPUT_DIR "C:/gen plugins" CACHE PATH "Where built plugins are copied on Windows")
+
+if(WIN32)
+    set(KLAUD_PLUGIN_COPY_ARGS VST3_COPY_DIR "${KLAUD_PLUGIN_OUTPUT_DIR}")
+else()
+    set(KLAUD_PLUGIN_COPY_ARGS)
+endif()
 
 include(FetchContent)
 FetchContent_Declare(JUCE

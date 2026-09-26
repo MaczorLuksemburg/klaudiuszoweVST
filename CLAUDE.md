@@ -18,5 +18,12 @@ AI-made VST plugins for testing and fun.
 - Shared UI look (FabFilter-inspired, keep it minimal) lives in `shared/KlaudLookAndFeel.h`; reuse it for new plugins.
 - `cmake -S . -B build -G "Visual Studio 17 2022" -A x64`, then `cmake --build build --config Release`.
 
+## Targets
+- Systems: Windows, macOS, Linux. DAWs: Logic Pro, Cubase, FL Studio, Ableton Live, Reaper.
+- Formats: VST3 everywhere + AU on macOS (Logic). Pass `${KLAUD_PLUGIN_FORMATS}` and `${KLAUD_PLUGIN_COPY_ARGS}`
+  to every `juce_add_plugin`.
+- There is no local Mac/Linux: `.github/workflows/build.yml` builds all three and runs `auval` on macOS.
+  Keep code portable (no Windows-only APIs).
+
 ## GitHub
 - `gh`/git use a fine-grained token scoped to this repo only. Push or open PRs only when asked.

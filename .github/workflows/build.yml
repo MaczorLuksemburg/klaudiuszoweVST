@@ -1,0 +1,69 @@
+name: Build plugins
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            configure: -G "Visual Studio 17 2022" -A x64
+          - name: macOS
+            os: macos-latest
+            configure: -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+          - name: Linux
+            os: ubuntu-22.04
+            configure: -DCMAKE_BUILD_TYPE=Release
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libjack-jackd2-dev libfreetype-dev libfontconfig1-dev \
+            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxinerama-dev libxrandr-dev \
+            libxrender-dev libglu1-mesa-dev mesa-common-dev
+
+      - name: Configure
+        shell: bash
+        run: cmake -S . -B build ${{ matrix.configure }}
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      # Logic Pro only loads AUs that pass Apple's validator, so run it on every build.
+      - name: Validate Audio Units (auval)
+        if: runner.os == 'macOS'
+        run: |
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          units=$(auval -a | awk '$3 == "Klau" { print $1, $2, $3 }')
+          if [ -z "$units" ]; then echo "No Maki plugins AUs registered"; auval -a; exit 1; fi
+          failed=0
+          while read -r type subtype manufacturer; do
+            auval -v "$type" "$subtype" "$manufacturer" || failed=1
+          done <<< "$units"
+          exit $failed
+
+      - name: Collect plugins
+        shell: bash
+        run: |
+          mkdir -p dist
+          find build/plugins -maxdepth 5 -path '*_artefacts/Release/*' \( -name '*.vst3' -o -name '*.component' \) -prune \
+            -exec cp -R {} dist/ \;
+          ls -la dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MakiPlugins-${{ matrix.name }}
+          path: dist/
