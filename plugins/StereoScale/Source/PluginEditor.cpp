@@ -59,7 +59,7 @@ void StereoScaleEditor::paint (juce::Graphics& g)
 
     g.setColour (colours::textDim);
     g.setFont (font (11.0f));
-    g.drawFittedText ("klaudiuszowe", header, juce::Justification::centredRight, 1);
+    g.drawFittedText (JucePlugin_Manufacturer, header, juce::Justification::centredRight, 1);
 
     g.setColour (juce::Colours::white.withAlpha (0.05f));
     g.fillRect (0, headerHeight - 1, getWidth(), 1);

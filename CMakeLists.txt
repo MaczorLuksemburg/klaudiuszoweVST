@@ -5,6 +5,9 @@ project(klaudiuszoweVST VERSION 0.1.0)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Vendor name shown in DAWs and in each plugin header.
+set(KLAUD_COMPANY_NAME "Maki plugins")
+
 # Finished plugins are copied here after every build.
 set(KLAUD_PLUGIN_OUTPUT_DIR "C:/gen plugins" CACHE PATH "Where built plugins are copied")
 

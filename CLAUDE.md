@@ -2,6 +2,10 @@
 
 AI-made VST plugins for testing and fun.
 
+## Branding
+- Company / vendor name is "Maki plugins" (`KLAUD_COMPANY_NAME` in the root `CMakeLists.txt`); plugin headers show it via `JucePlugin_Manufacturer`.
+- Never change an existing plugin's `PLUGIN_MANUFACTURER_CODE` or `PLUGIN_CODE`: DAWs use them to find the plugin in saved projects.
+
 ## Locations
 - Source code lives in this repo (`C:\Users\user\Documents\GitHub\klaudiuszoweVST`), one folder per plugin.
 - Built plugins (`.vst3` bundles) go to `C:\gen plugins`. Each plugin's build must copy its output there

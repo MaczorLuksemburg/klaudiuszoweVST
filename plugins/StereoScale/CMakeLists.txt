@@ -1,5 +1,5 @@
 juce_add_plugin(StereoScale
-    COMPANY_NAME             klaudiuszowe
+    COMPANY_NAME             "${KLAUD_COMPANY_NAME}"
     PLUGIN_MANUFACTURER_CODE Klau
     PLUGIN_CODE              KsSc
     FORMATS                  VST3
