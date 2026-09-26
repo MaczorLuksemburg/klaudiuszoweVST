@@ -224,18 +224,29 @@ namespace
             juce::AudioBuffer<float> quiet (noise);
             quiet.applyGain (0.02f);
 
-            auto panAmount = [&] (float compIndex)
+            auto panAmount = [&] (float compIndex, float makeupIndex)
             {
                 resetAll (p);
                 setParam (p, msc::ids::dpOn, 1.0f);
                 setParam (p, msc::ids::dpAmount, 0.5f);
                 setParam (p, msc::ids::dpComp, compIndex);
+                setParam (p, msc::ids::dpMakeup, makeupIndex);
                 return maxDifference (run (p, quiet), quiet, 4800);
             };
 
-            const float without = panAmount (0.0f), with = panAmount (3.0f);
-            expect (with > without * 10.0f, "8:1 mod comp makes a quiet signal pan harder (" + juce::String (without, 5)
+            const float without = panAmount (0.0f, 4.0f), with = panAmount (3.0f, 4.0f);
+            expect (with > without * 10.0f, "8:1 mod comp at 100 % makeup makes a quiet signal pan harder (" + juce::String (without, 5)
                                                 + " -> " + juce::String (with, 5) + ")");
+
+            float previous = 0.0f;
+            bool increasing = true;
+            for (int makeupIndex = 0; makeupIndex <= 4; ++makeupIndex)
+            {
+                const float amount = panAmount (3.0f, (float) makeupIndex);
+                increasing = increasing && amount > previous;
+                previous = amount;
+            }
+            expect (increasing, "more makeup (0 -> 100 %) pans a quiet signal progressively harder");
         }
 
         // Every factory preset, odd block sizes, mono-compatible input: finite output.

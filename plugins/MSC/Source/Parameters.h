@@ -26,6 +26,7 @@ namespace msc
         inline constexpr const char* dpSource = "dp_src";
         inline constexpr const char* dpComp   = "dp_comp";
         inline constexpr const char* dpThresh = "dp_thresh";
+        inline constexpr const char* dpMakeup = "dp_makeup";
 
         // Module 2: Haas delay and polarity.
         inline constexpr const char* hsOn    = "hs_on";
@@ -55,6 +56,9 @@ namespace msc
 
     // Compressor ratios for the dynamic-pan modulator, matching the "Comp" choices.
     inline constexpr float modCompRatios[] { 1.0f, 2.0f, 4.0f, 8.0f };
+
+    // Share of the full auto makeup (the gain that keeps 0 dBFS at 0 dBFS), matching the "Makeup" choices.
+    inline constexpr float modMakeupAmounts[] { 0.0f, 0.25f, 0.5f, 0.75f, 1.0f };
 
     juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 

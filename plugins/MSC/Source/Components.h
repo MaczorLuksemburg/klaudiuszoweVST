@@ -185,14 +185,15 @@ namespace msc::ui
 
         Knob amount;
         juce::Slider maxBox, thresholdBox;
-        juce::ComboBox source, comp, clip;
+        juce::ComboBox source, comp, clip, makeup;
         std::vector<std::unique_ptr<APVTS::SliderAttachment>> sliderAttachments;
         std::vector<std::unique_ptr<APVTS::ComboBoxAttachment>> comboAttachments;
         std::unique_ptr<juce::ParameterAttachment> maxWatcher;
         ModScopeDisplay scope;
         FilterSection filter;
-        juce::Rectangle<int> sourceCaption, compCaption, thresholdCaption, maxCaption, clipCaption,
+        juce::Rectangle<int> sourceCaption, compCaption, thresholdCaption, maxCaption, clipCaption, makeupCaption,
                              scopeCaption, filterCaption;
+        int dividerX = 0;
     };
 
     class HaasModule : public ModulePanel

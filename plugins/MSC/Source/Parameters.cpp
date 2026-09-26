@@ -148,7 +148,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
                       choiceParam (ids::dpSource, "Dyn Pan Mod Source", { "Sum", "Left", "Right" }, modSum),
                       choiceParam (ids::dpComp, "Dyn Pan Mod Comp", { "Off", "2:1", "4:1", "8:1" }, 0),
                       floatParam (ids::dpThresh, "Dyn Pan Mod Threshold", Range (-60.0f, 0.0f, 0.1f), -30.0f,
-                                  [] (float v, int) { return juce::String (v, 1) + " dB"; }));
+                                  [] (float v, int) { return juce::String (v, 1) + " dB"; }),
+                      choiceParam (ids::dpMakeup, "Dyn Pan Mod Makeup", { "0 %", "25 %", "50 %", "75 %", "100 %" }, 2));
 
     auto haas = std::make_unique<juce::AudioProcessorParameterGroup> ("haas", "Haas", " | ");
     haas->addChild (boolParam (ids::hsOn, "Haas On"),

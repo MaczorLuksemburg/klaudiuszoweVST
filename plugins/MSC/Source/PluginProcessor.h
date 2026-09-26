@@ -61,7 +61,7 @@ private:
     struct Params
     {
         std::atomic<float> *inOn, *inShape, *inCutoff, *inSlope, *inWetSrc, *inDrySrc;
-        std::atomic<float> *dpOn, *dpAmount, *dpMax, *dpShape, *dpCutoff, *dpSlope, *dpClip, *dpSource, *dpComp, *dpThresh;
+        std::atomic<float> *dpOn, *dpAmount, *dpMax, *dpShape, *dpCutoff, *dpSlope, *dpClip, *dpSource, *dpComp, *dpThresh, *dpMakeup;
         std::atomic<float> *hsOn, *hsLeft, *hsRight, *hsInvL, *hsInvR;
         std::atomic<float> *chOn, *chMode, *chDepth, *chWidth, *chTone, *chMix;
         std::atomic<float> *imOn, *imBalance, *imMid, *imSide;
@@ -82,7 +82,7 @@ private:
     Multiplicative dpCutoff;
     Linear dpShape, dpDepth, dpThreshold;
     int dpSlope = 0, clipMode = msc::clipSoft, modSource = msc::modSum;
-    float compRatio = 1.0f, compEnvelope = 0.0f, compAttack = 0.0f, compRelease = 0.0f;
+    float compRatio = 1.0f, compMakeup = 0.5f, compEnvelope = 0.0f, compAttack = 0.0f, compRelease = 0.0f;
 
     // Haas
     msc::dsp::DelayLine haasLeft, haasRight;

@@ -49,7 +49,7 @@ MscProcessor::MscProcessor()
     params.dpOn = get (ids::dpOn);         params.dpAmount = get (ids::dpAmount); params.dpMax = get (ids::dpMax);
     params.dpShape = get (ids::dpShape);   params.dpCutoff = get (ids::dpCutoff); params.dpSlope = get (ids::dpSlope);
     params.dpClip = get (ids::dpClip);     params.dpSource = get (ids::dpSource); params.dpComp = get (ids::dpComp);
-    params.dpThresh = get (ids::dpThresh);
+    params.dpThresh = get (ids::dpThresh); params.dpMakeup = get (ids::dpMakeup);
 
     params.hsOn = get (ids::hsOn);         params.hsLeft = get (ids::hsLeft);     params.hsRight = get (ids::hsRight);
     params.hsInvL = get (ids::hsInvL);     params.hsInvR = get (ids::hsInvR);
@@ -134,6 +134,7 @@ void MscProcessor::updateTargets (bool snap)
     clipMode  = toIndex (params.dpClip);
     modSource = toIndex (params.dpSource);
     compRatio = modCompRatios[juce::jlimit (0, 3, toIndex (params.dpComp))];
+    compMakeup = modMakeupAmounts[juce::jlimit (0, 4, toIndex (params.dpMakeup))];
 
     const float msToSamples = (float) sampleRate * 0.001f;
     set (hsDelayL, params.hsLeft->load() * msToSamples);
@@ -272,10 +273,10 @@ void MscProcessor::processChunk (float* left, float* right, int n)
                 const float coeff = level > compEnvelope ? compAttack : compRelease;
                 compEnvelope = level + coeff * (compEnvelope - level);
 
-                // Gain reduction above the threshold plus makeup that keeps 0 dBFS at 0 dBFS,
-                // so everything below full scale is lifted: quiet parts pan harder.
+                // Gain reduction above the threshold plus a share of the makeup that would keep
+                // 0 dBFS at 0 dBFS; the makeup lifts everything below it, so quiet parts pan harder.
                 const float envelopeDb = juce::Decibels::gainToDecibels (compEnvelope, -120.0f);
-                const float gainDb = -threshold * compSlope - juce::jmax (0.0f, envelopeDb - threshold) * compSlope;
+                const float gainDb = -threshold * compSlope * compMakeup - juce::jmax (0.0f, envelopeDb - threshold) * compSlope;
                 mod *= std::exp (gainDb * dbToLog);
             }
 

@@ -607,6 +607,7 @@ DynamicPanModule::DynamicPanModule (APVTS& state, SpectrumAnalyzer& analyzer, Mo
     setUpCombo (source, ids::dpSource, "Which channel drives the panning: the sum of both, left or right");
     setUpCombo (comp, ids::dpComp, "Compresses the modulator (10 ms attack, 150 ms release, auto makeup) so quiet parts pan as hard as loud ones");
     setUpCombo (clip, ids::dpClip, "Limits the pan movement to hard left/right. Shapes the modulation, not the audio.");
+    setUpCombo (makeup, ids::dpMakeup, "How much of the compressor's auto makeup gain to apply. 100 % keeps full scale at full scale and lifts everything below it the most.");
 
     addAndMakeVisible (scope);
     addAndMakeVisible (filter);
@@ -644,27 +645,32 @@ void DynamicPanModule::layoutContent (juce::Rectangle<int> area)
 {
     constexpr int row = 40, rowGap = 8, captionHeight = 16, columnGap = 8;
 
+    // Two groups: the pan (next to the Amount knob) and the modulator compressor.
     auto top = area.removeFromTop (3 * row + 2 * rowGap);
     amount.setBounds (top.removeFromLeft (top.getHeight()));
     top.removeFromLeft (12);
 
-    auto placePair = [&] (juce::Rectangle<int> r, juce::Rectangle<int>& captionA, juce::Component& a,
-                          juce::Rectangle<int>& captionB, juce::Component& b)
+    auto panColumn = top.removeFromLeft ((top.getWidth() - 2 * columnGap) / 2);
+    top.removeFromLeft (columnGap);
+    dividerX = top.getX();
+    top.removeFromLeft (columnGap);
+    auto compColumn = top;
+
+    auto placeColumn = [&] (juce::Rectangle<int> column,
+                            std::initializer_list<std::pair<juce::Rectangle<int>*, juce::Component*>> items)
     {
-        auto left = r.removeFromLeft ((r.getWidth() - columnGap) / 2);
-        r.removeFromLeft (columnGap);
-        captionA = left.removeFromTop (captionHeight);
-        a.setBounds (left);
-        captionB = r.removeFromTop (captionHeight);
-        b.setBounds (r);
+        for (auto [caption, component] : items)
+        {
+            auto cell = column.removeFromTop (row);
+            column.removeFromTop (rowGap);
+            *caption = cell.removeFromTop (captionHeight);
+            component->setBounds (cell);
+        }
     };
 
-    placePair (top.removeFromTop (row), sourceCaption, source, compCaption, comp);
-    top.removeFromTop (rowGap);
-    placePair (top.removeFromTop (row), thresholdCaption, thresholdBox, maxCaption, maxBox);
-    top.removeFromTop (rowGap);
-    clipCaption = top.removeFromTop (captionHeight);
-    clip.setBounds (top.removeFromTop (row - captionHeight).removeFromLeft ((top.getWidth() - columnGap) / 2));
+    // Reads like the chain: source -> amount range -> clip; Max sits beside Threshold.
+    placeColumn (panColumn,  { { &sourceCaption, &source }, { &maxCaption, &maxBox }, { &clipCaption, &clip } });
+    placeColumn (compColumn, { { &compCaption, &comp }, { &thresholdCaption, &thresholdBox }, { &makeupCaption, &makeup } });
 
     area.removeFromTop (10);
     scopeCaption = area.removeFromTop (captionHeight);
@@ -684,6 +690,10 @@ void DynamicPanModule::paintContent (juce::Graphics& g)
     drawCaption (g, "THRESHOLD", thresholdCaption, juce::Justification::centredLeft);
     drawCaption (g, "MAX", maxCaption, juce::Justification::centredLeft);
     drawCaption (g, "MOD CLIP", clipCaption, juce::Justification::centredLeft);
+    drawCaption (g, "MAKEUP", makeupCaption, juce::Justification::centredLeft);
+
+    g.setColour (palette().panelOutline.brighter (0.15f));
+    g.drawVerticalLine (dividerX, (float) sourceCaption.getY() + 2.0f, (float) clip.getBottom() - 2.0f);
     drawCaption (g, "MODULATION", scopeCaption, juce::Justification::centredLeft);
     drawCaption (g, "MODULATOR FILTER", filterCaption, juce::Justification::centredLeft);
 }
