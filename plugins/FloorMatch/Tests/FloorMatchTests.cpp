@@ -938,31 +938,33 @@ namespace
 
         const auto output = run (p, input, fs);
 
-        // Noise floor per second, before and after.
-        std::cout << "time   noise in   noise out (A-weighted, estimated between words)" << std::endl;
+        // Noise floor per second, measured on the input and on the rendered output by the same estimator.
+        auto floorTimeline = [&] (const juce::AudioBuffer<float>& audio)
         {
             floormatch::dsp::Engine meter;
             meter.prepare (fs, 1, 2);
-            // (the plugin's own estimates are printed by processing a mono sum through a fresh engine)
-            juce::AudioBuffer<float> mono (1, input.getNumSamples());
-            mono.copyFrom (0, 0, input, 0, 0, input.getNumSamples());
-            if (channels > 1)
-            {
-                mono.addFrom (0, 0, input, 1, 0, input.getNumSamples());
-                mono.applyGain (0.5f);
-            }
+            juce::AudioBuffer<float> mono (1, audio.getNumSamples() + meter.getLatencySamples());
+            mono.clear();
+            for (int ch = 0; ch < audio.getNumChannels(); ++ch)
+                mono.addFrom (0, 0, audio, ch, 0, audio.getNumSamples(), 1.0f / (float) audio.getNumChannels());
+
+            std::vector<float> levels;
             const int step = (int) fs;
             for (int start = 0; start + step <= mono.getNumSamples(); start += step)
             {
                 float* block[] { mono.getWritePointer (0) + start };
                 meter.process (block, 1, step);
-                const auto& s = meter.getSnapshot();
-                const double seconds = (start + step - meter.getLatencySamples()) / fs;
-                if (seconds >= 0.0 && s.valid)
-                    std::cout << juce::String (seconds, 0).paddedLeft (' ', 4) << "   " << juce::String (s.noiseDb, 1).paddedLeft (' ', 7)
-                              << "   " << juce::String (s.outputDb, 1).paddedLeft (' ', 7) << std::endl;
+                if (start + step > meter.getLatencySamples())
+                    levels.push_back (meter.getSnapshot().valid ? meter.getSnapshot().noiseDb : -150.0f);
             }
-        }
+            return levels;
+        };
+
+        const auto before = floorTimeline (input), after = floorTimeline (output);
+        std::cout << "time   noise in   noise out (A-weighted dB, estimated between words)" << std::endl;
+        for (size_t i = 0; i < std::min (before.size(), after.size()); ++i)
+            std::cout << juce::String ((int) i).paddedLeft (' ', 4) << "   " << juce::String (before[i], 1).paddedLeft (' ', 7)
+                      << "   " << juce::String (after[i], 1).paddedLeft (' ', 7) << std::endl;
 
         outFile.deleteFile();
         juce::WavAudioFormat wav;
