@@ -30,9 +30,10 @@ AI-made VST plugins for testing and fun.
   -> dynamic pan -> Haas -> Juno-style chorus -> image, then the unprocessed band is added back.
 - Modules default off; touching any control in a module switches it on. Off modules are skipped (15 ms fades).
 - Dynamic pan: modulator = filter(mod source, read from the plugin input, not the input module's band)
-  -> optional comp (makeup 0-100 %) -> x amount -> mod clip, then a
-  balance law that only turns one side down. The clipper shapes the pan position, never the audio, so the
-  module can't make anything louder.
+  -> optional comp (makeup 0-100 %) -> x amount -> mod clip = p, then side += mid * p (mono: L = x(1-p),
+  R = x(1+p)). Mid is untouched, so the effect cancels exactly in mono: this is the module's core promise,
+  keep it. Never clip or otherwise process L/R separately there; the clipper shapes p only. Stereo peaks can
+  rise up to +6 dB at |p| = 1.
 - Parameter IDs in `Parameters.h` are saved in projects and presets: never rename or remove them.
 
 ## Targets

@@ -236,9 +236,10 @@ void MscProcessor::processChunk (float* left, float* right, int n)
     // ---- 1: dynamic pan -------------------------------------------------------------------
     // The signal drives its own pan position at audio rate:
     //   modulator = filter(source taken from the plugin input) -> optional compressor -> * amount
-    //   p = modClip(modulator), then a balance law that only turns one side down,
-    //   so the output is never louder than the input. The clipper shapes the pan
-    //   movement (+-1 = hard left/right), never the audio itself.
+    //   p = modClip(modulator), then side += mid * p (for a mono input: L = x(1-p), R = x(1+p)).
+    //   Mid is untouched, so L + R is exactly the input: the effect cancels perfectly in mono.
+    //   The clipper shapes p (+-1 = hard left/right), never the audio, since clipping the
+    //   channels would break that cancellation.
     if (beginModule (dynPan, justStarted))
     {
         if (justStarted)
@@ -290,8 +291,9 @@ void MscProcessor::processChunk (float* left, float* right, int n)
             if (feedScope)
                 modScope.push (pre, p);
 
-            const float pl = l * (1.0f - juce::jmax (p, 0.0f));
-            const float pr = r * (1.0f + juce::jmin (p, 0.0f));
+            const float sideAdd = 0.5f * (l + r) * p;
+            const float pl = l - sideAdd;
+            const float pr = r + sideAdd;
 
             const float g = dynPan.fade.getNextValue();
             wetL[(size_t) i] = l + g * (pl - l);

@@ -178,23 +178,37 @@ namespace
             expect (diff > 0.01f && allFinite (out), "chorus creates stereo from a mono source");
         }
 
-        // Dynamic pan: with any mod clip the balance law only turns a side down, never up.
-        for (int clipMode : { msc::clipHard, msc::clipSoft, msc::clipExtreme })
+        // Dynamic pan is perfectly mono compatible: L + R equals the input's L + R for any
+        // setting (every clip mode, 1000 %, 8:1 comp, with and without the input split).
+        for (int clipMode : { msc::clipOff, msc::clipHard, msc::clipSoft, msc::clipExtreme })
         {
-            resetAll (p);
-            setParam (p, msc::ids::dpOn, 1.0f);
-            setParam (p, msc::ids::dpAmount, 1.0f);
-            setParam (p, msc::ids::dpMax, 1000.0f);
-            setParam (p, msc::ids::dpComp, 3.0f);
-            setParam (p, msc::ids::dpClip, (float) clipMode);
-            const auto out = run (p, noise);
+            for (bool split : { false, true })
+            {
+                resetAll (p);
+                setParam (p, msc::ids::inOn, split ? 1.0f : 0.0f);
+                setParam (p, msc::ids::inCutoff, 1500.0f);
+                setParam (p, msc::ids::dpOn, 1.0f);
+                setParam (p, msc::ids::dpAmount, 1.0f);
+                setParam (p, msc::ids::dpMax, 1000.0f);
+                setParam (p, msc::ids::dpComp, 3.0f);
+                setParam (p, msc::ids::dpMakeup, 4.0f);
+                setParam (p, msc::ids::dpClip, (float) clipMode);
+                const auto out = run (p, noise);
 
-            bool neverLouder = allFinite (out);
-            for (int ch = 0; ch < 2; ++ch)
+                float monoDiff = 0.0f, sideChange = 0.0f;
                 for (int i = 0; i < out.getNumSamples(); ++i)
-                    neverLouder = neverLouder && std::abs (out.getSample (ch, i)) <= std::abs (noise.getSample (ch, i)) + 1.0e-6f;
+                {
+                    const float inSum = noise.getSample (0, i) + noise.getSample (1, i);
+                    const float outSum = out.getSample (0, i) + out.getSample (1, i);
+                    monoDiff = std::max (monoDiff, std::abs (outSum - inSum));
+                    sideChange = std::max (sideChange, std::abs ((out.getSample (0, i) - out.getSample (1, i))
+                                                                 - (noise.getSample (0, i) - noise.getSample (1, i))));
+                }
 
-            expect (neverLouder, "dynamic pan at 1000 % + 8:1 comp, mod clip " + juce::String (clipMode) + ": no sample gets louder");
+                expect (allFinite (out, 64.0f) && monoDiff < 1.0e-5f && sideChange > 0.1f,
+                        "dynamic pan (clip " + juce::String (clipMode) + (split ? ", split on" : "")
+                            + ") changes the side but leaves the mono sum identical (max diff " + juce::String (monoDiff) + ")");
+            }
         }
 
         {
