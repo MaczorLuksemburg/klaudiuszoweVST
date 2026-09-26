@@ -33,4 +33,11 @@ FetchContent_MakeAvailable(JUCE)
 add_library(klaud_shared INTERFACE)
 target_include_directories(klaud_shared INTERFACE shared)
 
+option(KLAUD_BUILD_TESTS "Build the offline plugin test programs" ON)
+
+if(KLAUD_BUILD_TESTS)
+    enable_testing()
+endif()
+
 add_subdirectory(plugins/StereoScale)
+add_subdirectory(plugins/MSC)
