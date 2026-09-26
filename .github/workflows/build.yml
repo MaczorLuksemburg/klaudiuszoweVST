@@ -70,7 +70,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p MakiPlugins
-          find build/plugins -maxdepth 5 -path '*_artefacts/Release/*' \( -name '*.vst3' -o -name '*.component' \) -prune             -exec cp -R {} MakiPlugins/ \;
+          find build/plugins -maxdepth 5 -path '*_artefacts/Release/*' \( -name '*.vst3' -o -name '*.component' \) \
+            -prune -exec cp -R {} MakiPlugins/ \;
           cp docs/INSTALL.md MakiPlugins/INSTALL.md
           cp LICENSE MakiPlugins/LICENSE.txt
           ls -la MakiPlugins
@@ -102,7 +103,9 @@ jobs:
           retention-days: 14
 
   # Runs only for version tags (e.g. v1.0.0): publishes the three zips on a public release page,
-  # downloadable without a GitHub account, with docs/INSTALL.md as the release notes.
+  # downloadable without a GitHub account. Works both for a pushed tag (creates the release with
+  # docs/INSTALL.md as notes) and for a release published on GitHub's page (attaches the zips and
+  # adds the install guide under the notes written there).
   release:
     name: Publish release
     if: startsWith(github.ref, 'refs/tags/v')
@@ -119,9 +122,24 @@ jobs:
           merge-multiple: true
           path: release
 
-      - name: Create release
+      - name: Create or update release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           ls -la release
-          gh release create "$GITHUB_REF_NAME" release/*.zip             --title "Maki plugins $GITHUB_REF_NAME"             --notes-file docs/INSTALL.md
+          tag="$GITHUB_REF_NAME"
+
+          if gh release view "$tag" > /dev/null 2>&1; then
+            gh release upload "$tag" release/*.zip --clobber
+
+            gh release view "$tag" --json body -q .body > notes.md
+            if ! grep -q "Maki plugins: free VST3" notes.md; then
+              printf '\n\n' >> notes.md
+              cat docs/INSTALL.md >> notes.md
+              gh release edit "$tag" --notes-file notes.md
+            fi
+          else
+            gh release create "$tag" release/*.zip \
+              --title "Maki plugins $tag" \
+              --notes-file docs/INSTALL.md
+          fi
