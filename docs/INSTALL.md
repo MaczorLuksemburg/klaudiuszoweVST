@@ -4,6 +4,7 @@ Download the zip for your system below, then follow the steps for it.
 
 | Plugin | What it does |
 |---|---|
+| **FloorMatch** | Brings the background noise of dialogue takes (e.g. boom recordings) to one level and colour, leaving the dialogue untouched |
 | **MSC** | Multistage stereo control: band split, dynamic pan, Haas, Juno-style chorus, mid/side image |
 | **StereoScale** | Left / right / mid / side gain, 0–200 % |
 

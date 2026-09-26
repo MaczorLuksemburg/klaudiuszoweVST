@@ -41,3 +41,4 @@ endif()
 
 add_subdirectory(plugins/StereoScale)
 add_subdirectory(plugins/MSC)
+add_subdirectory(plugins/FloorMatch)

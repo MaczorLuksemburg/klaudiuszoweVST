@@ -36,6 +36,21 @@ AI-made VST plugins for testing and fun.
   rise up to +6 dB at |p| = 1.
 - Parameter IDs in `Parameters.h` are saved in projects and presets: never rename or remove them.
 
+## FloorMatch (plugins/FloorMatch)
+- Made for friends doing film dialogue: all boom takes on one track, background noise brought to one target
+  level (A-weighted, dB where a full-scale sine is 0) and optionally one colour; dialogue must stay untouched.
+  Noise is only matched, never removed completely; "Room tone fill" adds shaped noise to takes below the target.
+- DSP is in `Source/Engine.*` (STFT ~21 ms, 75 % overlap). Noise floor per bin = robust truncated mean over a
+  window before and after each frame (lookahead, reported as latency); per-band cut detection picks the side
+  that belongs to the current take, frames > 6 dB over the estimate are labelled speech and skipped, long
+  phrases hold the last estimate, rises without a cut are rate-limited. Gain = sqrt(beta) + (1 - sqrt(beta)) *
+  speech gain (MMSE-LSA + presence, lookahead attack, 50 ms release).
+- Learned profile (61 bands of 1/6 octave, dB per Hz) is saved in the state tree property `profile`, not a parameter.
+- `FloorMatch_Tests` measures everything on synthetic takes (formant "speech" over different noises joined with
+  cuts); `--quality` isolates speech and noise via shadow channels, `--bench` measures CPU,
+  `--render in.wav out.wav [--target dB] [--quietest] ...` processes real recordings for listening tests.
+  Keep these numbers passing when tuning: the thresholds encode the quality bar.
+
 ## Targets
 - Systems: Windows, macOS, Linux. DAWs: Logic Pro, Cubase, FL Studio, Ableton Live, Reaper.
 - Formats: VST3 everywhere + AU on macOS (Logic). Pass `${KLAUD_PLUGIN_FORMATS}` and `${KLAUD_PLUGIN_COPY_ARGS}`
