@@ -29,7 +29,8 @@ AI-made VST plugins for testing and fun.
 - Chain: input band split (processed = filter(x), unprocessed = x - filter(x), so it always sums back to x)
   -> dynamic pan -> Haas -> Juno-style chorus -> image, then the unprocessed band is added back.
 - Modules default off; touching any control in a module switches it on. Off modules are skipped (15 ms fades).
-- Dynamic pan: modulator = filter(mod source) -> optional comp (auto makeup) -> x amount -> mod clip, then a
+- Dynamic pan: modulator = filter(mod source, read from the plugin input, not the input module's band)
+  -> optional comp (makeup 0-100 %) -> x amount -> mod clip, then a
   balance law that only turns one side down. The clipper shapes the pan position, never the audio, so the
   module can't make anything louder.
 - Parameter IDs in `Parameters.h` are saved in projects and presets: never rename or remove them.
