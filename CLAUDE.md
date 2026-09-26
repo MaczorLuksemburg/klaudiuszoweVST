@@ -43,5 +43,11 @@ AI-made VST plugins for testing and fun.
 - There is no local Mac/Linux: `.github/workflows/build.yml` builds all three and runs `auval` on macOS.
   Keep code portable (no Windows-only APIs).
 
+## Releases
+- Pushing a `v*` tag (e.g. `v1.0.0`) on `main` builds all three systems and publishes a GitHub Release with
+  `MakiPlugins-<OS>.zip` files (plugins + INSTALL.md + LICENSE.txt); `docs/INSTALL.md` is the release notes.
+  Keep it up to date when plugins are added. Bump each plugin's `VERSION` in its CMakeLists before tagging.
+- Licence: AGPLv3 (`LICENSE`), required because JUCE is used under its open-source licence.
+
 ## GitHub
 - `gh`/git use a fine-grained token scoped to this repo only. Push or open PRs only when asked.

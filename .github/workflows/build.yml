@@ -3,6 +3,7 @@ name: Build plugins
 on:
   push:
     branches: [main]
+    tags: ['v*']   # a version tag also publishes a GitHub Release (see the release job)
   pull_request:
   workflow_dispatch:
 
@@ -68,12 +69,59 @@ jobs:
       - name: Collect plugins
         shell: bash
         run: |
-          mkdir -p dist
-          find build/plugins -maxdepth 5 -path '*_artefacts/Release/*' \( -name '*.vst3' -o -name '*.component' \) -prune \
-            -exec cp -R {} dist/ \;
-          ls -la dist
+          mkdir -p MakiPlugins
+          find build/plugins -maxdepth 5 -path '*_artefacts/Release/*' \( -name '*.vst3' -o -name '*.component' \) -prune             -exec cp -R {} MakiPlugins/ \;
+          cp docs/INSTALL.md MakiPlugins/INSTALL.md
+          cp LICENSE MakiPlugins/LICENSE.txt
+          ls -la MakiPlugins
+
+      # One zip per system with a MakiPlugins/ folder inside. On macOS, ditto keeps the bundles'
+      # permissions and code signatures intact (a plain artifact upload can drop them).
+      - name: Package zip
+        shell: bash
+        run: |
+          zip_name="MakiPlugins-${{ matrix.name }}.zip"
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            ditto -c -k --keepParent MakiPlugins "$zip_name"
+          elif [ "$RUNNER_OS" = "Windows" ]; then
+            7z a -tzip "$zip_name" MakiPlugins
+          else
+            zip -qr "$zip_name" MakiPlugins
+          fi
+          ls -la "$zip_name"
 
       - uses: actions/upload-artifact@v4
         with:
           name: MakiPlugins-${{ matrix.name }}
-          path: dist/
+          path: MakiPlugins/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.name }}
+          path: MakiPlugins-${{ matrix.name }}.zip
+          retention-days: 14
+
+  # Runs only for version tags (e.g. v1.0.0): publishes the three zips on a public release page,
+  # downloadable without a GitHub account, with docs/INSTALL.md as the release notes.
+  release:
+    name: Publish release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: release
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -la release
+          gh release create "$GITHUB_REF_NAME" release/*.zip             --title "Maki plugins $GITHUB_REF_NAME"             --notes-file docs/INSTALL.md
