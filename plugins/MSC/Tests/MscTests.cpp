@@ -219,6 +219,38 @@ namespace
             expect (maxDifference (run (p, leftOnly), leftOnly) > 0.01f, "mod source Left with the same input pans");
         }
 
+        // The modulator reads the plugin input, not the input module's band: with only the
+        // highs processed, a low-passed modulator (the bass) still pans them.
+        {
+            juce::AudioBuffer<float> mono (2, 48000);
+            for (int i = 0; i < mono.getNumSamples(); ++i)
+            {
+                const float t = (float) i / (float) testSampleRate;
+                const float s = 0.4f * std::sin (juce::MathConstants<float>::twoPi * 60.0f * t)
+                              + 0.2f * std::sin (juce::MathConstants<float>::twoPi * 5000.0f * t);
+                mono.setSample (0, i, s);
+                mono.setSample (1, i, s);
+            }
+
+            resetAll (p);
+            setParam (p, msc::ids::inOn, 1.0f);
+            setParam (p, msc::ids::inShape, 1.0f);
+            setParam (p, msc::ids::inCutoff, 1000.0f);
+            setParam (p, msc::ids::dpOn, 1.0f);
+            setParam (p, msc::ids::dpAmount, 0.5f);
+            setParam (p, msc::ids::dpShape, 0.0f);
+            setParam (p, msc::ids::dpCutoff, 200.0f);
+            setParam (p, msc::ids::dpSlope, 1.0f);
+            const auto out = run (p, mono);
+
+            float width = 0.0f;
+            for (int i = 4800; i < out.getNumSamples(); ++i)
+                width = std::max (width, std::abs (out.getSample (0, i) - out.getSample (1, i)));
+
+            expect (width > 0.05f, "bass in the plugin input pans the highs picked by the input module (L-R peak "
+                                       + juce::String (width, 3) + ")");
+        }
+
         // Comp lifts quiet modulators: a -40 dB signal pans much harder with 8:1.
         {
             juce::AudioBuffer<float> quiet (noise);

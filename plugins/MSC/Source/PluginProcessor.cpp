@@ -235,7 +235,7 @@ void MscProcessor::processChunk (float* left, float* right, int n)
 
     // ---- 1: dynamic pan -------------------------------------------------------------------
     // The signal drives its own pan position at audio rate:
-    //   modulator = filter(source) -> optional compressor with auto makeup -> * amount
+    //   modulator = filter(source taken from the plugin input) -> optional compressor -> * amount
     //   p = modClip(modulator), then a balance law that only turns one side down,
     //   so the output is never louder than the input. The clipper shapes the pan
     //   movement (+-1 = hard left/right), never the audio itself.
@@ -261,7 +261,11 @@ void MscProcessor::processChunk (float* left, float* right, int n)
             }
 
             const float l = wetL[(size_t) i], r = wetR[(size_t) i];
-            const float source = modSource == modLeft ? l : modSource == modRight ? r : 0.5f * (l + r);
+
+            // The modulator reads the plugin's own input (left/right are untouched until the
+            // recombine step), not the input module's band: e.g. the bass can pan the highs.
+            const float inL = left[i], inR = right[i];
+            const float source = modSource == modLeft ? inL : modSource == modRight ? inR : 0.5f * (inL + inR);
             scratch[(size_t) i] = source;
 
             float mod = dynPanFilter.process (0, source);

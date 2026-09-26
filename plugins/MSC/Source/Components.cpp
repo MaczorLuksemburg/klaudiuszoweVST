@@ -15,6 +15,8 @@ namespace
     {
         if (auto* choice = dynamic_cast<juce::AudioParameterChoice*> (&param))
             box.addItemList (choice->choices, 1);
+
+        box.setScrollWheelEnabled (true);   // quick stepping through options without opening the menu
     }
 
     float defaultValueOf (juce::RangedAudioParameter& param)
@@ -145,6 +147,13 @@ void ModulePanel::resized()
 void ModulePanel::mouseDown (const juce::MouseEvent& e)
 {
     if (! isOn && e.eventComponent != &power)
+        onWatcher->setValueAsCompleteGesture (1.0f);
+}
+
+void ModulePanel::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails&)
+{
+    // Scrolling a knob or menu inside an off module changes it, so switch the module on too.
+    if (! isOn && e.eventComponent != this && e.eventComponent != &power)
         onWatcher->setValueAsCompleteGesture (1.0f);
 }
 
@@ -599,6 +608,7 @@ DynamicPanModule::DynamicPanModule (APVTS& state, SpectrumAnalyzer& analyzer, Mo
     addAndMakeVisible (amount);
 
     setUpNumberBox (maxBox, "Maximum of the Amount knob. Drag or double-click to type.");
+    maxBox.setMouseDragSensitivity (200);   // wide 10-1000 % range: twice the speed of the other boxes
     sliderAttachments.push_back (std::make_unique<APVTS::SliderAttachment> (state, ids::dpMax, maxBox));
 
     setUpNumberBox (thresholdBox, "Compressor threshold. Everything below it is lifted by the ratio.");
@@ -619,7 +629,7 @@ DynamicPanModule::DynamicPanModule (APVTS& state, SpectrumAnalyzer& analyzer, Mo
 
 void DynamicPanModule::setUpNumberBox (juce::Slider& box, const juce::String& tooltip)
 {
-    box.setSliderStyle (juce::Slider::LinearBar);
+    box.setSliderStyle (juce::Slider::LinearBarVertical);   // drag up/down like the knobs
     box.setTextBoxStyle (juce::Slider::TextBoxLeft, false, 60, 24);
     box.setColour (juce::Slider::trackColourId, colours::dynPan);
     box.setSliderSnapsToMousePosition (false);

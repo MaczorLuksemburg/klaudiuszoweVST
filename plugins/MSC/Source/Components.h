@@ -65,6 +65,7 @@ namespace msc::ui
         void paintOverChildren (juce::Graphics&) override;
         void resized() override;
         void mouseDown (const juce::MouseEvent&) override;
+        void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
 
     protected:
         virtual void layoutContent (juce::Rectangle<int> area) = 0;
