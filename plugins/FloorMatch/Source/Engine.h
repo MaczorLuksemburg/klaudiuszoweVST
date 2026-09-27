@@ -12,9 +12,11 @@
 //     gives a robust truncated mean of the smoothed power; per frequency band the engine
 //     decides whether a cut between takes lies inside the window (the noise floor steps
 //     up or down and stays there) and then only uses the side that belongs to the current
-//     take, so a cut is followed on the exact frame instead of lagging behind. Frames well
-//     above the estimate count as speech and are skipped, a long phrase holds the last
-//     estimate, and without a cut the floor may only rise slowly.
+//     take, so a cut is followed on the exact frame instead of lagging behind. Only sharp
+//     steps count as cuts: noise events inside a take (cloth rustle, a passing car) fade in
+//     and out and are left alone. Frames well above the estimate count as speech and are
+//     skipped, a long phrase or event holds the last estimate, and without a cut the floor
+//     may only rise slowly.
 //  3. Speech gain per bin: decision-directed a priori SNR, MMSE log-spectral amplitude
 //     gain and a speech presence probability, opened slightly before onsets (lookahead)
 //     and released slowly. In pure noise it is ~0, so the noise only sees a smooth,
@@ -96,6 +98,17 @@ namespace floormatch::dsp
         // analysis, so a clean component of the mix can be processed alongside it.
         void setAnalysisChannels (int channels) noexcept { analysisChannels = std::max (1, channels); }
 
+        // What the estimator decided for its latest frame, for tracing real recordings. Tests only.
+        struct Diagnostics
+        {
+            char sides[32] {};          // per decision band: '-' none, 'P' past, 'F' future, 'p'/'f' bounded, 'R' recent
+            int rises = 0, falls = 0, compared = 0, holdingBins = 0;
+            int probeBin = 200, probeCountPast = 0, probeCountFuture = 0, probeHold = 0;
+            float probeNoise = 0.0f, probePast = 0.0f, probeFuture = 0.0f, probeTrack = 0.0f;
+        };
+        void setProbeBin (int bin) noexcept { diagnostics.probeBin = bin; }
+        const Diagnostics& getDiagnostics() const noexcept { return diagnostics; }
+
         // Estimated noise per bin for the latest output frame (power, in FFT units). Tests only.
         const std::vector<float>& getLatestNoiseEstimate() const noexcept { return latestNoise; }
         bool isLatestNoiseValid() const noexcept                         { return latestNoiseValid; }
@@ -152,6 +165,7 @@ namespace floormatch::dsp
         std::vector<uint8_t> speechLabel;            // [bin * smoothLength + slot]: the frame looked like speech
         std::vector<float> referenceNoise;           // latest estimate, for labelling and holding
         std::vector<int> holdFrames;
+        int heldBins = 0;                            // bins holding their estimate on the previous frame
         std::vector<float> riseTrack;                // slowly rising floor that limits rises without a cut
         bool referenceValid = false;
         std::vector<float> noiseHistory, speechHistory;   // [slot * numBins + bin], last attackFrames + 1 frames
@@ -163,6 +177,8 @@ namespace floormatch::dsp
         std::vector<BandState> bands;
         std::vector<int> cutHold;                    // no lookahead: frames a detected cut still applies
         std::vector<float> scratchPast, scratchFuture;
+        std::vector<float> spanLevels, spanReversed, sharpTrack, sharpWindow;   // cut sharpness test
+        int cutTrackHalfWidth = 9, maxCutFrames = 28;
         std::vector<int> pastSlots, futureSlots;
 
         // Speech gain state
@@ -183,6 +199,8 @@ namespace floormatch::dsp
         // Profile band mapping: bins [start, end) or, for narrow bands, interpolation at the centre.
         struct BandMap { int start = 0, end = 0, lower = 0; float fraction = 0.0f, width = 1.0f; };
         std::array<BandMap, numProfileBands> bandMap {};
+
+        Diagnostics diagnostics;
 
         // Metering, learning, quietest
         Snapshot snapshot;

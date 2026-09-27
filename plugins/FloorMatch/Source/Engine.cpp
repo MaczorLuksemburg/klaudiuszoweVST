@@ -11,6 +11,12 @@ namespace
     constexpr float stepRatio = 2.0f;               // the two sides' floors differ by more than 3 dB
     constexpr float stationaryRatio = 5.0f;         // 30th percentile within 7 dB of the minimum: noise, not speech
     constexpr int minBandFrames = 8;
+
+    // A cut between takes changes the background at once (a hard cut or a short crossfade); a
+    // noise event inside a take (close cloth rustle, a passing car) fades in and out. Steps over
+    // 6 dB only count as cuts when they complete within 150 ms, so events are left alone.
+    constexpr float sharpTestMinStepDb = 6.0f;
+    constexpr double maxCutSeconds = 0.15, cutTrackHalfSeconds = 0.05;
     constexpr int minBinFrames = 3;
 
     // Frames more than 6 dB over the current noise estimate count as speech and stay out of the
@@ -18,7 +24,7 @@ namespace
     // phrase) keeps its last estimate for up to 4 s.
     constexpr float speechLabelRatio = 4.0f;
     constexpr int minNoiseFrames = 6;
-    constexpr double maxHoldSeconds = 4.0, maxHoldSecondsNoLookahead = 1.0;
+    constexpr double maxHoldSeconds = 8.0, maxHoldSecondsNoLookahead = 4.0;
 
     // Without a detected cut a bin's floor may only rise slowly (it falls freely): speech that
     // slips through the labels can't pull it up far before the next pause pulls it back.
@@ -68,6 +74,53 @@ namespace
     }
 
     float toDb (float power) { return 10.0f * std::log10 (std::max (power, 1.0e-20f)); }
+
+    // Did a level sequence (dB, in time order) step up from the part before `split` to the part
+    // after it within maxFrames? Works on a short 20th-percentile track, which ignores speech
+    // peaks. Falls are tested on the reversed sequence.
+    bool isSharpRise (const float* levels, int n, int split, float minStepDb, int halfWidth, int maxFrames,
+                      std::vector<float>& track, std::vector<float>& window)
+    {
+        if (split <= 0 || split >= n)
+            return true;
+
+        for (int i = 0; i < n; ++i)
+        {
+            const int a = std::max (0, i - halfWidth), b = std::min (n, i + halfWidth + 1);
+            std::copy (levels + a, levels + b, window.begin());
+            auto nth = window.begin() + (b - a) / 5;
+            std::nth_element (window.begin(), nth, window.begin() + (b - a));
+            track[(size_t) i] = *nth;
+        }
+
+        auto percentile = [&] (int from, int to, int percent)
+        {
+            std::copy (track.begin() + from, track.begin() + to, window.begin());
+            auto nth = window.begin() + (to - from) * percent / 100;
+            std::nth_element (window.begin(), nth, window.begin() + (to - from));
+            return *nth;
+        };
+
+        // Both levels from the quiet end of each part: by the time a step is judged, most of the
+        // first part may already be the new level, and speech may fill much of either part.
+        const float before = percentile (0, split, 10), after = percentile (split, n, 25);
+        const float step = after - before;
+        if (step <= minStepDb)
+            return true;
+
+        // From the last frame still near the old level to the first frame near the new one. Speech
+        // before a cut sits above the in-between band, so it can't stretch the step; a fade-in can.
+        const float low = before + 0.25f * step, high = before + 0.9f * step;
+        int lastOld = -1;
+        for (int i = n - 1; i >= 0; --i)
+            if (track[(size_t) i] <= low) { lastOld = i; break; }
+
+        for (int i = lastOld + 1; i < n; ++i)
+            if (track[(size_t) i] >= high)
+                return i - lastOld <= maxFrames;
+
+        return false;
+    }
 
     double aWeightingAmplitude (double hz)
     {
@@ -225,6 +278,13 @@ void Engine::prepare (double newSampleRate, int channels, int lookahead)
     speechHistory.assign ((size_t) (gainLength * numBins), 1.0f);
     noiseHistoryValid.assign ((size_t) gainLength, 0);
 
+    const int spanLength = futureWindow.end - pastWindow.start + 1;
+    spanLevels.assign ((size_t) spanLength, 0.0f);
+    spanReversed.assign ((size_t) spanLength, 0.0f);
+    sharpTrack.assign ((size_t) spanLength, 0.0f);
+    cutTrackHalfWidth = std::max (1, juce::roundToInt (cutTrackHalfSeconds * framesPerSecond));
+    maxCutFrames = juce::roundToInt (maxCutSeconds * framesPerSecond);
+    sharpWindow.assign ((size_t) std::max (spanLength, 2 * cutTrackHalfWidth + 1), 0.0f);
     scratchPast.assign ((size_t) pastWindow.length() + 1, 0.0f);
     scratchFuture.assign ((size_t) futureWindow.length() + 1, 0.0f);
     pastSlots.clear();
@@ -257,6 +317,7 @@ void Engine::reset()
     std::fill (speechLabel.begin(), speechLabel.end(), (uint8_t) 0);
     std::fill (holdFrames.begin(), holdFrames.end(), 0);
     std::fill (cutHold.begin(), cutHold.end(), 0);
+    heldBins = 0;
     std::fill (riseTrack.begin(), riseTrack.end(), 0.0f);
     referenceValid = false;
     std::fill (noiseHistoryValid.begin(), noiseHistoryValid.end(), (uint8_t) 0);
@@ -520,7 +581,17 @@ bool Engine::estimateNoise (int64_t frame, float* noise)
             continue;
 
         const float* row = bandSmoothed.data() + b * (size_t) smoothLength;
-        int numPast = 0, numFuture = 0;
+        int numPast = 0, numFuture = 0, numSpan = 0;
+        bool spanHasGap = false;
+
+        // Both windows in time order, for the sharpness test (a digital-silence gap counts as a cut).
+        for (int64_t t = std::max<int64_t> (0, frame + pastWindow.start); t <= frame + futureWindow.end; ++t)
+        {
+            if (smoothedValid[(size_t) slotOf (t, smoothLength)] != 0)
+                spanLevels[(size_t) numSpan++] = toDb (row[slotOf (t, smoothLength)]);
+            else
+                spanHasGap = true;
+        }
 
         for (int64_t t = std::max<int64_t> (0, frame + pastWindow.start); t <= frame + pastWindow.end; ++t)
             if (smoothedValid[(size_t) slotOf (t, smoothLength)] != 0)
@@ -552,20 +623,35 @@ bool Engine::estimateNoise (int64_t frame, float* noise)
 
         // A cut: the floor steps and the side after the step looks like steady noise (speech
         // would leave a much lower minimum than its 30th percentile).
-        if (band.ratio > stepRatio && p30Future < stationaryRatio * minFuture)
+        auto sharp = [&] (bool rise)
+        {
+            if (spanHasGap)
+                return true;
+
+            const int split = std::clamp (futureWindow.start - pastWindow.start, 1, numSpan - 1);
+            if (rise)
+                return isSharpRise (spanLevels.data(), numSpan, split, sharpTestMinStepDb, cutTrackHalfWidth, maxCutFrames, sharpTrack, sharpWindow);
+
+            std::reverse_copy (spanLevels.begin(), spanLevels.begin() + numSpan, spanReversed.begin());
+            return isSharpRise (spanReversed.data(), numSpan, numSpan - split, sharpTestMinStepDb, cutTrackHalfWidth, maxCutFrames, sharpTrack, sharpWindow);
+        };
+
+        if (band.ratio > stepRatio && p30Future < stationaryRatio * minFuture && sharp (true))
         {
             band.side = sideFuture;
             ++rises;
         }
-        else if (band.ratio < 1.0f / stepRatio && p30Past < stationaryRatio * minPast)
+        else if (band.ratio < 1.0f / stepRatio && p30Past < stationaryRatio * minPast && sharp (false))
         {
             band.side = sidePast;
             ++falls;
         }
     }
 
-    // A cut seen in most bands is a cut between takes: every band then keeps to the current
-    // take's side, bounded by the typical step where that side may hold continuous speech.
+    // A cut between takes changes the background across most bands at once: every band then keeps
+    // to the current take's side, bounded by the typical step where that side may hold continuous
+    // speech. A step in only a few bands is an event (a crackle of cloth rustle, a hum starting):
+    // those bands stay on the normal path, which holds the background through it.
     float riseRatio = 1.0f, fallRatio = 1.0f;
 
     auto medianRatio = [this] (int side)
@@ -580,7 +666,16 @@ bool Engine::estimateNoise (int64_t frame, float* noise)
         return values[(size_t) (n / 2)];
     };
 
-    if (rises >= 3 && rises * 2 >= compared)
+    // While the background is being held through an event, steps are the event's own ups and
+    // downs; taking one as a cut would adopt the event as the background.
+    const bool insideEvent = heldBins > numBins / 4;
+
+    if (insideEvent)
+    {
+        for (auto& band : bands)
+            band.side = sideNone;
+    }
+    else if (rises >= 3 && rises * 2 >= compared)
     {
         riseRatio = medianRatio (sideFuture);
         for (auto& band : bands)
@@ -593,6 +688,14 @@ bool Engine::estimateNoise (int64_t frame, float* noise)
         for (auto& band : bands)
             if (band.side != sidePast)
                 band.side = band.ratio < 1.0f ? sideBoundedPast : sidePast;
+    }
+    else if (std::max (rises, falls) < std::max (4, compared / 4))
+    {
+        // Fewer than a quarter of the bands: an event. (Between a quarter and a half it is still a
+        // cut whose new take differs only in part of the spectrum, like hiss giving way to rumble:
+        // the bands that saw the step keep their decision.)
+        for (auto& band : bands)
+            band.side = sideNone;
     }
 
     // Without lookahead the frame is the newest one, so after a cut in either direction the recent
@@ -616,6 +719,13 @@ bool Engine::estimateNoise (int64_t frame, float* noise)
             cutHold[b] = std::max (0, cutHold[b] - 1);
         }
     }
+
+    diagnostics.rises = rises;
+    diagnostics.falls = falls;
+    diagnostics.compared = compared;
+    diagnostics.holdingBins = 0;
+    for (size_t b = 0; b < bands.size() && b + 1 < sizeof (diagnostics.sides); ++b)
+        diagnostics.sides[b] = "-PFpfR"[bands[b].side];
 
     // ---- per-bin noise floor ------------------------------------------------------------------
     // Without lookahead a cut up is only seen late, so holding and slow rises cost more there.
@@ -722,10 +832,23 @@ bool Engine::estimateNoise (int64_t frame, float* noise)
                 riseTrack[(size_t) k] = n;   // a cut: the track jumps with the estimate
 
             holdFrames[(size_t) k] = holding ? holdFrames[(size_t) k] + 1 : 0;
+            diagnostics.holdingBins += holding ? 1 : 0;
+            if (k == diagnostics.probeBin)
+            {
+                int cp = 0, cf = 0;
+                diagnostics.probePast = truncatedMean (row, labels, pastSlots, cp);
+                diagnostics.probeFuture = truncatedMean (row, labels, futureSlots, cf);
+                diagnostics.probeCountPast = cp;
+                diagnostics.probeCountFuture = cf;
+                diagnostics.probeHold = holdFrames[(size_t) k];
+                diagnostics.probeNoise = n;
+                diagnostics.probeTrack = riseTrack[(size_t) k];
+            }
             noise[k] = std::max (n, tiny);
         }
     }
 
+    heldBins = diagnostics.holdingBins;
     std::copy (noise, noise + numBins, referenceNoise.begin());
     referenceValid = true;
 

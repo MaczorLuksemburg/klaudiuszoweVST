@@ -40,6 +40,9 @@ AI-made VST plugins for testing and fun.
 - Made for friends doing film dialogue: all boom takes on one track, background noise brought to one target
   level (A-weighted, dB where a full-scale sine is 0) and optionally one colour; dialogue must stay untouched.
   Noise is only matched, never removed completely; "Room tone fill" adds shaped noise to takes below the target.
+  Its only job is balancing backgrounds between takes (the friends follow it with a peak compressor, no makeup).
+  Noise events inside a take (close cloth rustle, a passing car) are left alone by design: only sharp steps
+  (< 150 ms) seen by at least a quarter of the bands count as cuts; everything else holds the background.
 - DSP is in `Source/Engine.*` (STFT ~21 ms, 75 % overlap). Noise floor per bin = robust truncated mean over a
   window before and after each frame (lookahead, reported as latency); per-band cut detection picks the side
   that belongs to the current take, frames > 6 dB over the estimate are labelled speech and skipped, long
@@ -48,7 +51,8 @@ AI-made VST plugins for testing and fun.
 - Learned profile (61 bands of 1/6 octave, dB per Hz) is saved in the state tree property `profile`, not a parameter.
 - `FloorMatch_Tests` measures everything on synthetic takes (formant "speech" over different noises joined with
   cuts); `--quality` isolates speech and noise via shadow channels, `--bench` measures CPU,
-  `--render in.wav out.wav [--target dB] [--quietest] ...` processes real recordings for listening tests.
+  `--render in.wav out.wav [--target dB] [--quietest] ...` processes real recordings for listening tests,
+  `--trace in.wav <from s> <to s> [lookahead] [--bin k]` prints the estimator's per-band decisions over time.
   Keep these numbers passing when tuning: the thresholds encode the quality bar.
 
 ## Targets

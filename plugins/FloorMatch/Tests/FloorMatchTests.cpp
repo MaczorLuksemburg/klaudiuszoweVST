@@ -718,6 +718,117 @@ namespace
         }
     }
 
+    // Noise events inside a take (close cloth rustle, a passing car) are not background: they must
+    // pass untouched, while real cuts, also crossfaded ones, are still followed at once.
+    void testEvents()
+    {
+        std::cout << "Noise events and crossfaded cuts" << std::endl;
+        constexpr double fs = 48000.0;
+
+        // Rustle: band-passed noise with a fast random envelope and 400 ms fades, 18 dB over the floor.
+        auto track = makeTrack ({ { roomTone, -62.0 } }, 16.0, fs, 91);
+        const int eventStart = (int) (6.0 * fs), eventLength = (int) (6.0 * fs), fade = (int) (0.4 * fs);
+        {
+            Rng rng (92);
+            juce::dsp::IIR::Filter<float> high, low;
+            high.coefficients = juce::dsp::IIR::Coefficients<float>::makeHighPass (fs, 800.0f);
+            low.coefficients = juce::dsp::IIR::Coefficients<float>::makeLowPass (fs, 9000.0f);
+            std::vector<float> rustle ((size_t) eventLength);
+            float envelope = 1.0f, targetEnvelope = 1.0f;
+            for (int i = 0; i < eventLength; ++i)
+            {
+                if (i % (int) (0.08 * fs) == 0)
+                    targetEnvelope = std::pow (10.0f, rng.uniform (-6.0f, 3.0f) / 20.0f);
+                envelope += 0.002f * (targetEnvelope - envelope);
+                const float ramp = std::min ({ 1.0f, (float) i / fade, (float) (eventLength - i) / fade });
+                rustle[(size_t) i] = low.processSample (high.processSample (rng.gaussian())) * envelope * ramp;
+            }
+            std::vector<float> middle (rustle.begin() + fade, rustle.end() - fade);
+            scaleToLevel (middle, -44.0, fs);
+            const float gain = middle[0] / std::max (1.0e-9f, rustle[(size_t) fade]);
+            for (int i = 0; i < eventLength; ++i)
+                track.audio[(size_t) (eventStart + i)] += rustle[(size_t) i] * gain;
+        }
+
+        for (int lookahead : { 2, 3, 0 })
+        {
+            FloorMatchProcessor p;
+            resetParams (p);
+            setParam (p, ids::lookahead, (float) lookahead);
+            setParam (p, ids::target, -70.0f);
+            setParam (p, ids::maxReduction, 20.0f);
+            setParam (p, ids::match, 0.0f);
+            const auto out = run (p, toBuffer (track.audio), fs);
+
+            const std::vector<juce::Range<int>> event { { eventStart + fade, eventStart + eventLength - fade } };
+            const double inDb = weightedLevel (welch (track.audio.data(), event, fs));
+            const double outDb = weightedLevel (welch (out.getReadPointer (0), event, fs));
+            const double before = pauseLevel (out.getReadPointer (0), track, { 0, eventStart }, fs);
+            const double after = pauseLevel (out.getReadPointer (0), track, { eventStart + eventLength + (int) fs, track.takes[0].getEnd() }, fs);
+
+            expect (std::abs (outDb - inDb) < 1.5 && std::abs (before + 70.0) < 1.0 && std::abs (after + 70.0) < 1.0,
+                    "lookahead " + juce::String (lookahead) + ": a 6 s cloth-rustle-like event passes (" + db (outDb - inDb)
+                        + ") while the background around it sits on the target (" + juce::String (before, 1) + " / "
+                        + juce::String (after, 1) + ")");
+        }
+
+        // A cut with a 100 ms equal-power crossfade from a loud to a quiet take and back.
+        {
+            const int takeLength = (int) (9.0 * fs), crossfade = (int) (0.1 * fs);
+            const std::vector<Take> takes { { pink, -50.0 }, { roomTone, -64.0 }, { hiss, -52.0 } };
+            Track faded;
+            faded.audio.assign ((size_t) takeLength * takes.size(), 0.0f);
+            faded.speech.audio.assign (faded.audio.size(), 0.0f);
+
+            for (size_t i = 0; i < takes.size(); ++i)
+            {
+                const int offset = takeLength * (int) i;
+                auto noise = makeNoise (takeLength + crossfade, takes[i].colour, 93 + (int) i, fs);
+                scaleToLevel (noise, takes[i].noiseDb, fs);
+                for (int n = 0; n < takeLength + crossfade; ++n)
+                {
+                    const int at = offset - crossfade / 2 + n;
+                    if (at < 0 || at >= (int) faded.audio.size())
+                        continue;
+                    float gain = 1.0f;
+                    if (i > 0 && n < crossfade)                    gain = std::sin (juce::MathConstants<float>::halfPi * (float) n / crossfade);
+                    if (i + 1 < takes.size() && n >= takeLength)   gain = std::cos (juce::MathConstants<float>::halfPi * (float) (n - takeLength) / crossfade);
+                    faded.audio[(size_t) at] += noise[(size_t) n] * gain;
+                }
+
+                auto speech = makeSpeech (takeLength, 193 + (int) i, fs, -26.0);
+                for (int n = 0; n < takeLength; ++n)
+                    faded.speech.audio[(size_t) (offset + n)] = speech.audio[(size_t) n];
+                for (auto u : speech.utterances)
+                    faded.speech.utterances.push_back (u + offset);
+                faded.takes.push_back ({ offset, offset + takeLength });
+            }
+
+            for (size_t n = 0; n < faded.audio.size(); ++n)
+                faded.audio[n] += faded.speech.audio[n];
+
+            FloorMatchProcessor p;
+            resetParams (p);
+            setParam (p, ids::target, -66.0f);
+            setParam (p, ids::maxReduction, 20.0f);
+            setParam (p, ids::match, 0.0f);
+            const auto out = run (p, toBuffer (faded.audio), fs);
+
+            double worst = 0.0;
+            juce::String report;
+            for (size_t i = 1; i < takes.size(); ++i)
+            {
+                // Between the end of the crossfade and the first word (at 0.6 s; the gain opens just before it).
+                const int start = faded.takes[i].getStart() + (int) (0.1 * fs);
+                const double level = weightedLevel (welch (out.getReadPointer (0), { { start, start + (int) (0.3 * fs) } }, fs, 11));
+                worst = std::max (worst, std::abs (level + 66.0));
+                report << juce::String (level, 1) << " ";
+            }
+
+            expect (worst < 1.5, "cuts with 100 ms crossfades are followed at once (0.1-0.4 s after each: " + report.trim() + ")");
+        }
+    }
+
     void testColourAndFill()
     {
         std::cout << "Colour match, learn and fill" << std::endl;
@@ -1045,6 +1156,51 @@ int main (int argc, char* argv[])
         return render (args);
 
     verboseQuality = args.contains ("--verbose");
+
+    // --trace <file.wav> <start s> <end s> [lookahead]: the estimator's decisions every 0.1 s.
+    if (args.contains ("--trace"))
+    {
+        const int i = args.indexOf ("--trace");
+        juce::AudioFormatManager formats;
+        formats.registerBasicFormats();
+        std::unique_ptr<juce::AudioFormatReader> reader (formats.createReaderFor (juce::File::getCurrentWorkingDirectory().getChildFile (args[i + 1])));
+        if (reader == nullptr)
+            return 1;
+
+        const double fs = reader->sampleRate;
+        const double from = args[i + 2].getDoubleValue(), to = args[i + 3].getDoubleValue();
+        floormatch::dsp::Engine engine;
+        engine.prepare (fs, 1, i + 4 < args.size() ? args[i + 4].getIntValue() : 2);
+        if (args.contains ("--bin"))
+            engine.setProbeBin (args[args.indexOf ("--bin") + 1].getIntValue());
+        const int latency = engine.getLatencySamples();
+        const int start = std::max (0, (int) (from * fs) - (int) (3.0 * fs));
+        const int length = (int) (to * fs) - start + latency;
+        juce::AudioBuffer<float> audio (1, length);
+        reader->read (&audio, 0, length, start, true, false);
+
+        // The estimator's frame runs 4 frames (the attack lookahead) ahead of the output frame.
+        const double offset = (latency - engine.getFftSize() / 2 - 4 * engine.getHopSize()) / fs;
+        double nextPrint = from;
+        for (int n = 0; n + engine.getHopSize() <= length; n += engine.getHopSize())
+        {
+            float* block[] { audio.getWritePointer (0) + n };
+            engine.process (block, 1, engine.getHopSize());
+            const double t = (start + n + engine.getHopSize()) / fs - offset;
+            if (t >= nextPrint && t <= to)
+            {
+                nextPrint += 0.1;
+                const auto& d = engine.getDiagnostics();
+                std::cout << juce::String (t, 1) << "  noise " << juce::String (engine.getSnapshot().noiseDb, 1) << "  " << d.sides
+                          << "  rises " << d.rises << " falls " << d.falls << " of " << d.compared << "  holding " << d.holdingBins
+                          << "  | bin " << d.probeBin << ": n " << juce::String (10 * std::log10 (d.probeNoise + 1e-30f), 1)
+                          << " past " << juce::String (10 * std::log10 (d.probePast + 1e-30f), 1) << "/" << d.probeCountPast
+                          << " future " << juce::String (10 * std::log10 (d.probeFuture + 1e-30f), 1) << "/" << d.probeCountFuture
+                          << " hold " << d.probeHold << " track " << juce::String (10 * std::log10 (d.probeTrack + 1e-30f), 1) << std::endl;
+            }
+        }
+        return 0;
+    }
     if (args.contains ("--bench"))
     {
         // Real-time factor for 60 s of stereo audio at 48 kHz, per lookahead setting.
@@ -1070,6 +1226,7 @@ int main (int argc, char* argv[])
     if (args.contains ("--quality"))
     {
         testQuality();
+    testEvents();
         return 0;
     }
 
@@ -1147,6 +1304,7 @@ int main (int argc, char* argv[])
     testLevelMatching();
     testSpeechPreservation();
     testQuality();
+    testEvents();
     testColourAndFill();
     testQuietest();
     testRobustness();
