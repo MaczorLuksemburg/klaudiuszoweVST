@@ -22,7 +22,11 @@ target_sources(DynMap PRIVATE
     Source/Stage.cpp
     Source/Engine.cpp
     Source/Presets.cpp
-    Source/PluginProcessor.cpp)
+    Source/PluginProcessor.cpp
+    Source/Components.cpp
+    Source/CurveEditor.cpp
+    Source/BandDisplay.cpp
+    Source/PluginEditor.cpp)
 
 target_compile_definitions(DynMap PUBLIC
     JUCE_WEB_BROWSER=0

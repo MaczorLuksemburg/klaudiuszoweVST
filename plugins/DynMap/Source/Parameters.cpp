@@ -30,6 +30,7 @@ namespace
 
     juce::String percentText (float value, int) { return juce::String (juce::roundToInt (value)) + " %"; }
     juce::String dbText (float value, int)      { return formatDb (value); }
+    juce::String plainDbText (float value, int) { return juce::String (value, 1) + " dB"; }
 
     juce::String msText (float ms, int)
     {
@@ -121,8 +122,8 @@ namespace
                                      [] (float v, int) { return v <= 10.5f ? juce::String ("Off") : formatHz (v); }),
                          choiceParam (id (ids::scSource), label ("Detector Source"), { "Internal", "Sidechain" }, scInternal),
                          msParam (id (ids::trTime), label ("Transient Time"), logRange (5.0f, 500.0f), 40.0f),
-                         dbParam (id (ids::maxBoost), label ("Max Boost"), 0.0f, 48.0f, 24.0f),
-                         dbParam (id (ids::maxCut), label ("Max Cut"), 0.0f, 96.0f, 96.0f),
+                         floatParam (id (ids::maxBoost), label ("Max Boost"), Range (0.0f, 48.0f, 0.1f), 24.0f, plainDbText),
+                         floatParam (id (ids::maxCut), label ("Max Cut"), Range (0.0f, 96.0f, 0.1f), 96.0f, plainDbText),
                          msParam (id (ids::smooth), label ("Smoothing"), skewed (0.0f, 50.0f, 2.0f), 0.5f),
                          choiceParam (id (ids::satType), label ("Saturation"), { "Off", "Tape", "Tube", "Hard", "Fold", "Crush" }, satOff),
                          dbParam (id (ids::drive), label ("Drive"), 0.0f, 36.0f, 0.0f),

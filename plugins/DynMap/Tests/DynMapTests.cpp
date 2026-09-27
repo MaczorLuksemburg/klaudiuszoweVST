@@ -824,7 +824,7 @@ namespace
             saveSnapshot (*editor, folder.getChildFile ("dynmap-init.png"));
         }
 
-        p.presets.loadPreset (19 < p.presets.getNumFactoryPresets() ? 19 : 1);
+        p.presets.loadPreset (p.presets.getNumFactoryPresets() - 1);   // Multiband Mangle: 5 bands
         std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
         auto audio = makeDrums (4096);
         juce::MidiBuffer midi;

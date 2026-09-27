@@ -1,10 +1,83 @@
 #pragma once
 
-#include "PluginProcessor.h"
+#include "BandDisplay.h"
+#include "CurveEditor.h"
 
-// Placeholder until the DynMap UI is written.
-class DynMapEditor : public juce::GenericAudioProcessorEditor
+// Everything is laid out at a fixed base size and scaled as a whole when the window resizes.
+class DynMapMainView : public juce::Component, private juce::Timer
 {
 public:
-    explicit DynMapEditor (DynMapProcessor& p) : juce::GenericAudioProcessorEditor (p) {}
+    static constexpr int baseWidth = 1320;
+    static constexpr int baseHeight = 800;
+
+    DynMapMainView (DynMapProcessor&, klaud::LookAndFeel&);
+    ~DynMapMainView() override;
+
+    void paint (juce::Graphics&) override;
+    void resized() override;
+
+    int getSelectedStage() const { return selectedStage; }
+    void selectStage (int stage);
+
+private:
+    void timerCallback() override;
+    void updateStageControls();
+
+    // Declared first so the look and feel is in place before any child component is built.
+    struct LookAndFeelSetter
+    {
+        LookAndFeelSetter (juce::Component& c, juce::LookAndFeel& lf) { c.setLookAndFeel (&lf); }
+    };
+
+    DynMapProcessor& processor;
+    LookAndFeelSetter lookAndFeelSetter;
+    int selectedStage = dynmap::bandStage (0);
+    juce::Colour stageAccent;
+    juce::String stageTitle;
+
+    dynmap::ui::PresetBar presetBar;
+    dynmap::ui::Choice quality { "" }, phase { "" };
+
+    dynmap::ui::StageTab inputTab, masterTab;
+    dynmap::ui::BandDisplay bandDisplay;
+
+    // Selected stage.
+    dynmap::ui::CurveEditor levelEditor, transientEditor;
+    dynmap::ui::Choice mode { "" };
+    dynmap::ui::Toggle bypass { "Bypass" }, solo { "S" }, mute { "M" };
+    dynmap::ui::Knob pre { "PRE" }, post { "POST" }, mix { "MIX", true }, width { "WIDTH" };
+    dynmap::ui::Choice satType { "SATURATION" }, satPos { "POSITION" };
+    dynmap::ui::Knob drive { "DRIVE", true };
+    dynmap::ui::Knob attack { "ATTACK", true }, hold { "HOLD", true }, release { "RELEASE", true }, relShape { "REL CURVE", true };
+    dynmap::ui::Knob rms { "RMS", true }, link { "LINK", true }, trTime { "TRANS TIME", true }, smooth { "SMOOTH", true };
+    dynmap::ui::Knob maxBoost { "MAX BOOST", true }, maxCut { "MAX CUT", true }, scFilter { "DET HP", true };
+    dynmap::ui::Choice lookahead { "LOOKAHEAD" }, stereo { "STEREO" }, scSource { "DETECT FROM" };
+
+    // Global and output.
+    dynmap::ui::Knob amount { "AMOUNT" }, time { "TIME" }, globalMix { "MIX", true }, inGain { "IN" }, outGain { "OUT" };
+    dynmap::ui::Choice clip { "CLIPPER" };
+    dynmap::ui::Toggle limiter { "Limiter" }, autoGain { "Auto gain" }, delta { "Delta" };
+    dynmap::ui::Knob ceiling { "CEILING" }, limRelease { "RELEASE", true };
+    dynmap::ui::OutputMeter meter;
+    dynmap::ui::LoudnessReadout readout;
+
+    juce::Rectangle<int> levelPanel, transientPanel, stagePanel, detectorPanel, globalPanel, outputPanel;
+
+    juce::TooltipWindow tooltips { this, 700 };
+};
+
+class DynMapEditor : public juce::AudioProcessorEditor
+{
+public:
+    explicit DynMapEditor (DynMapProcessor&);
+    ~DynMapEditor() override;
+
+    void resized() override;
+
+private:
+    DynMapProcessor& processor;
+    klaud::LookAndFeel lookAndFeel { dynmap::ui::palette() };
+    DynMapMainView view;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DynMapEditor)
 };
