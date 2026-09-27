@@ -22,6 +22,7 @@ public:
 private:
     void timerCallback() override;
     void updateStageControls();
+    void updateDetectorView();
 
     // Declared first so the look and feel is in place before any child component is built.
     struct LookAndFeelSetter
@@ -52,6 +53,8 @@ private:
     dynmap::ui::Knob rms { "RMS", true }, link { "LINK", true }, trTime { "TRANS TIME", true }, smooth { "SMOOTH", true };
     dynmap::ui::Knob maxBoost { "MAX BOOST", true }, maxCut { "MAX CUT", true }, scFilter { "DET HP", true };
     dynmap::ui::Choice lookahead { "LOOKAHEAD" }, stereo { "STEREO" }, scSource { "DETECT FROM" };
+    dynmap::ui::DetectorStylePicker detectorStyles;
+    juce::TextButton advanced { "Advanced" };
 
     // Global and output.
     dynmap::ui::Knob amount { "AMOUNT" }, time { "TIME" }, globalMix { "MIX", true }, inGain { "IN" }, outGain { "OUT" };

@@ -104,6 +104,41 @@ namespace dynmap::ui
     };
 
     //==============================================================================
+    // One-click detector settings. Choosing a style sets the stage's detector parameters; the
+    // highlighted style is whichever one the current settings match ("Custom" otherwise).
+    struct DetectorStyle
+    {
+        const char* name;
+        const char* description;
+        float attack, hold, release, relShape, rms, link;
+        int lookahead;
+        float smooth, trTime;
+    };
+
+    const std::vector<DetectorStyle>& detectorStyles();
+
+    class DetectorStylePicker : public juce::Component, private juce::Timer
+    {
+    public:
+        explicit DetectorStylePicker (DynMapProcessor&);
+
+        void setStage (int stage, juce::Colour accent);
+        void paint (juce::Graphics&) override;
+        void resized() override;
+
+    private:
+        void timerCallback() override;
+        int matchingStyle() const;
+        void apply (int style);
+
+        DynMapProcessor& processor;
+        static constexpr int buttonHeight = 38;
+
+        int stage = inputStage;
+        int shown = -2;
+        juce::OwnedArray<juce::TextButton> buttons;
+    };
+
     // Input/output peak meters.
     class OutputMeter : public juce::Component, public juce::SettableTooltipClient, private juce::Timer
     {

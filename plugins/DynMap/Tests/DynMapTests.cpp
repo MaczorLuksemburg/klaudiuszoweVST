@@ -51,6 +51,13 @@ namespace
         p.engine.curves.set (stage, kind, Curve::preset (kind, presetIndex));
     }
 
+    void loadPresetNamed (DynMapProcessor& p, const juce::String& name)
+    {
+        const int index = p.presets.getPresetNames().indexOf (name);
+        jassert (index >= 0);
+        p.presets.loadPreset (index);
+    }
+
     juce::AudioBuffer<float> makeNoise (int numSamples, int seed, float amplitude = 0.5f)
     {
         juce::Random random (seed);
@@ -477,6 +484,23 @@ namespace
         }
     }
 
+    // Pink-ish noise (three one-pole-filtered layers) at a given RMS, for level experiments.
+    juce::AudioBuffer<float> makePink (int numSamples, float rmsTargetDb, int seed = 3)
+    {
+        juce::Random random (seed);
+        juce::AudioBuffer<float> b (2, numSamples);
+        float s1 = 0, s2 = 0, s3 = 0;
+        for (int i = 0; i < numSamples; ++i)
+        {
+            const float w = random.nextFloat() * 2.0f - 1.0f;
+            s1 = 0.997f * s1 + 0.03f * w; s2 = 0.96f * s2 + 0.1f * w; s3 = 0.6f * s3 + 0.3f * w;
+            const float v = s1 + s2 + s3 + 0.1f * w;
+            b.setSample (0, i, v); b.setSample (1, i, v);
+        }
+        b.applyGain (juce::Decibels::decibelsToGain (rmsTargetDb - rmsDb (b, 0, numSamples)));
+        return b;
+    }
+
     // Per drum hit: peak of the first 3 ms against the RMS of the body (15-60 ms), and the RMS of
     // the tail (100-240 ms) against the body. Averaged in dB over the hits.
     struct DrumStats { float attack, tail; };
@@ -526,6 +550,29 @@ namespace
         expect (soften.attack < dry.attack - 3.0f, "Soften lowers the attack: " + db (dry.attack) + " -> " + db (soften.attack));
         expect (tighten.tail < dry.tail - 3.0f, "Tighten cuts the tails: " + db (dry.tail) + " -> " + db (tighten.tail));
         expect (bloom.tail > dry.tail + 3.0f, "Bloom lifts the tails: " + db (dry.tail) + " -> " + db (bloom.tail));
+
+        // OTT presets bring any input to one loud level (louder than a typical -18 dB RMS mix) and
+        // lift the quiet tails.
+        for (const char* name : { "OTT Style", "Extreme OTT" })
+        {
+            loadPresetNamed (p, name);
+            const auto quiet = run (p, makePink (48000 * 3, -30.0f));
+            const auto loud = run (p, makePink (48000 * 3, -8.0f));
+            const float quietOut = rmsDb (quiet, 48000, 48000 * 3), loudOut = rmsDb (loud, 48000, 48000 * 3);
+            const auto hits = drumStats (run (p, drums), p.getLatencySamples());
+
+            expect (std::abs (quietOut - loudOut) < 2.0f && quietOut > -16.0f && hits.tail > dry.tail + 2.0f,
+                    juce::String (name) + ": -30 and -8 dB RMS in -> " + db (quietOut) + " / " + db (loudOut)
+                        + " out, drum tails " + db (dry.tail) + " -> " + db (hits.tail));
+        }
+
+        loadPresetNamed (p, "Multiband Drum Punch");
+        {
+            const auto out = run (p, drums);
+            const auto stats = drumStats (out, p.getLatencySamples());
+            expect (stats.attack > dry.attack + 2.0f && stats.tail > dry.tail,
+                    "Multiband Drum Punch: attack " + db (dry.attack) + " -> " + db (stats.attack) + ", tail " + db (dry.tail) + " -> " + db (stats.tail));
+        }
     }
 
     void testShaperAndOutput()
@@ -696,7 +743,7 @@ namespace
         auto owner = std::make_unique<DynMapProcessor>();
         auto& p = *owner;
 
-        p.presets.loadPreset (2);   // Loud Master: bands + curves
+        loadPresetNamed (p, "Loud Master");   // bands + curves
         juce::MemoryBlock state;
         p.getStateInformation (state);
 
@@ -743,7 +790,7 @@ namespace
         expect (stable, "random parameters and curves stay finite");
 
         // Block size doesn't change the result.
-        p.presets.loadPreset (1);
+        loadPresetNamed (p, "OTT Style");
         const auto noise = makeNoise (24000, 11);
         const auto a = run (p, noise, 64);
         const auto b = run (p, noise, 1024);
@@ -779,9 +826,11 @@ namespace
 
         p.presets.loadPreset (0);
         measure ("Init");
-        p.presets.loadPreset (1);
+        loadPresetNamed (p, "OTT Style");
         measure ("OTT Style (3 bands)");
-        p.presets.loadPreset (2);
+        loadPresetNamed (p, "Multiband Drum Punch");
+        measure ("Multiband Drum Punch (4 bands, limiter)");
+        loadPresetNamed (p, "Loud Master");
         measure ("Loud Master (4 bands, 4x)");
 
         p.presets.resetToDefaults();
@@ -838,6 +887,12 @@ namespace
         }
 
         saveSnapshot (*editor, folder.getChildFile ("dynmap-active.png"));
+        editor.reset();
+
+        // Detector with every control shown.
+        p.apvts.state.setProperty ("detectorAdvanced", true, nullptr);
+        editor.reset (p.createEditor());
+        saveSnapshot (*editor, folder.getChildFile ("dynmap-advanced.png"));
     }
 }
 

@@ -485,7 +485,7 @@ void CurveEditor::showCurveMenu()
     juce::PopupMenu menu, shapes;
     const auto names = Curve::presetNames (kind);
 
-    for (int i = 0; i < names.size(); ++i)
+    for (int i : Curve::presetMenuOrder (kind))
         menu.addItem (i + 1, names[i]);
 
     for (int i = 0; i < numSegmentTypes; ++i)

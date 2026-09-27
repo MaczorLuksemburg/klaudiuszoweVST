@@ -288,9 +288,18 @@ juce::StringArray Curve::presetNames (CurveKind kind)
 {
     if (kind == CurveKind::level)
         return { "Neutral", "Compress 2:1", "Compress 4:1", "Limit", "Upward 2:1", "OTT", "Smash",
-                 "Expand 1:2", "Gate", "Invert", "Stairs", "Soft Clip (waveshaper)", "Fold (waveshaper)" };
+                 "Expand 1:2", "Gate", "Invert", "Stairs", "Soft Clip (waveshaper)", "Fold (waveshaper)", "Extreme OTT" };
 
-    return { "Neutral", "Punch", "Snap", "Soften", "Tighten", "Bloom", "Flip" };
+    return { "Neutral", "Punch", "Snap", "Soften", "Tighten", "Bloom", "Flip", "Punch Hard" };
+}
+
+std::vector<int> Curve::presetMenuOrder (CurveKind kind)
+{
+    // Indices are stored in factory presets, so new shapes are appended and only sorted for the menu.
+    if (kind == CurveKind::level)
+        return { 0, 1, 2, 3, 4, 5, 13, 6, 7, 8, 9, 10, 11, 12 };
+
+    return { 0, 1, 7, 2, 3, 4, 5, 6 };
 }
 
 Curve Curve::preset (CurveKind kind, int index)
@@ -303,7 +312,10 @@ Curve Curve::preset (CurveKind kind, int index)
             case 2:  return makeCurve (kind, { { -72, -72 }, { -24, -24 }, { 12, -15 } });
             case 3:  return makeCurve (kind, { { -72, -72 }, { -6, -6 }, { 12, -6 } });
             case 4:  return makeCurve (kind, { { -72, -51 }, { -30, -30 }, { 12, 12 } });
-            case 5:  return makeCurve (kind, { { -72, -48 }, { -36, -36 }, { -18, -18 }, { 12, -10.5f } });
+            // OTT (Ableton's original: 4.17:1 up below -41, 66:1 down above -33) with ~8 dB of its band
+            // makeup baked in, so it sounds like OTT on any stage. Extreme OTT (13): 8:1 up below -38,
+            // brick wall above -32, +10 dB makeup.
+            case 5:  return makeCurve (kind, { { -72, -40.43f }, { -41, -33 }, { -33, -25 }, { 12, -24.32f } });
             case 6:  return makeCurve (kind, { { -72, -40 }, { -48, -16, curveSeg, 0.3f }, { 12, -8 } });
             case 7:  return makeCurve (kind, { { -72, -72, holdSeg }, { -56, -72 }, { -40, -40 }, { 12, 12 } });
             case 8:  return makeCurve (kind, { { -72, -72, holdSeg }, { -45, -45 }, { 12, 12 } });
@@ -311,6 +323,7 @@ Curve Curve::preset (CurveKind kind, int index)
             case 10: return makeCurve (kind, { { -72, -72, stairsSeg, -0.286f }, { 12, 12 } });
             case 11: return makeCurve (kind, { { -72, -72 }, { -18, -18, curveSeg, 0.55f }, { 12, -1 } });
             case 12: return makeCurve (kind, { { -72, -72 }, { -12, -12, Segment::wave, -0.43f }, { 12, -12 } });
+            case 13: return makeCurve (kind, { { -72, -32.25f }, { -38, -28 }, { -32, -22 }, { 12, -22 } });
             default: break;
         }
 
@@ -325,6 +338,7 @@ Curve Curve::preset (CurveKind kind, int index)
         case 4:  return makeCurve (kind, { { -24, -18 }, { -12, -8 }, { 0, 0 }, { 24, 0 } });
         case 5:  return makeCurve (kind, { { -24, 12 }, { -12, 6 }, { 0, 0 }, { 24, 0 } });
         case 6:  return makeCurve (kind, { { -24, 10 }, { 0, 0 }, { 24, -10 } });
+        case 7:  return makeCurve (kind, { { -24, 0 }, { 0, -6 }, { 12, 8 }, { 24, 10 } });
         default: break;
     }
 

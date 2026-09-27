@@ -309,6 +309,135 @@ void PresetBar::showSaveDialog()
 }
 
 //==============================================================================
+const std::vector<DetectorStyle>& detectorStyles()
+{
+    //                                                                                    att    hold  rel    shape rms  link la sm   trans
+    static const std::vector<DetectorStyle> styles {
+        { "Clean",     "Even and general purpose: follows the music without drawing attention.",   5.0f,  0.0f, 120.0f, 0.0f,  0.0f,  100.0f, 0, 0.5f, 40.0f },
+        { "Punchy",    "Slower attack lets each hit through before the curve acts.",               30.0f, 0.0f, 120.0f, 30.0f, 0.0f,  100.0f, 0, 0.5f, 30.0f },
+        { "Glue",      "Averaged (RMS) with a slow release: bus glue and gentle levelling.",       30.0f, 0.0f, 400.0f, 60.0f, 20.0f, 100.0f, 0, 1.0f, 60.0f },
+        { "Smooth",    "Very slow and averaged, for vocals, pads and long notes.",                 60.0f, 20.0f, 900.0f, 80.0f, 50.0f, 100.0f, 0, 2.0f, 80.0f },
+        { "Fast",      "Quick attack and release: grabs every peak, can add grit.",                1.0f,  0.0f, 40.0f,  0.0f,  0.0f,  100.0f, 0, 0.3f, 20.0f },
+        { "Brickwall", "Lookahead and instant attack: nothing slips past the curve (2 ms latency).", 0.05f, 5.0f, 80.0f, 0.0f, 0.0f, 100.0f, 3, 0.2f, 30.0f },
+        { "Pump",      "Audible, breathing release for sidechain and EDM pumping.",                5.0f,  0.0f, 250.0f, 70.0f, 0.0f,  100.0f, 0, 0.5f, 40.0f },
+        { "Waveform",  "Follows the waveform itself, so the curve becomes distortion (the Maximus trick).", 0.01f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0.0f, 5.0f },
+    };
+
+    return styles;
+}
+
+DetectorStylePicker::DetectorStylePicker (DynMapProcessor& p) : processor (p)
+{
+    const auto& styles = detectorStyles();
+
+    for (int i = 0; i < (int) styles.size(); ++i)
+    {
+        auto* button = buttons.add (new juce::TextButton (styles[(size_t) i].name));
+        button->setTooltip (styles[(size_t) i].description);
+        button->onClick = [this, i] { apply (i); };
+        addAndMakeVisible (button);
+    }
+
+    startTimerHz (8);
+}
+
+void DetectorStylePicker::setStage (int newStage, juce::Colour accent)
+{
+    stage = newStage;
+
+    for (auto* b : buttons)
+        b->setColour (juce::TextButton::buttonOnColourId, accent);
+
+    shown = -2;
+    timerCallback();
+}
+
+int DetectorStylePicker::matchingStyle() const
+{
+    auto value = [this] (const char* name) { return processor.apvts.getRawParameterValue (stageParamId (stage, name))->load(); };
+    auto near = [] (float a, float b) { return std::abs (a - b) <= 0.02f * juce::jmax (std::abs (a), std::abs (b)) + 1.0e-3f; };
+    const auto& styles = detectorStyles();
+
+    for (int i = 0; i < (int) styles.size(); ++i)
+    {
+        const auto& s = styles[(size_t) i];
+        if (near (value (ids::attack), s.attack) && near (value (ids::hold), s.hold) && near (value (ids::release), s.release)
+            && near (value (ids::relShape), s.relShape) && near (value (ids::rms), s.rms) && near (value (ids::link), s.link)
+            && juce::roundToInt (value (ids::lookahead)) == s.lookahead && near (value (ids::smooth), s.smooth)
+            && near (value (ids::trTime), s.trTime))
+            return i;
+    }
+
+    return -1;
+}
+
+void DetectorStylePicker::apply (int index)
+{
+    const auto& s = detectorStyles()[(size_t) index];
+    auto set = [this] (const char* name, float v) { setParameter (processor.apvts, stageParamId (stage, name), v); };
+
+    set (ids::attack, s.attack);
+    set (ids::hold, s.hold);
+    set (ids::release, s.release);
+    set (ids::relShape, s.relShape);
+    set (ids::rms, s.rms);
+    set (ids::link, s.link);
+    set (ids::lookahead, (float) s.lookahead);
+    set (ids::smooth, s.smooth);
+    set (ids::trTime, s.trTime);
+    timerCallback();
+}
+
+void DetectorStylePicker::timerCallback()
+{
+    const int match = matchingStyle();
+    repaint();   // the summary line follows the knobs
+
+    if (match == shown)
+        return;
+
+    shown = match;
+    for (int i = 0; i < buttons.size(); ++i)
+        buttons[i]->setToggleState (i == match, juce::dontSendNotification);
+    repaint();
+}
+
+void DetectorStylePicker::resized()
+{
+    auto area = getLocalBounds();
+    const int columnWidth = (area.getWidth() - 8) / 2;
+
+    for (int i = 0; i < buttons.size(); ++i)
+        buttons[i]->setBounds (area.getX() + (i % 2) * (columnWidth + 8), area.getY() + (i / 2) * (buttonHeight + 10), columnWidth, buttonHeight);
+}
+
+void DetectorStylePicker::paint (juce::Graphics& g)
+{
+    const auto& pal = palette();
+    auto area = getLocalBounds().withTrimmedTop (4 * buttonHeight + 3 * 10 + 16).reduced (4, 0);
+
+    g.setFont (klaud::font (12.5f));
+    g.setColour (shown >= 0 ? pal.text : pal.textDim);
+    g.drawFittedText (shown >= 0 ? juce::String (detectorStyles()[(size_t) shown].description)
+                                 : juce::String ("Custom settings. Open Advanced to see or change them."),
+                      area.removeFromTop (36), juce::Justification::topLeft, 2);
+
+    // What the detector is actually set to.
+    auto value = [this] (const char* name) { return processor.apvts.getRawParameterValue (stageParamId (stage, name))->load(); };
+    auto ms = [] (float v) { return v < 1.0f ? juce::String (v, 2) + " ms" : v < 10.0f ? juce::String (v, 1) + " ms" : juce::String (juce::roundToInt (v)) + " ms"; };
+
+    juce::String summary = "attack " + ms (value (ids::attack)) + ",  release " + ms (value (ids::release));
+    summary << ",  " << (value (ids::rms) > 0.0f ? "RMS " + ms (value (ids::rms)) : juce::String ("peak"));
+    const int la = juce::roundToInt (value (ids::lookahead));
+    if (la > 0)
+        summary << ",  lookahead " << juce::String (lookaheadMs[(size_t) juce::jlimit (0, numLookaheads - 1, la)], 1) << " ms";
+
+    g.setFont (klaud::font (11.0f));
+    g.setColour (pal.textDim);
+    g.drawFittedText (summary, area.removeFromTop (30), juce::Justification::topLeft, 2);
+}
+
+//==============================================================================
 OutputMeter::OutputMeter (DynMapProcessor& p) : processor (p)
 {
     setTooltip ("Peak levels: input (left pair) and output (right pair)");

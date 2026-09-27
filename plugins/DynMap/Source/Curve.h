@@ -62,6 +62,7 @@ namespace dynmap
         static Curve fromString (CurveKind, const juce::String&);
 
         static juce::StringArray presetNames (CurveKind);
+        static std::vector<int> presetMenuOrder (CurveKind);
         static Curve preset (CurveKind, int index);
 
         bool operator== (const Curve&) const = default;

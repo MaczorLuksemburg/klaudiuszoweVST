@@ -5,7 +5,7 @@ namespace dynmap
 namespace
 {
     const juce::Identifier presetNameId { "presetName" };
-    const juce::StringArray uiProperties { "uiWidth", "selectedStage" };   // kept when presets load
+    const juce::StringArray uiProperties { "uiWidth", "selectedStage", "detectorAdvanced" };   // kept when presets load
     constexpr const char* fileExtension = ".dynmappreset";
 
     struct CurveDef
@@ -55,15 +55,55 @@ namespace
 
             list.push_back ({ "Init", {}, {} });
 
+            // Ableton's original OTT: bands at 88.3 Hz and 2.5 kHz, +5.2 dB into each band, RMS thresholds,
+            // 4.17:1 upward below about -41 dB, 66:1 (high band: brick wall) downward above -34/-30/-35 dB,
+            // then +10.3 / +5.7 / +10.3 dB band makeup. That lands any input at about -20 dB RMS, quieter
+            // than most mixes, so the output gain adds 7 dB (limiter as a safety net). Turn Mix down for the
+            // usual "OTT at 30 %".
+            auto ottBands = [&] (Values& v, float timeScale)
             {
-                Values v;
-                addBand (v, 1, 88.0f);
+                addBand (v, 1, 88.3f);
                 addBand (v, 2, 2500.0f);
                 setTimes (v, b0, 47.8f, 282.0f);
                 setTimes (v, b1, 22.4f, 282.0f);
                 setTimes (v, b2, 13.5f, 132.0f);
-                v.push_back ({ ids::globalMix, 70.0f });
-                list.push_back ({ "OTT Style", v, { { b0, level, 5 }, { b1, level, 5 }, { b2, level, 5 } } });
+                for (int s : { b0, b1, b2 })
+                {
+                    v.push_back (sp (s, ids::pre, 5.2f));
+                    v.push_back (sp (s, ids::rms, 10.0f));
+                }
+                v.push_back ({ ids::time, timeScale });
+            };
+
+            {
+                Values v;
+                ottBands (v, 100.0f);
+                v.push_back (sp (b0, ids::post, 10.3f));
+                v.push_back (sp (b1, ids::post, 5.7f));
+                v.push_back (sp (b2, ids::post, 10.3f));
+                v.push_back ({ ids::outGain, 7.0f });
+                v.push_back ({ ids::limiter, 1.0f });
+                list.push_back ({ "OTT Style", v, { { b0, level, 0, "-72,-48.28;-40.8,-40.8;-33.8,-33.8;12,-33.11" },
+                                                    { b1, level, 0, "-72,-49.04;-41.8,-41.8;-30.3,-30.3;12,-29.67" },
+                                                    { b2, level, 0, "-72,-48.28;-40.8,-40.8;-35.5,-35.5;12,-35.5" } } });
+            }
+
+            // Everything squeezed into a 6 dB window (8:1 up, brick wall down), faster, more makeup, and the
+            // clipper + limiter to keep it from running away.
+            {
+                Values v;
+                ottBands (v, 60.0f);
+                for (int s : { b0, b1, b2 })
+                    v.push_back (sp (s, ids::maxBoost, 36.0f));
+                v.push_back (sp (b0, ids::post, 13.0f));
+                v.push_back (sp (b1, ids::post, 8.0f));
+                v.push_back (sp (b2, ids::post, 13.0f));
+                v.push_back ({ ids::outGain, 5.0f });
+                v.push_back ({ ids::clip, (float) clipSoft });
+                v.push_back ({ ids::limiter, 1.0f });
+                v.push_back ({ ids::ceiling, -1.0f });
+                const juce::String squeeze = "-72,-42.25;-38,-38;-32,-32;12,-32";
+                list.push_back ({ "Extreme OTT", v, { { b0, level, 0, squeeze }, { b1, level, 0, squeeze }, { b2, level, 0, squeeze } } });
             }
 
             {
@@ -85,6 +125,33 @@ namespace
             }
 
             list.push_back ({ "Drum Punch", { sp (inputStage, ids::trTime, 30.0f) }, { { inputStage, transient, 1 } } });
+
+            // Punch where it matters and fuller bodies: the kick and body bands get a little sustain and
+            // gentle upward compression, the snap and air bands get sharp transient boosts.
+            {
+                Values v;
+                addBand (v, 1, 120.0f);
+                addBand (v, 2, 1200.0f);
+                addBand (v, 3, 6000.0f);
+                v.push_back (sp (b0, ids::trTime, 50.0f));
+                v.push_back (sp (b1, ids::trTime, 40.0f));
+                v.push_back (sp (b2, ids::trTime, 25.0f));
+                v.push_back (sp (b3, ids::trTime, 15.0f));
+                for (int s : { b0, b1 })
+                {
+                    setTimes (v, s, 30.0f, 250.0f);
+                    v.push_back (sp (s, ids::maxBoost, 10.0f));
+                }
+                v.push_back ({ ids::clip, (float) clipSoft });
+                v.push_back ({ ids::limiter, 1.0f });
+                list.push_back ({ "Multiband Drum Punch", v,
+                                  { { b0, transient, 0, "-24,2;-8,0;0,-3;10,5;24,7" },
+                                    { b0, level, 0, "-72,-60;-30,-30;12,12" },
+                                    { b1, transient, 0, "-24,4;-10,2;0,0;12,4;24,5" },
+                                    { b1, level, 0, "-72,-54;-36,-36;12,12" },
+                                    { b2, transient, 7 },
+                                    { b3, transient, 0, "-24,-2;0,-3;6,6;24,8" } } });
+            }
 
             list.push_back ({ "Drum Snap Extreme",
                               { sp (inputStage, ids::trTime, 20.0f), sp (inputStage, ids::satType, (float) satTape), sp (inputStage, ids::drive, 6.0f) },

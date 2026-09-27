@@ -10,6 +10,7 @@ namespace
 
     const juce::Identifier uiWidthId { "uiWidth" };
     const juce::Identifier selectedStageId { "selectedStage" };
+    const juce::Identifier detectorAdvancedId { "detectorAdvanced" };
 
     // Lays components out left to right in a row of equal cells.
     void row (juce::Rectangle<int> area, std::initializer_list<juce::Component*> items, int cellWidth)
@@ -36,6 +37,7 @@ DynMapMainView::DynMapMainView (DynMapProcessor& p, klaud::LookAndFeel& lookAndF
       bandDisplay (p, [this] { return selectedStage; }, [this] (int s) { selectStage (s); }),
       levelEditor (p, CurveKind::level),
       transientEditor (p, CurveKind::transient),
+      detectorStyles (p),
       meter (p),
       readout (p)
 {
@@ -97,8 +99,18 @@ DynMapMainView::DynMapMainView (DynMapProcessor& p, klaud::LookAndFeel& lookAndF
              &mode, &bypass, &solo, &mute, &pre, &post, &mix, &width, &satType, &satPos, &drive,
              &attack, &hold, &release, &relShape, &rms, &link, &trTime, &smooth, &maxBoost, &maxCut, &scFilter,
              &lookahead, &stereo, &scSource, &amount, &time, &globalMix, &inGain, &outGain, &clip, &limiter,
-             &autoGain, &delta, &ceiling, &limRelease, &meter, &readout })
+             &autoGain, &delta, &ceiling, &limRelease, &meter, &readout, &detectorStyles, &advanced })
         addAndMakeVisible (c);
+
+    advanced.setClickingTogglesState (true);
+    advanced.setTooltip ("Show every detector control instead of the styles");
+    advanced.setToggleState ((bool) p.apvts.state.getProperty (detectorAdvancedId, false), juce::dontSendNotification);
+    advanced.onClick = [this]
+    {
+        processor.apvts.state.setProperty (detectorAdvancedId, advanced.getToggleState(), nullptr);
+        updateDetectorView();
+    };
+    updateDetectorView();
 
     const int saved = (int) p.apvts.state.getProperty (selectedStageId, bandStage (0));
     selectStage (juce::jlimit (0, numStages - 1, saved));
@@ -134,6 +146,8 @@ void DynMapMainView::updateStageControls()
     stageTitle = stageLabel (processor, stage);
 
     levelEditor.setStage (stage, stageAccent);
+    detectorStyles.setStage (stage, stageAccent);
+    advanced.setColour (juce::TextButton::buttonOnColourId, stageAccent);
     transientEditor.setStage (stage, stageAccent);
 
     mode.attach (apvts, id (ids::mode));
@@ -177,6 +191,19 @@ void DynMapMainView::updateStageControls()
 
     for (auto* t : { &bypass, &solo, &mute })
         t->setAccent (stageAccent);
+}
+
+void DynMapMainView::updateDetectorView()
+{
+    // Styles by default; every knob (what the styles set, plus limits and filters) under Advanced.
+    const bool showAll = advanced.getToggleState();
+    detectorStyles.setVisible (! showAll);
+
+    for (auto* c : std::initializer_list<juce::Component*> { &attack, &hold, &release, &relShape, &rms, &link, &trTime,
+                                                             &smooth, &maxBoost, &maxCut, &scFilter, &lookahead })
+        c->setVisible (showAll);
+
+    resized();
 }
 
 void DynMapMainView::timerCallback()
@@ -306,21 +333,36 @@ void DynMapMainView::resized()
     // Detector.
     {
         auto area = detectorPanel.reduced (8, 6);
+        advanced.setBounds (area.getRight() - 78, area.getY() + 1, 78, 22);
         area.removeFromTop (34);
-        const int spacing = juce::jmin (18, (area.getHeight() - 3 * knobH - 42) / 4);
-        row (area.removeFromTop (knobH), { &attack, &hold, &release, &relShape }, knobW);
-        area.removeFromTop (spacing);
-        row (area.removeFromTop (knobH), { &rms, &link, &trTime, &smooth }, knobW);
-        area.removeFromTop (spacing);
-        row (area.removeFromTop (knobH), { &maxBoost, &maxCut, &scFilter }, knobW);
-        area.removeFromTop (spacing);
-        auto combos = area.removeFromTop (42).reduced (6, 0);
-        const int w = (combos.getWidth() - 12) / 3;
-        lookahead.setBounds (combos.removeFromLeft (w));
-        combos.removeFromLeft (6);
-        stereo.setBounds (combos.removeFromLeft (w));
-        combos.removeFromLeft (6);
-        scSource.setBounds (combos);
+
+        if (! advanced.getToggleState())
+        {
+            // Styles, then the two routing choices that matter without the details.
+            auto combos = area.removeFromBottom (42).reduced (6, 0);
+            const int w = (combos.getWidth() - 6) / 2;
+            stereo.setBounds (combos.removeFromLeft (w));
+            combos.removeFromLeft (6);
+            scSource.setBounds (combos);
+            detectorStyles.setBounds (area.reduced (6, 4));
+        }
+        else
+        {
+            const int spacing = juce::jmin (18, (area.getHeight() - 3 * knobH - 42) / 4);
+            row (area.removeFromTop (knobH), { &attack, &hold, &release, &relShape }, knobW);
+            area.removeFromTop (spacing);
+            row (area.removeFromTop (knobH), { &rms, &link, &trTime, &smooth }, knobW);
+            area.removeFromTop (spacing);
+            row (area.removeFromTop (knobH), { &maxBoost, &maxCut, &scFilter }, knobW);
+            area.removeFromTop (spacing);
+            auto combos = area.removeFromTop (42).reduced (6, 0);
+            const int w = (combos.getWidth() - 12) / 3;
+            lookahead.setBounds (combos.removeFromLeft (w));
+            combos.removeFromLeft (6);
+            stereo.setBounds (combos.removeFromLeft (w));
+            combos.removeFromLeft (6);
+            scSource.setBounds (combos);
+        }
     }
 
     // Global.
