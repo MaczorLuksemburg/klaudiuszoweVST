@@ -4,6 +4,7 @@ Download the zip for your system below, then follow the steps for it.
 
 | Plugin | What it does |
 |---|---|
+| **DynMap** | Multiband dynamics you draw: input/output level curves (Maximus style) and transient curves on up to 12 bands, saturation, clipper and true-peak limiter |
 | **MSC** | Multistage stereo control: band split, dynamic pan, Haas, Juno-style chorus, mid/side image |
 | **StereoScale** | Left / right / mid / side gain, 0–200 % |
 

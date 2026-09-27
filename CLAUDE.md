@@ -36,6 +36,26 @@ AI-made VST plugins for testing and fun.
   rise up to +6 dB at |p| = 1.
 - Parameter IDs in `Parameters.h` are saved in projects and presets: never rename or remove them.
 
+## DynMap (plugins/DynMap)
+- Multiband "dynamic mapping" (FabFilter Saturn's band system + Image-Line Maximus's drawn compressor curves).
+  Chain: in gain -> Input stage -> band split -> band stages (solo/mute) -> sum -> Master stage -> out gain
+  -> clipper -> true-peak limiter -> auto gain -> global mix / delta.
+- A stage (`Source/Stage.*`) = pre gain -> detector -> level curve (input dB -> output dB, gain = out - in,
+  bottom edge = silence) + transient curve (x = attack/tail measure, y = gain) -> x Amount, clamp to max
+  boost/cut, smoothing -> saturation or waveshaper mode (curve applied per sample), oversampled -> post, width, mix.
+  Followers run on linear amplitude after a short peak hold, so steady tones read their true peak; the
+  transient measure is dB(fast^2 / (slow-attack * slow-release)), positive on attacks, negative on tails.
+- Bands belong to 12 slots: slot 0 is the lowest band, slots 1-11 own the crossover at their lower edge
+  (`b<n>_on/_freq/_slope`); the layout sorts used slots by frequency, so splitting never renumbers bands.
+  Minimum-phase crossovers are LR (6/12/24/48 dB/oct) with allpass compensation (sum is flat); linear phase
+  designs nested FIRs on a background thread (sum is an exact delayed impulse).
+- Curves are not parameters: `CurveBank` keeps them in the state tree child `CURVES` and hands baked tables
+  to the audio thread through `CurveSlot` (spin lock, try-lock on the audio side).
+- Latency is reported exactly (lookahead, oversampling, linear phase, limiter) and changes only with those settings.
+- `DynMap_Tests` checks transparency (bit-exact init), latency, crossover flatness, static curve accuracy,
+  transient curves, limiter ceiling, sidechain, presets and state; `--bench` measures CPU, `--only <group>`
+  runs one group, `--snapshot <dir>` renders the editor.
+
 ## Targets
 - Systems: Windows, macOS, Linux. DAWs: Logic Pro, Cubase, FL Studio, Ableton Live, Reaper.
 - Formats: VST3 everywhere + AU on macOS (Logic). Pass `${KLAUD_PLUGIN_FORMATS}` and `${KLAUD_PLUGIN_COPY_ARGS}`
