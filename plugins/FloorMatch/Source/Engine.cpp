@@ -698,6 +698,32 @@ bool Engine::estimateNoise (int64_t frame, float* noise)
             band.side = sideNone;
     }
 
+    // With lookahead a cut up is seen while the new take fills the future window, but speech in
+    // that window soon hides the step. Keep to the new take until the past window holds no frames
+    // from before the cut, or the "lower side" rule would fall back to the old take's background.
+    if (lookaheadMode != lookaheadOff)
+    {
+        const bool cutUp = ! insideEvent && rises >= std::max (4, compared / 4) && rises >= falls;
+
+        for (size_t b = 0; b < bands.size(); ++b)
+        {
+            auto& band = bands[b];
+
+            if (cutUp)
+            {
+                cutHold[b] = pastWindow.length();
+                if (band.side == sideNone)
+                    band.side = band.ratio > 1.0f ? sideFuture : sideRecent;
+            }
+            else if (cutHold[b] > 0 && band.side == sideNone)
+            {
+                band.side = sideRecent;
+            }
+
+            cutHold[b] = std::max (0, cutHold[b] - 1);
+        }
+    }
+
     // Without lookahead the frame is the newest one, so after a cut in either direction the recent
     // window is the current take: keep using it until the older window has no frames from before.
     if (lookaheadMode == lookaheadOff)
