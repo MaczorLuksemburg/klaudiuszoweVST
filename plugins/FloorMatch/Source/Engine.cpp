@@ -38,13 +38,6 @@ namespace
     constexpr float biasCorrection = 1.035f;         // calibrated on white noise by the tests
 
     // Speech gain.
-    constexpr float ddAlpha = 0.98f;                // decision-directed a priori SNR smoothing
-    constexpr float minPrioriSnr = 0.001f;          // -30 dB
-    constexpr float presenceLowDb = 2.0f, presenceHighDb = 8.0f;
-    constexpr float attackStep = 0.8f;              // pre-opening per frame of lookahead
-    constexpr float speechGainFloor = 0.08f;        // below this the speech gain is random noise: zero it, or the
-                                                    // attack and release would hold it and let extra noise through
-    constexpr double releaseSeconds = 0.05;
 
     constexpr float aes17 = 3.0103f;                // a full-scale sine reads 0 dB
 
@@ -259,7 +252,7 @@ void Engine::prepare (double newSampleRate, int channels, int lookahead)
         map.fraction = position - (float) map.lower;
     }
 
-    releaseCoeff = (float) std::exp (-hop / (releaseSeconds * sampleRate));
+    releaseCoeff = (float) std::exp (-hop / (tuning.releaseSeconds * sampleRate));
 
     inputRing.assign ((size_t) numChannels, std::vector<float> ((size_t) fftSize, 0.0f));
     outputRing.assign ((size_t) numChannels, std::vector<float> ((size_t) fftSize, 0.0f));
@@ -333,6 +326,12 @@ void Engine::reset()
     frameSinceSnapshot = 0;
     snapshot.valid = false;
     latestNoiseValid = false;
+}
+
+void Engine::setTuning (const Tuning& newTuning)
+{
+    tuning = newTuning;
+    releaseCoeff = (float) std::exp (-hop / (tuning.releaseSeconds * sampleRate));
 }
 
 void Engine::setProfile (const Profile& newProfile)
@@ -900,12 +899,13 @@ void Engine::computeSpeechGain (int64_t frame, const float* noise, bool noiseVal
         const float n = noise[k];
         const float gamma = current[k] / n;
 
-        float xi = ddAlpha * previousSpeech[(size_t) k] / n + (1.0f - ddAlpha) * std::max (gamma - 1.0f, 0.0f);
-        xi = std::max (xi, minPrioriSnr);
+        float xi = tuning.ddAlpha * previousSpeech[(size_t) k] / n + (1.0f - tuning.ddAlpha) * std::max (gamma - 1.0f, 0.0f);
+        xi = std::max (xi, tuning.minPrioriSnr);
 
         // MMSE log-spectral amplitude gain (Ephraim & Malah).
         const float v = std::max (xi * gamma / (1.0f + xi), 1.0e-8f);
-        const float g = std::min (1.0f, xi / (1.0f + xi) * std::exp (0.5f * expIntegral (v)));
+        const float g = tuning.wienerSpeechGain ? xi / (1.0f + xi)
+                                                : std::min (1.0f, xi / (1.0f + xi) * std::exp (0.5f * expIntegral (v)));
         previousSpeech[(size_t) k] = g * g * current[k];
 
         // Speech presence from the power in a 3 x 3 neighbourhood (bins k-1..k+1, frames -1..+1),
@@ -916,7 +916,7 @@ void Engine::computeSpeechGain (int64_t frame, const float* noise, bool noiseVal
             local += previous[kk] + current[kk] + next[kk];
         local /= (float) (3 * (k1 - k0 + 1));
 
-        const float presence = smoothstep ((toDb (local / n) - presenceLowDb) / (presenceHighDb - presenceLowDb));
+        const float presence = smoothstep ((toDb (local / n) - tuning.presenceLowDb) / (tuning.presenceHighDb - tuning.presenceLowDb));
         tempGain[(size_t) k] = presence * g;
     }
 
@@ -924,8 +924,11 @@ void Engine::computeSpeechGain (int64_t frame, const float* noise, bool noiseVal
     {
         const float left  = tempGain[(size_t) std::max (0, k - 1)];
         const float right = tempGain[(size_t) std::min (numBins - 1, k + 1)];
-        const float g = 0.25f * left + 0.5f * tempGain[(size_t) k] + 0.25f * right;
-        speechGain[k] = std::max (0.0f, (g - speechGainFloor) / (1.0f - speechGainFloor));
+        const float neighbourMean = 0.25f * left + 0.5f * tempGain[(size_t) k] + 0.25f * right;
+        float g = tuning.smoothGainAcrossBins ? neighbourMean : tempGain[(size_t) k];
+        if (g < tuning.spikeGain)
+            g = std::min (g, neighbourMean);
+        speechGain[k] = std::max (0.0f, (g - tuning.speechGainFloor) / (1.0f - tuning.speechGainFloor));
     }
 }
 
@@ -959,7 +962,7 @@ void Engine::synthesise (int64_t frame)
 
         for (int j = 1; j <= attackFrames; ++j)
         {
-            weight *= attackStep;
+            weight *= tuning.attackStep;
             g = std::max (g, weight * speechHistory[(size_t) (slotOf (frame + j, gainLength) * numBins + k)]);
         }
 

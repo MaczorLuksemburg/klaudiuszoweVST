@@ -68,6 +68,24 @@ namespace floormatch::dsp
     class Engine
     {
     public:
+        // How the speech gain is formed. The defaults are the tuned values; tests sweep them.
+        struct Tuning
+        {
+            float ddAlpha = 0.98f;              // decision-directed a priori SNR smoothing (faster tracking keeps onsets and consonants)
+            float minPrioriSnr = 0.001f;        // -30 dB
+            float presenceLowDb = 2.0f;         // local SNR where speech presence starts ...
+            float presenceHighDb = 8.0f;        // ... and where it is certain
+            float attackStep = 0.8f;            // pre-opening per frame of lookahead before an onset
+            float speechGainFloor = 0.12f;      // speech gains below this are noise: zeroed, or attack and release would hold them
+            double releaseSeconds = 0.05;
+            bool wienerSpeechGain = false;      // Wiener instead of MMSE log-spectral amplitude
+            bool smoothGainAcrossBins = false;  // smoothing pulls harmonic peaks down towards the gaps between them
+            float spikeGain = 0.5f;             // gains below this are only ever lowered to their neighbours' average (isolated noise spikes)
+        };
+
+        void setTuning (const Tuning&);
+        const Tuning& getTuning() const noexcept { return tuning; }
+
         enum Lookahead { lookaheadOff, lookaheadShort, lookaheadNormal, lookaheadLong };
         static double lookaheadSeconds (int mode);
 
@@ -183,6 +201,8 @@ namespace floormatch::dsp
 
         // Speech gain state
         std::vector<float> previousSpeech, releasedGain, tempGain, noiseScratch;
+
+        Tuning tuning;
 
         // Target
         Settings settings;

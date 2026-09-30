@@ -996,6 +996,30 @@ namespace
     }
 
     //==============================================================================
+    // --t <name> <value> pairs on the command line, for tuning sweeps.
+    bool parseTuning (const juce::StringArray& args, floormatch::dsp::Engine::Tuning& tuning)
+    {
+        for (int k = 0; k + 2 < args.size(); ++k)
+        {
+            if (args[k] != "--t")
+                continue;
+            const auto name = args[k + 1];
+            const float value = args[k + 2].getFloatValue();
+            if (name == "ddAlpha")          tuning.ddAlpha = value;
+            else if (name == "minPriori")   tuning.minPrioriSnr = value;
+            else if (name == "presLow")     tuning.presenceLowDb = value;
+            else if (name == "presHigh")    tuning.presenceHighDb = value;
+            else if (name == "attack")      tuning.attackStep = value;
+            else if (name == "gainFloor")   tuning.speechGainFloor = value;
+            else if (name == "release")     tuning.releaseSeconds = value;
+            else if (name == "wiener")      tuning.wienerSpeechGain = value > 0.5f;
+            else if (name == "smoothBins")  tuning.smoothGainAcrossBins = value > 0.5f;
+            else if (name == "spike")       tuning.spikeGain = value;
+            else { std::cout << "unknown tuning " << name << std::endl; return false; }
+        }
+        return true;
+    }
+
     int render (const juce::StringArray& args)
     {
         const int index = args.indexOf ("--render");
@@ -1157,6 +1181,69 @@ int main (int argc, char* argv[])
 
     verboseQuality = args.contains ("--verbose");
 
+    // --shadow <in.wav> <out.wav> [--target dB] [--maxred dB] [--lookahead i] [--t <name> <value>]...
+    // Channel 0 is analysed; the other channels (e.g. clean speech and clean noise of the same mix)
+    // get exactly the same gains. Output is latency-compensated 32-bit float.
+    if (args.contains ("--shadow"))
+    {
+        const int i = args.indexOf ("--shadow");
+        auto option = [&] (const char* name, float fallback)
+        {
+            const int k = args.indexOf (name);
+            return k >= 0 && k + 1 < args.size() ? args[k + 1].getFloatValue() : fallback;
+        };
+
+        juce::AudioFormatManager formats;
+        formats.registerBasicFormats();
+        std::unique_ptr<juce::AudioFormatReader> reader (formats.createReaderFor (juce::File::getCurrentWorkingDirectory().getChildFile (args[i + 1])));
+        if (reader == nullptr)
+            return 1;
+
+        const double fs = reader->sampleRate;
+        const int channels = (int) reader->numChannels;
+        floormatch::dsp::Engine engine;
+        engine.prepare (fs, channels, (int) option ("--lookahead", 2));
+        engine.setAnalysisChannels (1);
+
+        floormatch::dsp::Engine::Tuning tuning;
+        if (! parseTuning (args, tuning))
+            return 1;
+        engine.setTuning (tuning);
+
+        floormatch::dsp::Settings settings;
+        settings.targetDb = option ("--target", -62.0f);
+        settings.maxReductionDb = option ("--maxred", 15.0f);
+        settings.match = 0.0f;
+        engine.setSettings (settings);
+
+        const int latency = engine.getLatencySamples();
+        const int length = (int) reader->lengthInSamples;
+        juce::AudioBuffer<float> audio (channels, length + latency);
+        audio.clear();
+        reader->read (&audio, 0, length, 0, true, true);
+
+        for (int n = 0; n < audio.getNumSamples(); n += 512)
+        {
+            const int block = std::min (512, audio.getNumSamples() - n);
+            std::vector<float*> pointers;
+            for (int ch = 0; ch < channels; ++ch)
+                pointers.push_back (audio.getWritePointer (ch) + n);
+            engine.process (pointers.data(), channels, block);
+        }
+
+        juce::AudioBuffer<float> output (channels, length);
+        for (int ch = 0; ch < channels; ++ch)
+            output.copyFrom (ch, 0, audio, ch, latency, length);
+
+        const juce::File outFile (juce::File::getCurrentWorkingDirectory().getChildFile (args[i + 2]));
+        outFile.deleteFile();
+        juce::WavAudioFormat wav;
+        std::unique_ptr<juce::OutputStream> stream (outFile.createOutputStream());
+        auto writer = wav.createWriterFor (stream, juce::AudioFormatWriterOptions {}.withSampleRate (fs).withNumChannels (channels)
+                                                       .withBitsPerSample (32).withSampleFormat (juce::AudioFormatWriterOptions::SampleFormat::floatingPoint));
+        return writer != nullptr && writer->writeFromAudioSampleBuffer (output, 0, length) ? 0 : 1;
+    }
+
     // --trace <file.wav> <start s> <end s> [lookahead]: the estimator's decisions every 0.1 s.
     if (args.contains ("--trace"))
     {
@@ -1245,6 +1332,10 @@ int main (int argc, char* argv[])
 
         floormatch::dsp::Engine engine;
         engine.prepare (fs, 1, (int) option ("--lookahead", 2));
+        floormatch::dsp::Engine::Tuning tuning;
+        if (! parseTuning (args, tuning))
+            return 1;
+        engine.setTuning (tuning);
         auto audio = track.audio;
         const int latency = engine.getLatencySamples();
         audio.resize (audio.size() + (size_t) latency, 0.0f);
