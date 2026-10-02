@@ -13,6 +13,7 @@ namespace dynmap::ui
         const juce::Colour master { 0xfff2a93b };
         const juce::Colour boost  { 0xfff2a93b };
         const juce::Colour cut    { 0xff4fc3f7 };
+        const juce::Colour sidechain { 0xffc58bff };
     }
 
     const klaud::Palette& palette();

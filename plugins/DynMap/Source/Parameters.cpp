@@ -120,7 +120,7 @@ namespace
                          choiceParam (id (ids::stereo), label ("Stereo Mode"), { "Left/Right", "Mid/Side" }, stereoLR),
                          floatParam (id (ids::scFilter), label ("Detector HP"), logRange (10.0f, 2000.0f), 10.0f,
                                      [] (float v, int) { return v <= 10.5f ? juce::String ("Off") : formatHz (v); }),
-                         choiceParam (id (ids::scSource), label ("Detector Source"), { "Internal", "Sidechain" }, scInternal),
+                         choiceParam (id (ids::scSource), label ("Detector Source"), { "Own signal", "Sidechain", "Sidechain (full)" }, scInternal),
                          msParam (id (ids::trTime), label ("Transient Time"), logRange (5.0f, 500.0f), 40.0f),
                          floatParam (id (ids::maxBoost), label ("Max Boost"), Range (0.0f, 48.0f, 0.1f), 24.0f, plainDbText),
                          floatParam (id (ids::maxCut), label ("Max Cut"), Range (0.0f, 96.0f, 0.1f), 96.0f, plainDbText),
@@ -196,6 +196,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
                       msParam (ids::limRel, "Limiter Release", logRange (1.0f, 1000.0f), 80.0f),
                       boolParam (ids::autoGain, "Auto Gain"),
                       boolParam (ids::delta, "Delta"),
+                      dbParam (ids::scGain, "Sidechain Gain", -24.0f, 24.0f, 0.0f),
+                      boolParam (ids::scListen, "Sidechain Listen"),
                       choiceParam (ids::quality, "Oversampling", { "Off", "2x", "4x", "8x" }, 1),
                       choiceParam (ids::phase, "Crossover Phase", { "Minimum phase", "Linear phase" }, phaseMinimum));
     layout.add (std::move (global));

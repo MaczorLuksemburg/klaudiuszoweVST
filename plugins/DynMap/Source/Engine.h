@@ -42,6 +42,7 @@ namespace dynmap
         std::atomic<float> limiterGainDb { 0.0f };
         std::atomic<float> autoGainDb { 0.0f };
         std::atomic<bool> resetTruePeak { false };
+        std::atomic<float> sidechainDb { -100.0f };    // recent sidechain peak (falls 60 dB/s), -100 = none
         dsp::LoudnessMeter outLoudness;
     };
 
@@ -73,7 +74,7 @@ namespace dynmap
 
         CurveBank curves;
         OutputMeters meters;
-        SpectrumAnalyzer preSpectrum, postSpectrum;
+        SpectrumAnalyzer preSpectrum, postSpectrum, sidechainSpectrum;
 
     private:
         struct StageParams
@@ -115,7 +116,7 @@ namespace dynmap
         std::array<StageParams, numStages> stageParams {};
         std::atomic<float> *amountParam, *timeParam, *mixParam, *inGainParam, *outGainParam, *clipParam,
                            *limiterParam, *ceilingParam, *limRelParam, *autoGainParam, *deltaParam,
-                           *qualityParam, *phaseParam;
+                           *qualityParam, *phaseParam, *scGainParam, *scListenParam;
 
         double sampleRate = 44100.0;
         int maxBlock = 512;
@@ -137,7 +138,8 @@ namespace dynmap
         std::array<juce::SmoothedValue<float>, maxBands> bandGains;
 
         std::array<dsp::DelayLine, 2> dryDelay, sidechainBandDelay, sidechainMasterDelay;
-        juce::AudioBuffer<float> sidechainDelayed;
+        juce::AudioBuffer<float> sidechainDelayed, sidechainInput;
+        juce::SmoothedValue<float> sidechainGain;
 
         juce::SmoothedValue<float> inGain, outGain, globalMix;
 

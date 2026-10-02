@@ -96,6 +96,12 @@ namespace bands
         return bandStage (layout.slots[(size_t) position - 1]);
     }
 
+    void setAllBandsSource (DynMapProcessor& p, int source)
+    {
+        for (int slot = 0; slot < maxBands; ++slot)
+            setParameter (p.apvts, stageParamId (bandStage (slot), ids::scSource), (float) source);
+    }
+
     void reset (DynMapProcessor& p, int stage)
     {
         for (const char* name : stageParamNames)
@@ -115,6 +121,7 @@ BandDisplay::BandDisplay (DynMapProcessor& p, std::function<int()> getSelectedSt
                 "drag a band's line to set its level, click the slope badge to change the slope, right-click for more.");
     processor.engine.preSpectrum.setEnabled (true);
     processor.engine.postSpectrum.setEnabled (true);
+    processor.engine.sidechainSpectrum.setEnabled (true);
     layout = processor.engine.getLayout();
     startTimerHz (30);
 }
@@ -123,6 +130,7 @@ BandDisplay::~BandDisplay()
 {
     processor.engine.preSpectrum.setEnabled (false);
     processor.engine.postSpectrum.setEnabled (false);
+    processor.engine.sidechainSpectrum.setEnabled (false);
 }
 
 juce::RangedAudioParameter* BandDisplay::param (int stage, const char* name) const
@@ -217,6 +225,7 @@ void BandDisplay::timerCallback()
 {
     processor.engine.preSpectrum.process();
     processor.engine.postSpectrum.process();
+    processor.engine.sidechainSpectrum.process();
 
     layout = processor.engine.getLayout();
 
@@ -264,7 +273,8 @@ void BandDisplay::paint (juce::Graphics& g)
     // Spectrum: signal into the bands (filled) and the output (line).
     {
         auto spectrumY = [&] (float db) { return a.getBottom() - juce::jlimit (0.0f, 1.0f, (db - spectrumFloor) / -spectrumFloor) * a.getHeight(); };
-        juce::Path pre, post;
+        juce::Path pre, post, sidechain;
+        const bool showSidechain = processor.engine.meters.sidechainDb.load() > -80.0f;
         pre.startNewSubPath (a.getX(), a.getBottom());
 
         for (float x = a.getX(); x <= a.getRight(); x += 2.0f)
@@ -273,6 +283,12 @@ void BandDisplay::paint (juce::Graphics& g)
             pre.lineTo (x, spectrumY (processor.engine.preSpectrum.getLevelAt (f)));
             const float yPost = spectrumY (processor.engine.postSpectrum.getLevelAt (f));
             if (x == a.getX()) post.startNewSubPath (x, yPost); else post.lineTo (x, yPost);
+
+            if (showSidechain)
+            {
+                const float ySc = spectrumY (processor.engine.sidechainSpectrum.getLevelAt (f));
+                if (x == a.getX()) sidechain.startNewSubPath (x, ySc); else sidechain.lineTo (x, ySc);
+            }
         }
 
         pre.lineTo (a.getRight(), a.getBottom());
@@ -284,6 +300,13 @@ void BandDisplay::paint (juce::Graphics& g)
         g.fillPath (pre);
         g.setColour (juce::Colours::white.withAlpha (0.28f));
         g.strokePath (post, juce::PathStrokeType (1.0f));
+
+        if (showSidechain)
+        {
+            g.setColour (colours::sidechain.withAlpha (0.55f));
+            g.strokePath (sidechain, juce::PathStrokeType (1.2f));
+        }
+
         g.restoreState();
     }
 
@@ -333,6 +356,7 @@ void BandDisplay::paint (juce::Graphics& g)
         if (param (stage, ids::solo)->getValue() > 0.5f) label << " S";
         if (param (stage, ids::mute)->getValue() > 0.5f) label << " M";
         if (bypassed) label << " off";
+        if (param (stage, ids::scSource)->getValue() > 0.25f) label << " SC";
 
         g.setFont (klaud::font (11.0f, true));
         g.setColour (colour.withAlpha (dim));
@@ -595,6 +619,127 @@ void BandDisplay::showSlopeMenu (int position)
             setParameter (safeThis->processor.apvts, stageParamId (stage, ids::slope), (float) (result - 1));
         else if (result == 10)
             safeThis->select (bands::remove (safeThis->processor, stage - 1));
+    });
+}
+
+//==============================================================================
+SidechainTab::SidechainTab (DynMapProcessor& p)
+    : processor (p), gain (*p.apvts.getParameter (ids::scGain))
+{
+    setTooltip ("Sidechain input (plugin inputs 3/4). Drag up or down for its gain, click for routing options. "
+                "In Reaper: send the trigger track to channels 3/4 of this track.");
+    setMouseCursor (juce::MouseCursor::UpDownResizeCursor);
+    startTimerHz (20);
+}
+
+void SidechainTab::timerCallback()
+{
+    repaint();
+}
+
+void SidechainTab::paint (juce::Graphics& g)
+{
+    const auto& pal = palette();
+    const float levelDb = processor.engine.meters.sidechainDb.load();
+    const bool present = levelDb > -90.0f;
+    const bool listening = processor.apvts.getRawParameterValue (ids::scListen)->load() > 0.5f;
+    auto area = getLocalBounds().toFloat().reduced (0.5f);
+
+    g.setColour (listening ? colours::sidechain.withAlpha (0.16f) : pal.panel);
+    g.fillRoundedRectangle (area, 5.0f);
+    g.setColour (listening ? colours::sidechain.withAlpha (0.8f) : pal.panelOutline);
+    g.drawRoundedRectangle (area, 5.0f, 1.0f);
+
+    g.setFont (klaud::font (10.0f, true));
+    g.setColour (present ? colours::sidechain : pal.textDim);
+    g.drawText (listening ? "SC LISTEN" : "SIDECHAIN", area.removeFromTop (20.0f).toNearestInt(), juce::Justification::centred, false);
+
+    // Level bar (-60..0 dB).
+    const auto bar = area.removeFromTop (8.0f).reduced (9.0f, 1.0f);
+    g.setColour (pal.track);
+    g.fillRoundedRectangle (bar, 2.0f);
+    const float fill = juce::jlimit (0.0f, 1.0f, (levelDb + 60.0f) / 60.0f);
+    g.setColour (colours::sidechain.withAlpha (0.9f));
+    g.fillRoundedRectangle (bar.withWidth (bar.getWidth() * fill), 2.0f);
+
+    g.setFont (klaud::font (10.0f));
+    g.setColour (pal.textDim);
+    g.drawText (present ? formatDb (gain.convertFrom0to1 (gain.getValue())) : juce::String ("no signal"),
+                area.toNearestInt(), juce::Justification::centred, false);
+}
+
+void SidechainTab::mouseDown (const juce::MouseEvent& e)
+{
+    dragging = false;
+    dragStartDb = gain.convertFrom0to1 (gain.getValue());
+
+    if (e.mods.isPopupMenu())
+        showMenu();
+}
+
+void SidechainTab::mouseDrag (const juce::MouseEvent& e)
+{
+    if (e.mods.isPopupMenu())
+        return;
+
+    if (! dragging && std::abs (e.getDistanceFromDragStartY()) > 3)
+    {
+        dragging = true;
+        gain.beginChangeGesture();
+    }
+
+    if (dragging)
+    {
+        const float db = juce::jlimit (-24.0f, 24.0f, dragStartDb - (float) e.getDistanceFromDragStartY() * 0.2f);
+        gain.setValueNotifyingHost (gain.convertTo0to1 (std::round (db * 2.0f) * 0.5f));
+    }
+}
+
+void SidechainTab::mouseUp (const juce::MouseEvent& e)
+{
+    if (dragging)
+        gain.endChangeGesture();
+    else if (! e.mods.isPopupMenu())
+        showMenu();
+
+    dragging = false;
+}
+
+void SidechainTab::mouseDoubleClick (const juce::MouseEvent&)
+{
+    setParameter (processor.apvts, ids::scGain, 0.0f);
+}
+
+void SidechainTab::showMenu()
+{
+    const bool listening = processor.apvts.getRawParameterValue (ids::scListen)->load() > 0.5f;
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader ("Sidechain = plugin inputs 3/4");
+    menu.addItem (1, "Every band follows the same band of the sidechain");
+    menu.addItem (2, "Every band follows the whole sidechain");
+    menu.addItem (3, "Every band follows its own signal");
+    menu.addSeparator();
+    menu.addItem (4, "Listen to the sidechain", true, listening);
+    menu.addItem (5, "Reset sidechain gain");
+
+    juce::Component::SafePointer<SidechainTab> safeThis (this);
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this), [safeThis, listening] (int result)
+    {
+        if (safeThis == nullptr)
+            return;
+
+        auto& p = safeThis->processor;
+
+        switch (result)
+        {
+            case 1: bands::setAllBandsSource (p, scExternal); break;
+            case 2: bands::setAllBandsSource (p, scExternalFull); break;
+            case 3: bands::setAllBandsSource (p, scInternal); break;
+            case 4: setParameter (p.apvts, ids::scListen, listening ? 0.0f : 1.0f); break;
+            case 5: setParameter (p.apvts, ids::scGain, 0.0f); break;
+            default: break;
+        }
     });
 }
 

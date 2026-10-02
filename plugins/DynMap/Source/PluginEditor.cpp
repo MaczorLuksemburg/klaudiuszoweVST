@@ -34,6 +34,7 @@ DynMapMainView::DynMapMainView (DynMapProcessor& p, klaud::LookAndFeel& lookAndF
       presetBar (p.presets),
       inputTab (p, inputStage, [this] { return selectedStage; }, [this] (int s) { selectStage (s); }),
       masterTab (p, masterStage, [this] { return selectedStage; }, [this] (int s) { selectStage (s); }),
+      sidechainTab (p),
       bandDisplay (p, [this] { return selectedStage; }, [this] (int s) { selectStage (s); }),
       levelEditor (p, CurveKind::level),
       transientEditor (p, CurveKind::transient),
@@ -92,10 +93,11 @@ DynMapMainView::DynMapMainView (DynMapProcessor& p, klaud::LookAndFeel& lookAndF
     scFilter.slider.setTooltip ("High-pass on the detector only, so bass doesn't drive the curve");
     lookahead.box.setTooltip ("Delays the audio so the detector sees peaks coming (adds latency)");
     stereo.box.setTooltip ("Process left/right or mid/side");
-    scSource.box.setTooltip ("Detect from this stage's own signal or from the sidechain input");
+    scSource.box.setTooltip ("What drives this stage's curves: its own signal, the same band of the sidechain input, "
+                             "or the whole sidechain (e.g. a kick ducking only the bass band)");
 
     for (auto* c : std::initializer_list<juce::Component*> {
-             &presetBar, &quality, &phase, &inputTab, &masterTab, &bandDisplay, &levelEditor, &transientEditor,
+             &presetBar, &quality, &phase, &inputTab, &masterTab, &sidechainTab, &bandDisplay, &levelEditor, &transientEditor,
              &mode, &bypass, &solo, &mute, &pre, &post, &mix, &width, &satType, &satPos, &drive,
              &attack, &hold, &release, &relShape, &rms, &link, &trTime, &smooth, &maxBoost, &maxCut, &scFilter,
              &lookahead, &stereo, &scSource, &amount, &time, &globalMix, &inGain, &outGain, &clip, &limiter,
@@ -218,6 +220,14 @@ void DynMapMainView::timerCallback()
     const auto colour = stageColour (processor, selectedStage);
     const auto title = stageLabel (processor, selectedStage);
 
+    const bool listensToSidechain = processor.apvts.getRawParameterValue (stageParamId (selectedStage, ids::scSource))->load() > 0.5f;
+    const bool missing = listensToSidechain && processor.engine.meters.sidechainDb.load() <= -90.0f;
+    if (missing != sidechainMissing)
+    {
+        sidechainMissing = missing;
+        repaint (detectorPanel);
+    }
+
     if (colour != stageAccent || title != stageTitle)
         updateStageControls();
 
@@ -255,6 +265,15 @@ void DynMapMainView::paint (juce::Graphics& g)
     drawPanel (g, transientPanel, "Transient map", stageAccent);
     drawPanel (g, stagePanel, "Gain and saturation", stageAccent);
     drawPanel (g, detectorPanel, "Detector", stageAccent);
+
+    if (sidechainMissing)
+    {
+        g.setColour (colours::sidechain);
+        g.setFont (klaud::font (11.5f, true));
+        g.drawFittedText ("No sidechain signal: send the trigger to inputs 3/4 (until then this stage follows its own signal)",
+                          detectorPanel.getX() + 14, detectorPanel.getBottom() - 96, detectorPanel.getWidth() - 28, 30,
+                          juce::Justification::centredLeft, 2);
+    }
     drawPanel (g, globalPanel, "Global");
     drawPanel (g, outputPanel, "Output");
 
@@ -280,7 +299,8 @@ void DynMapMainView::resized()
 
     // Input | bands | master.
     const int rowY = headerHeight + 8, rowH = 222;
-    inputTab.setBounds (margin, rowY, 74, rowH - 16);
+    inputTab.setBounds (margin, rowY, 74, rowH - 16 - 62);
+    sidechainTab.setBounds (margin, rowY + rowH - 16 - 56, 74, 56);
     masterTab.setBounds (baseWidth - margin - 74, rowY, 74, rowH - 16);
     bandDisplay.setBounds (margin + 74 + 12, rowY, baseWidth - 2 * (margin + 74 + 12), rowH);
 

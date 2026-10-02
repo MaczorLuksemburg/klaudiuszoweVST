@@ -218,6 +218,34 @@ namespace
                                 sp (inputStage, ids::release, 180.0f), sp (inputStage, ids::relShape, 60.0f) },
                               { { inputStage, level, 0, "-72,-72;-30,-30;0,-24;12,-12" } } });
 
+            // Sidechain a kick: only the bass band ducks, triggered by the kick's own low end, with 1 ms
+            // lookahead so the duck is already down when the kick lands.
+            {
+                Values v;
+                addBand (v, 1, 120.0f);
+                setTimes (v, b0, 0.5f, 120.0f);
+                v.push_back (sp (b0, ids::scSource, (float) scExternal));
+                v.push_back (sp (b0, ids::relShape, 50.0f));
+                v.push_back (sp (b0, ids::lookahead, 2.0f));
+                list.push_back ({ "Kick Ducks Bass", v, { { b0, level, 14 } } });
+            }
+
+            // Any hit on the sidechain ducks lows deeply, mids a little and the top barely.
+            {
+                Values v;
+                addBand (v, 1, 150.0f);
+                addBand (v, 2, 2500.0f);
+                for (int s : { b0, b1, b2 })
+                {
+                    setTimes (v, s, 1.0f, 200.0f);
+                    v.push_back (sp (s, ids::relShape, 60.0f));
+                    v.push_back (sp (s, ids::scSource, (float) scExternalFull));
+                }
+                list.push_back ({ "Multiband Sidechain Duck", v, { { b0, level, 0, "-72,-72;-40,-40;-10,-34;12,-12" },
+                                                                   { b1, level, 0, "-72,-72;-40,-40;-10,-18;12,4" },
+                                                                   { b2, level, 0, "-72,-72;-40,-40;-10,-13;12,9" } } });
+            }
+
             {
                 Values v;
                 addBand (v, 1, 100.0f);

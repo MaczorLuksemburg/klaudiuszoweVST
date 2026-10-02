@@ -49,6 +49,9 @@ AI-made VST plugins for testing and fun.
   (`b<n>_on/_freq/_slope`); the layout sorts used slots by frequency, so splitting never renumbers bands.
   Minimum-phase crossovers are LR (6/12/24/48 dB/oct) with allpass compensation (sum is flat); linear phase
   designs nested FIRs on a background thread (sum is an exact delayed impulse).
+- Sidechain = inputs 3/4 (bus on by default), scaled by `g_scgain`. Per stage `scsrc`: own signal, sidechain
+  (bands: the same band of the sidechain, split by its own crossover) or sidechain full (bands: the whole
+  sidechain). Sidechain copies are delayed to line up with the audio each stage sees. `g_sclisten` outputs it.
 - Curves are not parameters: `CurveBank` keeps them in the state tree child `CURVES` and hands baked tables
   to the audio thread through `CurveSlot` (spin lock, try-lock on the audio side).
 - Latency is reported exactly (lookahead, oversampling, linear phase, limiter) and changes only with those settings.

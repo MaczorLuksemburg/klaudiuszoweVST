@@ -11,6 +11,7 @@ namespace dynmap::ui
         int split (DynMapProcessor&, float freq);                         // returns the new band's stage, or -1
         int remove (DynMapProcessor&, int bandSlot);                      // returns the stage to select next
         void reset (DynMapProcessor&, int stage);                         // stage parameters and curves to default
+        void setAllBandsSource (DynMapProcessor&, int source);            // ScSource for every band slot
     }
 
     // Saturn-style multiband display: live spectrum, bands coloured low to high, draggable
@@ -66,6 +67,28 @@ namespace dynmap::ui
         Hit hover, drag;
         float hoverX = -1.0f;
         juce::RangedAudioParameter* dragParam = nullptr;
+    };
+
+    // Sidechain input: level, gain (drag up/down) and a menu to route every band to it.
+    class SidechainTab : public juce::Component, public juce::SettableTooltipClient, private juce::Timer
+    {
+    public:
+        explicit SidechainTab (DynMapProcessor&);
+
+        void paint (juce::Graphics&) override;
+        void mouseDown (const juce::MouseEvent&) override;
+        void mouseDrag (const juce::MouseEvent&) override;
+        void mouseUp (const juce::MouseEvent&) override;
+        void mouseDoubleClick (const juce::MouseEvent&) override;
+
+    private:
+        void timerCallback() override;
+        void showMenu();
+
+        DynMapProcessor& processor;
+        juce::RangedAudioParameter& gain;
+        float dragStartDb = 0.0f;
+        bool dragging = false;
     };
 
     // Input / Master selector beside the band display, with its live gain.

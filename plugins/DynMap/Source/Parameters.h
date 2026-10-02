@@ -69,13 +69,15 @@ namespace dynmap
         inline constexpr const char* limRel    = "out_rel";
         inline constexpr const char* autoGain  = "g_autogain";
         inline constexpr const char* delta     = "g_delta";
+        inline constexpr const char* scGain    = "g_scgain";    // level of the sidechain input into the detectors
+        inline constexpr const char* scListen  = "g_sclisten";  // output plays the sidechain (to check routing)
         inline constexpr const char* quality   = "g_quality";
         inline constexpr const char* phase     = "g_phase";
     }
 
     enum Mode      { modeDynamics, modeWaveshaper };
     enum Stereo    { stereoLR, stereoMS };
-    enum ScSource  { scInternal, scExternal };
+    enum ScSource  { scInternal, scExternal, scExternalFull };   // bands: own band / same band of the sidechain / whole sidechain
     enum SatType   { satOff, satTape, satTube, satHard, satFold, satCrush };
     enum SatPos    { satAfter, satBefore };
     enum Slope     { slope6, slope12, slope24, slope48 };

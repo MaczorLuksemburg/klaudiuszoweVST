@@ -309,7 +309,8 @@ void CurveEditor::paint (juce::Graphics& g)
     if (kind == CurveKind::level)
     {
         g.drawText ("OUT", (int) a.getX() + 6, (int) a.getY() + 4, 40, 12, juce::Justification::centredLeft, false);
-        g.drawText ("IN", (int) a.getRight() - 46, (int) a.getBottom() - 16, 40, 12, juce::Justification::centredRight, false);
+        const bool sidechain = processor.apvts.getRawParameterValue (stageParamId (stage, ids::scSource))->load() > 0.5f;
+        g.drawText (sidechain ? "SIDECHAIN" : "IN", (int) a.getRight() - 86, (int) a.getBottom() - 16, 80, 12, juce::Justification::centredRight, false);
     }
     else
     {

@@ -174,7 +174,7 @@ void Stage::process (float* left, float* right, const float* scLeft, const float
 void Stage::processChunk (float* left, float* right, const float* scLeft, const float* scRight, int n)
 {
     const bool midSide = settings.stereo == stereoMS;
-    const bool useSidechain = settings.scSource == scExternal && scLeft != nullptr && scRight != nullptr;
+    const bool useSidechain = settings.scSource != scInternal && scLeft != nullptr && scRight != nullptr;
     const bool waveshaper = settings.mode == modeWaveshaper;
     const bool levelActive = ! waveshaper && ! levelTable.neutral;
     const bool dynamicsActive = levelActive || ! transientTable.neutral;

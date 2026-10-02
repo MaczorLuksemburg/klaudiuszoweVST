@@ -35,11 +35,13 @@ private:
     int selectedStage = dynmap::bandStage (0);
     juce::Colour stageAccent;
     juce::String stageTitle;
+    bool sidechainMissing = false;   // the selected stage listens to a sidechain that isn't arriving
 
     dynmap::ui::PresetBar presetBar;
     dynmap::ui::Choice quality { "" }, phase { "" };
 
     dynmap::ui::StageTab inputTab, masterTab;
+    dynmap::ui::SidechainTab sidechainTab;
     dynmap::ui::BandDisplay bandDisplay;
 
     // Selected stage.

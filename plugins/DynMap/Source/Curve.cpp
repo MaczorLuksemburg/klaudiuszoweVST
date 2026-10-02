@@ -288,7 +288,7 @@ juce::StringArray Curve::presetNames (CurveKind kind)
 {
     if (kind == CurveKind::level)
         return { "Neutral", "Compress 2:1", "Compress 4:1", "Limit", "Upward 2:1", "OTT", "Smash",
-                 "Expand 1:2", "Gate", "Invert", "Stairs", "Soft Clip (waveshaper)", "Fold (waveshaper)", "Extreme OTT" };
+                 "Expand 1:2", "Gate", "Invert", "Stairs", "Soft Clip (waveshaper)", "Fold (waveshaper)", "Extreme OTT", "Duck (sidechain)" };
 
     return { "Neutral", "Punch", "Snap", "Soften", "Tighten", "Bloom", "Flip", "Punch Hard" };
 }
@@ -297,7 +297,7 @@ std::vector<int> Curve::presetMenuOrder (CurveKind kind)
 {
     // Indices are stored in factory presets, so new shapes are appended and only sorted for the menu.
     if (kind == CurveKind::level)
-        return { 0, 1, 2, 3, 4, 5, 13, 6, 7, 8, 9, 10, 11, 12 };
+        return { 0, 1, 2, 3, 4, 5, 13, 6, 7, 8, 14, 9, 10, 11, 12 };
 
     return { 0, 1, 7, 2, 3, 4, 5, 6 };
 }
@@ -323,6 +323,8 @@ Curve Curve::preset (CurveKind kind, int index)
             case 10: return makeCurve (kind, { { -72, -72, stairsSeg, -0.286f }, { 12, 12 } });
             case 11: return makeCurve (kind, { { -72, -72 }, { -18, -18, curveSeg, 0.55f }, { 12, -1 } });
             case 12: return makeCurve (kind, { { -72, -72 }, { -12, -12, Segment::wave, -0.43f }, { 12, -12 } });
+            // Duck: meant for a sidechain; up to 18 dB down once the trigger passes about -40 dB.
+            case 14: return makeCurve (kind, { { -72, -72 }, { -40, -40 }, { -10, -28 }, { 12, -6 } });
             case 13: return makeCurve (kind, { { -72, -32.25f }, { -38, -28 }, { -32, -22 }, { 12, -22 } });
             default: break;
         }

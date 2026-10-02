@@ -194,7 +194,7 @@ Engine::Engine (juce::AudioProcessorValueTreeState& state) : apvts (state)
     inGainParam = get (ids::inGain);     outGainParam = get (ids::outGain);  clipParam = get (ids::clip);
     limiterParam = get (ids::limiter);   ceilingParam = get (ids::ceiling);  limRelParam = get (ids::limRel);
     autoGainParam = get (ids::autoGain); deltaParam = get (ids::delta);      qualityParam = get (ids::quality);
-    phaseParam = get (ids::phase);
+    phaseParam = get (ids::phase);         scGainParam = get (ids::scGain);    scListenParam = get (ids::scListen);
 }
 
 Engine::~Engine() = default;
@@ -240,6 +240,7 @@ void Engine::prepare (double newSampleRate, int maxBlockSize)
     sidechainBandBuffers.setSize (maxBands * 2, maxBlock);
     scratch.setSize (4, maxBlock);
     sidechainDelayed.setSize (2, maxBlock);
+    sidechainInput.setSize (2, maxBlock);
 
     for (int slot = 0; slot < maxBands; ++slot)
         for (int ch = 0; ch < 2; ++ch)
@@ -283,6 +284,7 @@ void Engine::prepare (double newSampleRate, int maxBlockSize)
         g.reset (sampleRate, 0.01);
 
     inGain.reset (sampleRate, 0.02);
+    sidechainGain.reset (sampleRate, 0.02);
     outGain.reset (sampleRate, 0.02);
     globalMix.reset (sampleRate, 0.02);
     clipFade.reset (sampleRate, 0.02);
@@ -294,6 +296,7 @@ void Engine::prepare (double newSampleRate, int maxBlockSize)
 
     preSpectrum.setSampleRate (sampleRate);
     postSpectrum.setSampleRate (sampleRate);
+    sidechainSpectrum.setSampleRate (sampleRate);
 
     reset();
     readSettings();
@@ -415,6 +418,42 @@ void Engine::processBlock (float* left, float* right, const float* scLeft, const
     meters.inPeak[0].store (juce::jmax (inPeakL, meters.inPeak[0].load()));
     meters.inPeak[1].store (juce::jmax (inPeakR, meters.inPeak[1].load()));
 
+    // Sidechain: gain, level meter and spectrum. Everything after this uses the scaled copy.
+    {
+        const float target = juce::Decibels::decibelsToGain (scGainParam->load());
+        if (firstBlock) sidechainGain.setCurrentAndTargetValue (target); else sidechainGain.setTargetValue (target);
+
+        float peak = 0.0f;
+
+        if (scLeft != nullptr && scRight != nullptr)
+        {
+            auto* l = sidechainInput.getWritePointer (0);
+            auto* r = sidechainInput.getWritePointer (1);
+
+            for (int i = 0; i < n; ++i)
+            {
+                const float g = sidechainGain.getNextValue();
+                l[i] = scLeft[i] * g;
+                r[i] = scRight[i] * g;
+                peak = juce::jmax (peak, std::abs (l[i]), std::abs (r[i]));
+            }
+
+            scLeft = l;
+            scRight = r;
+
+            if (sidechainSpectrum.isEnabled())
+            {
+                auto* mono = scratch.getWritePointer (2);
+                for (int i = 0; i < n; ++i)
+                    mono[i] = 0.5f * (l[i] + r[i]);
+                sidechainSpectrum.push (mono, n);
+            }
+        }
+
+        const float fallen = meters.sidechainDb.load() - 60.0f * (float) n / (float) sampleRate;
+        meters.sidechainDb.store (juce::jmax (-100.0f, fallen, juce::Decibels::gainToDecibels (peak, -100.0f)));
+    }
+
     // Input gain.
     const float inTarget = juce::Decibels::decibelsToGain (inGainParam->load());
     if (firstBlock) inGain.setCurrentAndTargetValue (inTarget); else inGain.setTargetValue (inTarget);
@@ -470,6 +509,22 @@ void Engine::processBlock (float* left, float* right, const float* scLeft, const
     master.process (left, right, scMasterL, scMasterR, n);
 
     processOutput (left, right, n);
+
+    // Sidechain listen: hear what the detectors get, to check the routing.
+    if (isOn (scListenParam))
+    {
+        if (scLeft != nullptr && scRight != nullptr)
+        {
+            std::copy (scLeft, scLeft + n, left);
+            std::copy (scRight, scRight + n, right);
+        }
+        else
+        {
+            juce::FloatVectorOperations::clear (left, n);
+            juce::FloatVectorOperations::clear (right, n);
+        }
+    }
+
     firstBlock = false;
 }
 
@@ -577,9 +632,23 @@ void Engine::processBands (float* left, float* right, const float* scLeft, const
 
         stage.pullCurves (curves.getSlot (stageIndex, CurveKind::level), curves.getSlot (stageIndex, CurveKind::transient));
         stage.setSettings (settings[(size_t) stageIndex], global, maxBandLookahead - settings[(size_t) stageIndex].lookaheadSamples);
-        stage.process (bandL, bandR,
-                       bandsUseSidechain ? sidechainBands[(size_t) slot][0] : nullptr,
-                       bandsUseSidechain ? sidechainBands[(size_t) slot][1] : nullptr, n);
+        // A band listens to the same band of the sidechain, or to all of it.
+        const float* scBandL = nullptr;
+        const float* scBandR = nullptr;
+        const int source = settings[(size_t) stageIndex].scSource;
+
+        if (hasSidechain && source == scExternal && bandsUseSidechain)
+        {
+            scBandL = sidechainBands[(size_t) slot][0];
+            scBandR = sidechainBands[(size_t) slot][1];
+        }
+        else if (hasSidechain && source == scExternalFull)
+        {
+            scBandL = sidechainDelayed.getReadPointer (0);
+            scBandR = sidechainDelayed.getReadPointer (1);
+        }
+
+        stage.process (bandL, bandR, scBandL, scBandR, n);
 
         auto& g = bandGains[(size_t) slot];
 

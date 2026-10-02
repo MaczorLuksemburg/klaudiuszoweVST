@@ -713,6 +713,94 @@ namespace
                     "sidechain ducks the input: " + db (before) + " before, " + db (during) + " while the sidechain plays");
         }
 
+        // Multiband sidechain: a 60 Hz kick on the sidechain ducks only the bass band ("same band"),
+        // while a 5 kHz hat only ducks the bass when the band follows the whole sidechain.
+        {
+            const auto duck = Curve::fromString (CurveKind::level, "-72,-72;-40,-40;-10,-34;12,-12");   // -24 dB above -10
+
+            auto twoTones = makeSine (n, 60.0f, -12.0f);
+            const auto highTone = makeSine (n, 3000.0f, -12.0f);
+            for (int ch = 0; ch < 2; ++ch)
+                twoTones.addFrom (ch, 0, highTone, ch, 0, n);
+
+            auto measure = [&] (const juce::AudioBuffer<float>& out, float freq)
+            {
+                // Level of one tone in the second half, via a simple correlation.
+                double re = 0.0, im = 0.0;
+                for (int i = n / 2; i < n; ++i)
+                {
+                    const double ph = juce::MathConstants<double>::twoPi * freq * i / testSampleRate;
+                    re += out.getSample (0, i) * std::cos (ph);
+                    im += out.getSample (0, i) * std::sin (ph);
+                }
+                return juce::Decibels::gainToDecibels ((float) (2.0 * std::sqrt (re * re + im * im) / (n / 2)), -200.0f);
+            };
+
+            for (int source : { scExternal, scExternalFull })
+            {
+                for (float trigger : { 60.0f, 5000.0f })
+                {
+                    resetAll (p);
+                    setParam (p, ids::quality, 0.0f);
+                    addBand (p, 1, 300.0f, slope48);
+                    setStage (p, bandStage (0), ids::scSource, (float) source);
+                    p.engine.curves.set (bandStage (0), CurveKind::level, duck);
+
+                    const auto out = runWithSidechain (p, twoTones, makeSine (n, trigger, -3.0f));
+                    const float bass = measure (out, 60.0f), top = measure (out, 3000.0f);
+                    const bool shouldDuck = source == scExternalFull || trigger < 300.0f;
+
+                    expect ((shouldDuck ? bass < -30.0f : std::abs (bass + 12.0f) < 0.5f) && std::abs (top + 12.0f) < 0.5f,
+                            juce::String (source == scExternal ? "same-band" : "full-range") + " sidechain, "
+                                + juce::String ((int) trigger) + " Hz trigger: bass " + db (bass) + ", top " + db (top));
+                }
+            }
+
+            // Sidechain gain moves the trigger along the curve: -24 dB ducks much less.
+            setParam (p, ids::scGain, -24.0f);
+            const auto quieter = runWithSidechain (p, twoTones, makeSine (n, 60.0f, -3.0f));
+            expect (measure (quieter, 60.0f) > -25.0f, "sidechain gain -24 dB ducks the bass less (" + db (measure (quieter, 60.0f)) + ")");
+
+            // Listen plays the sidechain itself.
+            setParam (p, ids::scGain, 0.0f);
+            setParam (p, ids::scListen, 1.0f);
+            const auto trigger = makeSine (n, 60.0f, -3.0f);
+            const auto heard = runWithSidechain (p, twoTones, trigger);
+            float diff = 0.0f;
+            for (int i = 0; i < n; ++i)
+                diff = std::max (diff, std::abs (heard.getSample (0, i) - trigger.getSample (0, i)));
+            expect (diff < 1.0e-6f, "sidechain listen outputs the sidechain");
+        }
+
+        // The sidechain bus is on by default and reaches the engine through processBlock (inputs 3/4).
+        {
+            resetAll (p);
+            setParam (p, ids::quality, 0.0f);
+            setStage (p, inputStage, ids::scSource, (float) scExternal);
+            p.engine.curves.set (inputStage, CurveKind::level, Curve::preset (CurveKind::level, 14));   // Duck
+
+            const auto main = makeSine (n, 300.0f, -20.0f);
+            const auto kick = makeSine (n, 60.0f, -3.0f);
+            juce::AudioBuffer<float> buffer (4, n);
+            for (int ch = 0; ch < 2; ++ch)
+            {
+                buffer.copyFrom (ch, 0, main, ch, 0, n);
+                buffer.copyFrom (ch + 2, 0, kick, ch, 0, n);
+            }
+
+            p.prepareToPlay (testSampleRate, 512);
+            juce::MidiBuffer midi;
+            for (int start = 0; start < n; start += 512)
+            {
+                juce::AudioBuffer<float> block (buffer.getArrayOfWritePointers(), 4, start, juce::jmin (512, n - start));
+                p.processBlock (block, midi);
+            }
+
+            const bool busOn = p.getBusCount (true) > 1 && p.getBus (true, 1)->isEnabled();
+            expect (busOn && peakDb (buffer, n / 2, n) < -32.0f,
+                    "sidechain bus on by default; a kick on inputs 3/4 ducks the input stage to " + db (peakDb (buffer, n / 2, n)));
+        }
+
         // Mid/side processing with neutral curves is transparent.
         resetAll (p);
         setStage (p, inputStage, ids::stereo, (float) stereoMS);

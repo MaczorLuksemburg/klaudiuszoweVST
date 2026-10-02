@@ -7,7 +7,7 @@ DynMapProcessor::DynMapProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",     juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output",    juce::AudioChannelSet::stereo(), true)
-                          .withInput  ("Sidechain", juce::AudioChannelSet::stereo(), false)),
+                          .withInput  ("Sidechain", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "DynMap", createParameterLayout()),
       engine (apvts),
       presets (apvts, engine.curves)
@@ -54,7 +54,8 @@ void DynMapProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     const float* scLeft = nullptr;
     const float* scRight = nullptr;
 
-    if (getBusCount (true) > 1 && getBus (true, 1)->isEnabled())
+    if (getBusCount (true) > 1 && getBus (true, 1)->isEnabled()
+        && buffer.getNumChannels() > getChannelIndexInProcessBlockBuffer (true, 1, 0))
     {
         const auto scBuffer = getBusBuffer (buffer, true, 1);
 
