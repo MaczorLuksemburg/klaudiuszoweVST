@@ -1,8 +1,10 @@
 // Offline checks for DynMap: DSP behaviour, presets and state, a CPU bench and an optional
 // screenshot of the editor.
-// Usage: DynMap_Tests [--no-gui] [--snapshot <dir>] [--bench]
+// Usage: DynMap_Tests [--no-gui] [--snapshot <dir>] [--bench] [--only <group>]
+//        DynMap_Tests --kit <file.wav> | --compare <render.wav> [--preset <name>] [--out <file.wav>]  (see Measure.h)
 #include "../Source/PluginEditor.h"
 #include "../Source/PluginProcessor.h"
+#include "Measure.h"
 
 #include <iostream>
 
@@ -1022,6 +1024,57 @@ namespace
     }
 }
 
+// Writes the measurement kit.
+int makeKit (const juce::File& file)
+{
+    const bool ok = measure::writeWav (measure::makeKit (48000.0), 48000.0, file);
+    std::cout << (ok ? "Wrote " : "Could not write ") << file.getFullPathName() << std::endl;
+    return ok ? 0 : 1;
+}
+
+// Measures a render of the kit made with another plugin and compares it with DynMap.
+int compare (const juce::StringArray& args)
+{
+    const auto value = [&args] (const char* flag) { const int i = args.indexOf (flag); return i >= 0 && i + 1 < args.size() ? args[i + 1] : juce::String(); };
+
+    juce::AudioBuffer<float> other;
+    double sr = 48000.0;
+    if (! measure::readAudio (juce::File (value ("--compare")), other, sr))
+    {
+        std::cout << "Could not read " << value ("--compare") << std::endl;
+        return 1;
+    }
+
+    auto owner = std::make_unique<DynMapProcessor>();
+    auto& p = *owner;
+    const auto presetName = value ("--preset").isNotEmpty() ? value ("--preset") : juce::String ("Init");
+    const int presetIndex = p.presets.getPresetNames().indexOf (presetName);
+
+    if (presetIndex < 0)
+    {
+        std::cout << "No preset called \"" << presetName << "\". Presets: " << p.presets.getPresetNames().joinIntoString (", ") << std::endl;
+        return 1;
+    }
+
+    p.presets.loadPreset (presetIndex);
+
+    auto ours = measure::makeKit (sr);
+    juce::MidiBuffer midi;
+    p.prepareToPlay (sr, 512);
+    for (int start = 0; start < ours.getNumSamples(); start += 512)
+    {
+        juce::AudioBuffer<float> block (ours.getArrayOfWritePointers(), 2, start, juce::jmin (512, ours.getNumSamples() - start));
+        p.processBlock (block, midi);
+    }
+
+    if (value ("--out").isNotEmpty())
+        measure::writeWav (ours, sr, juce::File (value ("--out")));
+
+    std::cout << "Render: " << value ("--compare") << " (" << sr << " Hz)   DynMap preset: " << presetName << std::endl;
+    measure::printComparison (measure::analyse (other, sr), "other", measure::analyse (ours, sr), "DynMap");
+    return 0;
+}
+
 int main (int argc, char* argv[])
 {
     juce::StringArray args;
@@ -1030,6 +1083,12 @@ int main (int argc, char* argv[])
 
     // The parameter tree uses timers, so a message manager is needed even without a GUI.
     juce::ScopedJuceInitialiser_GUI juceInitialiser;
+
+    if (args.contains ("--kit"))
+        return makeKit (juce::File (args[args.indexOf ("--kit") + 1]));
+
+    if (args.contains ("--compare"))
+        return compare (args);
 
     if (args.contains ("--bench"))
     {

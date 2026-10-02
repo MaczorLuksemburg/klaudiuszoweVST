@@ -59,7 +59,9 @@ AI-made VST plugins for testing and fun.
 - Latency is reported exactly (lookahead, oversampling, linear phase, limiter) and changes only with those settings.
 - `DynMap_Tests` checks transparency (bit-exact init), latency, crossover flatness, static curve accuracy,
   transient curves, limiter ceiling, sidechain, presets and state; `--bench` measures CPU, `--only <group>`
-  runs one group, `--snapshot <dir>` renders the editor.
+  runs one group, `--snapshot <dir>` renders the editor. `--kit <wav>` writes a measurement signal and
+  `--compare <render.wav> [--preset <name>]` measures another plugin's render of it (static curves, attack/
+  release, frequency response) next to DynMap: used to match FL Studio's Maximus, which can't be hosted here.
 
 ## Targets
 - Systems: Windows, macOS, Linux. DAWs: Logic Pro, Cubase, FL Studio, Ableton Live, Reaper.
