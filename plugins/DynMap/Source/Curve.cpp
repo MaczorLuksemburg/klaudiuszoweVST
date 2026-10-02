@@ -4,7 +4,11 @@ namespace dynmap
 {
 namespace
 {
-    constexpr float minPointGap = 0.05f;   // dB between neighbouring points
+    // Smallest distance between neighbouring points: 0.05 dB on dB axes.
+    float minPointGap (const CurveRange& r) { return (r.xMax - r.xMin) * 0.0006f; }
+
+    float toLinear (float db) { return db <= levelRange.xMin + 0.01f ? 0.0f : juce::jmin (linearLevelRange.xMax, std::pow (10.0f, db / 20.0f)); }
+    float toDb (float a)      { return a <= 2.6e-4f ? levelRange.xMin : juce::jlimit (levelRange.xMin, levelRange.xMax, 20.0f * std::log10 (a)); }
 
     float smoothstep (float t)
     {
@@ -26,9 +30,9 @@ namespace
     constexpr auto stairsSeg = Segment::stairs;
 }
 
-Curve::Curve (CurveKind k) : kind (k)
+Curve::Curve (CurveKind k, bool linearScale) : kind (k), linear (linearScale && k == CurveKind::level)
 {
-    const auto r = curveRange (kind);
+    const auto r = getRange();
 
     if (kind == CurveKind::level)
         points = { { r.xMin, r.yMin }, { r.xMax, r.yMax } };
@@ -125,6 +129,16 @@ float Curve::gainAt (float x) const
     if (kind == CurveKind::transient)
         return y;
 
+    if (linear)
+    {
+        // x is a level in dB; the curve works on amplitude. Beyond the right edge the gain stays.
+        const auto r = getRange();
+        const float a = std::pow (10.0f, x / 20.0f);
+        const float in = juce::jmin (a, r.xMax);
+        const float out = evaluate (in);
+        return out <= 1.0e-7f ? silenceDb : 20.0f * std::log10 (out / in);
+    }
+
     // The bottom edge means silence, except at the bottom-left corner itself (where an identity
     // line starts): there the curve counts as silent only if it stays on the floor.
     const bool onFloor = x <= levelRange.xMin + 0.001f ? evaluate (levelRange.xMin + 0.01f) <= levelRange.yMin + 0.001f
@@ -154,8 +168,8 @@ bool Curve::isNeutral() const
 
 int Curve::addPoint (float x, float y)
 {
-    const auto r = curveRange (kind);
-    x = juce::jlimit (r.xMin + minPointGap, r.xMax - minPointGap, x);
+    const auto r = getRange();
+    x = juce::jlimit (r.xMin + minPointGap (r), r.xMax - minPointGap (r), x);
     y = juce::jlimit (r.yMin, r.yMax, y);
 
     const auto it = std::upper_bound (points.begin(), points.end(), x,
@@ -182,7 +196,7 @@ void Curve::movePoint (int index, float x, float y)
     if (! juce::isPositiveAndBelow (index, (int) points.size()))
         return;
 
-    const auto r = curveRange (kind);
+    const auto r = getRange();
     auto& p = points[(size_t) index];
     p.y = juce::jlimit (r.yMin, r.yMax, y);
 
@@ -191,7 +205,7 @@ void Curve::movePoint (int index, float x, float y)
     else if (index == (int) points.size() - 1)
         p.x = r.xMax;
     else
-        p.x = juce::jlimit (points[(size_t) index - 1].x + minPointGap, points[(size_t) index + 1].x - minPointGap, x);
+        p.x = juce::jlimit (points[(size_t) index - 1].x + minPointGap (r), points[(size_t) index + 1].x - minPointGap (r), x);
 }
 
 void Curve::setSegment (int index, Segment segment)
@@ -211,7 +225,7 @@ void Curve::setTension (int index, float tension)
 
 void Curve::sanitise()
 {
-    const auto r = curveRange (kind);
+    const auto r = getRange();
 
     for (auto& p : points)
     {
@@ -224,7 +238,7 @@ void Curve::sanitise()
 
     if (points.size() < 2)
     {
-        *this = Curve (kind);
+        *this = Curve (kind, linear);
         return;
     }
 
@@ -234,7 +248,7 @@ void Curve::sanitise()
     // Drop points squeezed on top of each other.
     for (size_t i = 1; i + 1 < points.size();)
     {
-        if (points[i].x - points[i - 1].x < minPointGap || points.back().x - points[i].x < minPointGap)
+        if (points[i].x - points[i - 1].x < minPointGap (r) || points.back().x - points[i].x < minPointGap (r))
             points.erase (points.begin() + (std::ptrdiff_t) i);
         else
             ++i;
@@ -249,15 +263,48 @@ juce::String Curve::toString() const
         parts.add (juce::String (p.x, 3) + "," + juce::String (p.y, 3) + ","
                    + juce::String ((int) p.segment) + "," + juce::String (p.tension, 3));
 
-    return parts.joinIntoString (";");
+    return (linear ? "lin;" : "") + parts.joinIntoString (";");
+}
+
+Curve Curve::withScale (bool linearScale) const
+{
+    if (kind != CurveKind::level || linearScale == linear)
+        return *this;
+
+    Curve converted (kind, linearScale);
+    converted.points = points;
+
+    for (auto& p : converted.points)
+    {
+        p.x = linearScale ? toLinear (p.x) : toDb (p.x);
+        p.y = linearScale ? toLinear (p.y) : toDb (p.y);
+    }
+
+    converted.sanitise();
+
+    // The two graphs end at different levels (+6 / +12 dB): the new right edge takes what this
+    // curve does there (beyond its own edge the gain stays the same).
+    if (linearScale)
+    {
+        converted.points.back().y = toLinear (evaluate (20.0f * std::log10 (linearLevelRange.xMax)));
+    }
+    else
+    {
+        const float edge = std::pow (10.0f, levelRange.xMax / 20.0f);
+        const float gain = evaluate (linearLevelRange.xMax) / linearLevelRange.xMax;
+        converted.points.back().y = toDb (edge * gain);
+    }
+
+    return converted;
 }
 
 Curve Curve::fromString (CurveKind kind, const juce::String& text)
 {
-    Curve curve (kind);
+    const bool isLinearText = kind == CurveKind::level && text.startsWith ("lin;");
+    Curve curve (kind, isLinearText);
     std::vector<CurvePoint> parsed;
 
-    for (const auto& part : juce::StringArray::fromTokens (text, ";", ""))
+    for (const auto& part : juce::StringArray::fromTokens (isLinearText ? text.substring (4) : text, ";", ""))
     {
         const auto values = juce::StringArray::fromTokens (part, ",", "");
         if (values.size() < 2)
@@ -288,7 +335,7 @@ juce::StringArray Curve::presetNames (CurveKind kind)
 {
     if (kind == CurveKind::level)
         return { "Neutral", "Compress 2:1", "Compress 4:1", "Limit", "Upward 2:1", "OTT", "Smash",
-                 "Expand 1:2", "Gate", "Invert", "Stairs", "Soft Clip (waveshaper)", "Fold (waveshaper)", "Extreme OTT", "Duck (sidechain)" };
+                 "Expand 1:2", "Gate", "Invert", "Stairs", "Soft Clip (waveshaper)", "Fold (waveshaper)", "Extreme OTT", "Duck (sidechain)", "Maximus default (linear)" };
 
     return { "Neutral", "Punch", "Snap", "Soften", "Tighten", "Bloom", "Flip", "Punch Hard" };
 }
@@ -297,7 +344,7 @@ std::vector<int> Curve::presetMenuOrder (CurveKind kind)
 {
     // Indices are stored in factory presets, so new shapes are appended and only sorted for the menu.
     if (kind == CurveKind::level)
-        return { 0, 1, 2, 3, 4, 5, 13, 6, 7, 8, 14, 9, 10, 11, 12 };
+        return { 0, 1, 2, 3, 4, 5, 13, 6, 7, 8, 14, 15, 9, 10, 11, 12 };
 
     return { 0, 1, 7, 2, 3, 4, 5, 6 };
 }
@@ -325,6 +372,9 @@ Curve Curve::preset (CurveKind kind, int index)
             case 12: return makeCurve (kind, { { -72, -72 }, { -12, -12, Segment::wave, -0.43f }, { 12, -12 } });
             // Duck: meant for a sidechain; up to 18 dB down once the trigger passes about -40 dB.
             case 14: return makeCurve (kind, { { -72, -72 }, { -40, -40 }, { -10, -28 }, { 12, -6 } });
+            // Maximus's default master curve with the bend at 25 %, as measured: +10.6 dB for quiet
+            // signals, bending into 0 dBFS, flat above (linear axes).
+            case 15: return fromString (kind, "lin;0,0,0,0.41;1,1;2,1");
             case 13: return makeCurve (kind, { { -72, -32.25f }, { -38, -28 }, { -32, -22 }, { 12, -22 } });
             default: break;
         }

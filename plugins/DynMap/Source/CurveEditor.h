@@ -16,6 +16,10 @@ namespace dynmap::ui
 
         void setStage (int stage, juce::Colour accent);
 
+        // Level map only: linear amplitude axes like Maximus (the curve is converted).
+        bool isLinear() const { return curve.isLinear(); }
+        void setLinear (bool linear);
+
         void paint (juce::Graphics&) override;
         void mouseMove (const juce::MouseEvent&) override;
         void mouseExit (const juce::MouseEvent&) override;
@@ -36,12 +40,16 @@ namespace dynmap::ui
         Hit hitTest (juce::Point<float>) const;
         juce::Point<float> handlePosition (int segment) const;
         void commit();
+        void load (const Curve&);
+        float curveXForDb (float db) const;
+        float snap (float v) const;
+        juce::String levelText (float v) const;
         void showSegmentMenu (int segment);
         void showCurveMenu();
 
         DynMapProcessor& processor;
         const CurveKind kind;
-        const CurveRange range;
+        CurveRange range;
         int stage = inputStage;
         juce::Colour accent;
 

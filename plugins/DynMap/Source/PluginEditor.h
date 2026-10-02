@@ -48,6 +48,7 @@ private:
     dynmap::ui::CurveEditor levelEditor, transientEditor;
     dynmap::ui::Choice mode { "" };
     dynmap::ui::Toggle bypass { "Bypass" }, solo { "S" }, mute { "M" };
+    juce::TextButton linearScale { "Linear" };
     dynmap::ui::Knob pre { "PRE" }, post { "POST" }, mix { "MIX", true }, width { "WIDTH" };
     dynmap::ui::Choice satType { "SATURATION" }, satPos { "POSITION" };
     dynmap::ui::Knob drive { "DRIVE", true };

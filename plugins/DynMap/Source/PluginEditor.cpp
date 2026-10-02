@@ -105,6 +105,12 @@ DynMapMainView::DynMapMainView (DynMapProcessor& p, klaud::LookAndFeel& lookAndF
              &autoGain, &delta, &ceiling, &limRelease, &meter, &readout, &detectorStyles, &advanced })
         addAndMakeVisible (c);
 
+    addAndMakeVisible (linearScale);
+    linearScale.setClickingTogglesState (true);
+    linearScale.setTooltip ("Draw this level curve on linear amplitude axes, like Image-Line Maximus (0 dBFS in the middle, "
+                            "the slope at the bottom-left corner sets the gain for quiet signals). The curve is converted.");
+    linearScale.onClick = [this] { levelEditor.setLinear (linearScale.getToggleState()); };
+
     advanced.setClickingTogglesState (true);
     advanced.setTooltip ("Show every detector control instead of the styles");
     advanced.setToggleState ((bool) p.apvts.state.getProperty (detectorAdvancedId, false), juce::dontSendNotification);
@@ -151,6 +157,8 @@ void DynMapMainView::updateStageControls()
     levelEditor.setStage (stage, stageAccent);
     detectorStyles.setStage (stage, stageAccent);
     advanced.setColour (juce::TextButton::buttonOnColourId, stageAccent);
+    linearScale.setColour (juce::TextButton::buttonOnColourId, stageAccent);
+    linearScale.setToggleState (levelEditor.isLinear(), juce::dontSendNotification);
     transientEditor.setStage (stage, stageAccent);
 
     mode.attach (apvts, id (ids::mode));
@@ -220,6 +228,8 @@ void DynMapMainView::timerCallback()
 
     const auto colour = stageColour (processor, selectedStage);
     const auto title = stageLabel (processor, selectedStage);
+
+    linearScale.setToggleState (levelEditor.isLinear(), juce::dontSendNotification);
 
     const bool listensToSidechain = processor.apvts.getRawParameterValue (stageParamId (selectedStage, ids::scSource))->load() > 0.5f;
     const bool missing = listensToSidechain && processor.engine.meters.sidechainDb.load() <= -90.0f;
@@ -322,6 +332,8 @@ void DynMapMainView::resized()
         bypass.setBounds (header.removeFromRight (62).reduced (0, 2));
         header.removeFromRight (6);
         mode.setBounds (header.removeFromRight (112).withTrimmedTop (1));
+        header.removeFromRight (6);
+        linearScale.setBounds (header.removeFromRight (58).reduced (0, 2));
         area.removeFromTop (6);
         levelEditor.setBounds (area.withSizeKeepingCentre (area.getWidth(), juce::jmin (area.getHeight(), area.getWidth())));
     }

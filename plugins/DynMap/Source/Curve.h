@@ -25,6 +25,11 @@ namespace dynmap
 
     inline constexpr CurveRange curveRange (CurveKind kind) { return kind == CurveKind::level ? levelRange : transientRange; }
 
+    // Level curves can also be drawn on linear amplitude axes, like Image-Line Maximus: 0 to 2
+    // (+6 dBFS), so 0 dBFS sits in the middle and the slope at the bottom-left corner is the gain
+    // for quiet signals. Processing always reads the curve in dB (see gainAt).
+    inline constexpr CurveRange linearLevelRange { 0.0f, 2.0f, 0.0f, 2.0f };
+
     struct CurvePoint
     {
         float x = 0.0f, y = 0.0f;
@@ -37,9 +42,14 @@ namespace dynmap
     class Curve
     {
     public:
-        explicit Curve (CurveKind = CurveKind::level);   // neutral: identity (level) or flat 0 dB (transient)
+        explicit Curve (CurveKind = CurveKind::level, bool linearScale = false);   // neutral: identity (level) or flat 0 dB (transient)
 
         CurveKind getKind() const { return kind; }
+        bool isLinear() const { return linear; }
+        CurveRange getRange() const { return linear ? linearLevelRange : curveRange (kind); }
+
+        // The same points moved to the other scale (level curves only).
+        Curve withScale (bool linearScale) const;
         const std::vector<CurvePoint>& getPoints() const { return points; }
         int getNumPoints() const { return (int) points.size(); }
 
@@ -73,6 +83,7 @@ namespace dynmap
         void sanitise();
 
         CurveKind kind;
+        bool linear = false;
         std::vector<CurvePoint> points;
     };
 

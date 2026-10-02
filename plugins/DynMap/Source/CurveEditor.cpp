@@ -14,17 +14,24 @@ namespace
     // Mirrors the curve's gain: compression becomes expansion, a boost becomes a cut.
     Curve invertedGains (const Curve& curve)
     {
-        const auto r = curveRange (curve.getKind());
+        const auto r = curve.getRange();
         juce::StringArray parts;
 
         for (const auto& p : curve.getPoints())
         {
-            const float y = curve.getKind() == CurveKind::level ? juce::jlimit (r.yMin, r.yMax, 2.0f * p.x - p.y) : -p.y;
+            float y = -p.y;
+            if (curve.getKind() == CurveKind::level)
+                y = curve.isLinear() ? (p.y <= 1.0e-6f ? r.yMax : juce::jlimit (r.yMin, r.yMax, p.x * p.x / p.y))
+                                     : juce::jlimit (r.yMin, r.yMax, 2.0f * p.x - p.y);
             parts.add (juce::String (p.x) + "," + juce::String (y) + "," + juce::String ((int) p.segment) + "," + juce::String (-p.tension));
         }
 
-        return Curve::fromString (curve.getKind(), parts.joinIntoString (";"));
+        return Curve::fromString (curve.getKind(), (curve.isLinear() ? "lin;" : "") + parts.joinIntoString (";"));
     }
+
+    // dB marks on the linear axes, and which of them get a label.
+    constexpr float linearMarks[] { -24.0f, -18.0f, -12.0f, -9.0f, -6.0f, -3.0f, 0.0f, 3.0f, 6.0f };
+    bool isLabelledMark (float db) { return db != -24.0f && db != -18.0f && db != -9.0f; }
 }
 
 juce::String CurveEditor::segmentName (Segment segment)
@@ -59,7 +66,7 @@ void CurveEditor::setStage (int newStage, juce::Colour newAccent)
 {
     stage = newStage;
     accent = newAccent;
-    curve = processor.engine.curves.get (stage, kind);
+    load (processor.engine.curves.get (stage, kind));
     seenChanges = processor.engine.curves.getChangeCount();
     trail.fill (0.0f);
     live = false;
@@ -128,6 +135,44 @@ CurveEditor::Hit CurveEditor::hitTest (juce::Point<float> position) const
     return best;
 }
 
+void CurveEditor::load (const Curve& c)
+{
+    curve = c;
+    range = curve.getRange();
+}
+
+void CurveEditor::setLinear (bool linear)
+{
+    if (kind != CurveKind::level || linear == curve.isLinear())
+        return;
+
+    load (curve.withScale (linear));
+    commit();
+}
+
+float CurveEditor::curveXForDb (float db) const
+{
+    return curve.isLinear() ? juce::jlimit (range.xMin, range.xMax, std::pow (10.0f, db / 20.0f)) : juce::jlimit (range.xMin, range.xMax, db);
+}
+
+float CurveEditor::snap (float v) const
+{
+    if (! curve.isLinear())
+        return std::round (v / snapStep) * snapStep;
+
+    // Linear axes snap to the same 3 dB steps (and to 0 below -60 dB).
+    if (v < 0.001f)
+        return 0.0f;
+    return std::pow (10.0f, std::round (20.0f * std::log10 (v) / snapStep) * snapStep / 20.0f);
+}
+
+juce::String CurveEditor::levelText (float v) const
+{
+    if (! curve.isLinear())
+        return juce::String (v, 1);
+    return v <= 1.0e-6f ? juce::String ("-inf") : juce::String (20.0f * std::log10 (v), 1);
+}
+
 void CurveEditor::commit()
 {
     processor.engine.curves.set (stage, kind, curve);
@@ -141,7 +186,7 @@ void CurveEditor::timerCallback()
 
     if (changes != seenChanges && drag.type == Hit::none)
     {
-        curve = processor.engine.curves.get (stage, kind);
+        load (processor.engine.curves.get (stage, kind));
         seenChanges = changes;
     }
 
@@ -169,11 +214,35 @@ void CurveEditor::paint (juce::Graphics& g)
     g.setColour (pal.background.withAlpha (0.6f));
     g.fillRoundedRectangle (a.expanded (2.0f), 4.0f);
 
-    // Grid.
+    // Grid: every 6 dB on dB axes; dB marks at their amplitude on linear axes.
     const float step = gridStep;
     g.setFont (klaud::font (9.5f));
 
-    for (float v = range.xMin; v <= range.xMax + 0.01f; v += step)
+    if (curve.isLinear())
+    {
+        for (float db : linearMarks)
+        {
+            const float v = std::pow (10.0f, db / 20.0f);
+            const auto pos = toScreen (v, v);
+            const bool labelled = isLabelledMark (db);
+            g.setColour (juce::Colours::white.withAlpha (labelled ? 0.07f : 0.035f));
+            g.drawVerticalLine ((int) pos.x, a.getY(), a.getBottom());
+            g.drawHorizontalLine ((int) pos.y, a.getX(), a.getRight());
+
+            if (labelled)
+            {
+                const auto text = (db > 0.0f ? "+" : "") + juce::String ((int) db);
+                g.setColour (pal.textDim.withAlpha (0.8f));
+                g.drawText (text, (int) pos.x - 14, (int) a.getBottom() + 2, 28, 12, juce::Justification::centred, false);
+                g.drawText (text, 0, (int) pos.y - 6, 24, 12, juce::Justification::centredRight, false);
+            }
+        }
+
+        g.setColour (pal.textDim.withAlpha (0.8f));
+        g.drawText ("-inf", (int) a.getX() - 2, (int) a.getBottom() + 2, 24, 12, juce::Justification::centredLeft, false);
+    }
+
+    for (float v = range.xMin; ! curve.isLinear() && v <= range.xMax + 0.01f; v += step)
     {
         const bool major = std::fmod (std::abs (v), 12.0f) < 0.01f;
         const float x = toScreen (v, range.yMin).x;
@@ -187,7 +256,7 @@ void CurveEditor::paint (juce::Graphics& g)
         }
     }
 
-    for (float v = range.yMin; v <= range.yMax + 0.01f; v += step)
+    for (float v = range.yMin; ! curve.isLinear() && v <= range.yMax + 0.01f; v += step)
     {
         const bool major = std::fmod (std::abs (v), 12.0f) < 0.01f;
         const float y = toScreen (range.xMin, v).y;
@@ -226,9 +295,10 @@ void CurveEditor::paint (juce::Graphics& g)
     if (kind == CurveKind::level)
     {
         g.setColour (colours::master.withAlpha (0.45f));
+        const float fullScale = curve.isLinear() ? 1.0f : 0.0f;
 
-        for (const auto& [from, to] : { std::pair { toScreen (0.0f, range.yMin), toScreen (0.0f, range.yMax) },
-                                        std::pair { toScreen (range.xMin, 0.0f), toScreen (range.xMax, 0.0f) } })
+        for (const auto& [from, to] : { std::pair { toScreen (fullScale, range.yMin), toScreen (fullScale, range.yMax) },
+                                        std::pair { toScreen (range.xMin, fullScale), toScreen (range.xMax, fullScale) } })
         {
             juce::Path line, dotted;
             line.startNewSubPath (from);
@@ -238,7 +308,7 @@ void CurveEditor::paint (juce::Graphics& g)
             g.fillPath (dotted);
         }
 
-        const auto corner = toScreen (0.0f, 0.0f);
+        const auto corner = toScreen (fullScale, fullScale);
         g.setFont (klaud::font (9.5f, true));
         g.setColour (colours::master.withAlpha (0.75f));
         g.drawText ("0 dBFS", (int) a.getX() + 34, (int) corner.y - 13, 50, 12, juce::Justification::centredLeft, false);
@@ -285,9 +355,11 @@ void CurveEditor::paint (juce::Graphics& g)
         for (int i = 0; i < trailLength; ++i)
         {
             const int index = (trailHead + i) % trailLength;
-            const float x = juce::jlimit (range.xMin, range.xMax, trail[(size_t) index]);
-            if (x <= range.xMin + 0.01f && kind == CurveKind::level)
+            if (kind == CurveKind::level && trail[(size_t) index] <= levelRange.xMin + 0.01f)
                 continue;
+
+            const float x = kind == CurveKind::level ? curveXForDb (trail[(size_t) index])
+                                                     : juce::jlimit (range.xMin, range.xMax, trail[(size_t) index]);
 
             const auto p = toScreen (x, curve.evaluate (x));
             const float age = (float) i / (float) trailLength;
@@ -295,8 +367,8 @@ void CurveEditor::paint (juce::Graphics& g)
             g.fillEllipse (juce::Rectangle<float> (3.0f, 3.0f).withCentre (p));
         }
 
-        const float x = juce::jlimit (range.xMin, range.xMax, liveX);
-        if (! (kind == CurveKind::level && liveX < range.xMin - 20.0f))
+        const float x = kind == CurveKind::level ? curveXForDb (liveX) : juce::jlimit (range.xMin, range.xMax, liveX);
+        if (! (kind == CurveKind::level && liveX < levelRange.xMin - 20.0f))
         {
             const auto p = toScreen (x, curve.evaluate (x));
             g.setColour (accent.withAlpha (0.25f));
@@ -348,7 +420,7 @@ void CurveEditor::paint (juce::Graphics& g)
     if (drag.type == Hit::point)
     {
         const auto& p = points[(size_t) drag.index];
-        const auto text = kind == CurveKind::level ? juce::String (p.x, 1) + " > " + juce::String (p.y, 1) + " dB"
+        const auto text = kind == CurveKind::level ? levelText (p.x) + " > " + levelText (p.y) + " dB"
                                                    : juce::String (p.x, 1) + " dB: " + formatDb (p.y);
         g.setFont (klaud::font (11.0f, true));
         g.setColour (pal.text);
@@ -432,7 +504,7 @@ void CurveEditor::mouseDrag (const juce::MouseEvent& e)
         auto p = fromScreen (e.position);
 
         if (e.mods.isShiftDown())
-            p = { std::round (p.x / snapStep) * snapStep, std::round (p.y / snapStep) * snapStep };
+            p = { snap (p.x), snap (p.y) };
 
         curve.movePoint (drag.index, p.x, p.y);
         commit();
@@ -522,6 +594,8 @@ void CurveEditor::showCurveMenu()
     menu.addSeparator();
     menu.addSubMenu ("Set every segment to", shapes);
     menu.addItem (300, "Invert gains");
+    if (kind == CurveKind::level)
+        menu.addItem (303, "Linear scale (like Maximus)", true, curve.isLinear());
     menu.addItem (301, "Copy curve");
     menu.addItem (302, "Paste curve", clipboardFull[k]);
 
@@ -534,12 +608,17 @@ void CurveEditor::showCurveMenu()
         auto& self = *safeThis;
 
         if (result >= 1 && result < 200)
-            self.curve = Curve::preset (self.kind, result - 1);
+            self.load (Curve::preset (self.kind, result - 1));
         else if (result >= 200 && result < 200 + numSegmentTypes)
             for (int i = 0; i + 1 < self.curve.getNumPoints(); ++i)
                 self.curve.setSegment (i, (Segment) (result - 200));
         else if (result == 300)
-            self.curve = invertedGains (self.curve);
+            self.load (invertedGains (self.curve));
+        else if (result == 303)
+        {
+            self.setLinear (! self.curve.isLinear());
+            return;
+        }
         else if (result == 301)
         {
             clipboard[k] = self.curve;
@@ -547,7 +626,7 @@ void CurveEditor::showCurveMenu()
             return;
         }
         else if (result == 302)
-            self.curve = clipboard[k];
+            self.load (clipboard[k]);
 
         self.commit();
     });

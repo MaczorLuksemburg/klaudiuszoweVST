@@ -321,6 +321,9 @@ const std::vector<DetectorStyle>& detectorStyles()
         { "Brickwall", "Lookahead and instant attack: nothing slips past the curve (2 ms latency).", 0.05f, 5.0f, 80.0f, 0.0f, 0.0f, 100.0f, 3, 0.2f, 30.0f },
         { "Pump",      "Audible, breathing release for sidechain and EDM pumping.",                5.0f,  0.0f, 250.0f, 70.0f, 0.0f,  100.0f, 0, 0.5f, 40.0f },
         { "Waveform",  "Follows the waveform itself, so the curve becomes distortion (the Maximus trick).", 0.01f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0.0f, 5.0f },
+        // Measured from Maximus's default master band (ATT 2 ms, REL 85.53 ms): its attack is a 2 ms
+        // lookahead and its release recovers like our 31 ms.
+        { "Maximus",   "Behaves like Maximus's default timing: 2 ms lookahead, peak detection, quick release.", 0.2f, 0.0f, 31.0f, 0.0f, 0.0f, 100.0f, 3, 0.5f, 40.0f },
     };
 
     return styles;
@@ -405,16 +408,17 @@ void DetectorStylePicker::timerCallback()
 void DetectorStylePicker::resized()
 {
     auto area = getLocalBounds();
-    const int columnWidth = (area.getWidth() - 8) / 2;
+    const int columnWidth = (area.getWidth() - 2 * 8) / columns;
 
     for (int i = 0; i < buttons.size(); ++i)
-        buttons[i]->setBounds (area.getX() + (i % 2) * (columnWidth + 8), area.getY() + (i / 2) * (buttonHeight + 10), columnWidth, buttonHeight);
+        buttons[i]->setBounds (area.getX() + (i % columns) * (columnWidth + 8), area.getY() + (i / columns) * (buttonHeight + 10), columnWidth, buttonHeight);
 }
 
 void DetectorStylePicker::paint (juce::Graphics& g)
 {
     const auto& pal = palette();
-    auto area = getLocalBounds().withTrimmedTop (4 * buttonHeight + 3 * 10 + 16).reduced (4, 0);
+    const int rows = (buttons.size() + columns - 1) / columns;
+    auto area = getLocalBounds().withTrimmedTop (rows * buttonHeight + (rows - 1) * 10 + 16).reduced (4, 0);
 
     g.setFont (klaud::font (12.5f));
     g.setColour (shown >= 0 ? pal.text : pal.textDim);

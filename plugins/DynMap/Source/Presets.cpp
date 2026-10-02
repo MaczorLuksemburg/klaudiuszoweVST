@@ -230,6 +230,13 @@ namespace
                 list.push_back ({ "Kick Ducks Bass", v, { { b0, level, 14 } } });
             }
 
+            // Maximus's default patch (master band, bend at 25 %), matched by measurement: linear curve
+            // giving +10.6 dB to quiet signals and bending into 0 dBFS, 2 ms lookahead, quick release.
+            list.push_back ({ "Maximus Default",
+                              { sp (masterStage, ids::lookahead, 3.0f), sp (masterStage, ids::attack, 0.2f),
+                                sp (masterStage, ids::release, 31.0f) },
+                              { { masterStage, level, 15 } } });
+
             // Any hit on the sidechain ducks lows deeply, mids a little and the top barely.
             {
                 Values v;

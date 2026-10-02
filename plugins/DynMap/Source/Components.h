@@ -133,7 +133,7 @@ namespace dynmap::ui
         void apply (int style);
 
         DynMapProcessor& processor;
-        static constexpr int buttonHeight = 38;
+        static constexpr int buttonHeight = 38, columns = 3;
 
         int stage = inputStage;
         int shown = -2;

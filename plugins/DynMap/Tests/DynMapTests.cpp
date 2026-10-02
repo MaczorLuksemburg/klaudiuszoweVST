@@ -249,6 +249,15 @@ namespace
         edited.movePoint (index, 50.0f, 0.0f);   // clamped between neighbours
         expect (edited.getNumPoints() == 3 && edited.getPoints()[1].x < 12.0f && ! edited.isNeutral(), "points stay inside their neighbours");
 
+        // Linear (Maximus-style) axes: the slope at the corner is the gain for quiet signals.
+        const auto maximus = Curve::preset (CurveKind::level, 15);
+        expect (maximus.isLinear() && std::abs (maximus.gainAt (-60.0f) - 10.6f) < 0.6f && std::abs (maximus.gainAt (0.0f)) < 0.01f,
+                "linear Maximus-default curve: " + juce::String (maximus.gainAt (-60.0f), 2) + " dB at -60, "
+                    + juce::String (maximus.gainAt (0.0f), 2) + " dB at 0 dBFS");
+        expect (Curve (CurveKind::level).withScale (true).isNeutral() && Curve (CurveKind::level, true).withScale (false).isNeutral()
+                    && Curve::fromString (CurveKind::level, maximus.toString()) == maximus,
+                "identity stays neutral across scales; linear curves round-trip as text");
+
         CurveTable table;
         table.bake (comp);
         expect (std::abs (table.lookup (-6.0f) - comp.gainAt (-6.0f)) < 0.02f && std::abs (table.lookup (-100.0f)) < 0.01f,
@@ -1021,6 +1030,14 @@ namespace
         p.apvts.state.setProperty ("detectorAdvanced", true, nullptr);
         editor.reset (p.createEditor());
         saveSnapshot (*editor, folder.getChildFile ("dynmap-advanced.png"));
+        editor.reset();
+
+        // Linear (Maximus-style) level map on the master stage.
+        loadPresetNamed (p, "Maximus Default");
+        p.apvts.state.setProperty ("detectorAdvanced", false, nullptr);
+        p.apvts.state.setProperty ("selectedStage", masterStage, nullptr);
+        editor.reset (p.createEditor());
+        saveSnapshot (*editor, folder.getChildFile ("dynmap-linear.png"));
     }
 }
 
@@ -1057,6 +1074,25 @@ int compare (const juce::StringArray& args)
     }
 
     p.presets.loadPreset (presetIndex);
+
+    // Overrides for calibration: --set <param id>=<value>, --curve <stage>:<l|t>:<curve text>.
+    for (int i = 0; i + 1 < args.size(); ++i)
+    {
+        if (args[i] == "--set")
+        {
+            const auto id = args[i + 1].upToFirstOccurrenceOf ("=", false, false);
+            if (auto* param = p.apvts.getParameter (id))
+                param->setValueNotifyingHost (param->convertTo0to1 (args[i + 1].fromFirstOccurrenceOf ("=", false, false).getFloatValue()));
+            else
+                std::cout << "Unknown parameter " << id << std::endl;
+        }
+        else if (args[i] == "--curve")
+        {
+            const auto parts = juce::StringArray::fromTokens (args[i + 1], ":", "");
+            const auto kind = parts[1] == "t" ? CurveKind::transient : CurveKind::level;
+            p.engine.curves.set (parts[0].getIntValue(), kind, Curve::fromString (kind, args[i + 1].fromLastOccurrenceOf (":", false, false)));
+        }
+    }
 
     auto ours = measure::makeKit (sr);
     juce::MidiBuffer midi;
