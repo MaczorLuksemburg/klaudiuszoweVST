@@ -8,6 +8,8 @@ bool CurveEditor::clipboardFull[2] { false, false };
 namespace
 {
     constexpr float pointRadius = 4.5f, handleRadius = 3.0f;
+    constexpr float gridStep = 6.0f;                 // grid lines every 6 dB (labels every 12)
+    constexpr float snapStep = gridStep * 0.5f;      // Shift snaps points to half the grid
 
     // Mirrors the curve's gain: compression becomes expansion, a boost becomes a cut.
     Curve invertedGains (const Curve& curve)
@@ -43,10 +45,12 @@ CurveEditor::CurveEditor (DynMapProcessor& p, CurveKind k)
     : processor (p), kind (k), range (curveRange (k)), accent (palette().accent), curve (k)
 {
     setTooltip (kind == CurveKind::level
-                    ? "Level map: detected input level (across) to output level (up). Drag points, double-click to add or delete, "
-                      "drag the small handles to bend a segment, right-click for shapes and presets. Points on the bottom edge mean silence."
+                    ? "Level map: detected input level (across) to output level (up). Drag points (hold Shift to snap to 3 dB), "
+                      "double-click to add or delete, drag the small handles to bend a segment, right-click for shapes and presets. "
+                      "Points on the bottom edge mean silence; the dotted lines mark 0 dBFS (the graph goes on to +12 dB)."
                     : "Transient map: how far the signal jumps above its recent level (right, attacks) or falls below it (left, tails) "
-                      "to a gain (up = boost). Drag points, double-click to add or delete, right-click for shapes and presets.");
+                      "to a gain (up = boost). Drag points (hold Shift to snap to 3 dB), double-click to add or delete, "
+                      "right-click for shapes and presets.");
     setRepaintsOnMouseActivity (false);
     startTimerHz (30);
 }
@@ -166,7 +170,7 @@ void CurveEditor::paint (juce::Graphics& g)
     g.fillRoundedRectangle (a.expanded (2.0f), 4.0f);
 
     // Grid.
-    const float step = kind == CurveKind::level ? 6.0f : 6.0f;
+    const float step = gridStep;
     g.setFont (klaud::font (9.5f));
 
     for (float v = range.xMin; v <= range.xMax + 0.01f; v += step)
@@ -216,6 +220,29 @@ void CurveEditor::paint (juce::Graphics& g)
         juce::PathStrokeType (1.0f).createDashedStroke (dashed, reference, dashes, 2);
         g.setColour (juce::Colours::white.withAlpha (0.18f));
         g.fillPath (dashed);
+    }
+
+    // 0 dBFS on both axes: the graph goes on to +12 dB (room for pre gain), so full scale is marked.
+    if (kind == CurveKind::level)
+    {
+        g.setColour (colours::master.withAlpha (0.45f));
+
+        for (const auto& [from, to] : { std::pair { toScreen (0.0f, range.yMin), toScreen (0.0f, range.yMax) },
+                                        std::pair { toScreen (range.xMin, 0.0f), toScreen (range.xMax, 0.0f) } })
+        {
+            juce::Path line, dotted;
+            line.startNewSubPath (from);
+            line.lineTo (to);
+            const float dots[] { 1.5f, 3.0f };
+            juce::PathStrokeType (1.2f).createDashedStroke (dotted, line, dots, 2);
+            g.fillPath (dotted);
+        }
+
+        const auto corner = toScreen (0.0f, 0.0f);
+        g.setFont (klaud::font (9.5f, true));
+        g.setColour (colours::master.withAlpha (0.75f));
+        g.drawText ("0 dBFS", (int) corner.x + 4, (int) a.getY() + 2, 50, 12, juce::Justification::centredLeft, false);
+        g.drawText ("0 dBFS", (int) a.getX() + 34, (int) corner.y - 13, 50, 12, juce::Justification::centredLeft, false);
     }
 
     // Curve, with the area between it and the reference tinted.
@@ -406,7 +433,7 @@ void CurveEditor::mouseDrag (const juce::MouseEvent& e)
         auto p = fromScreen (e.position);
 
         if (e.mods.isShiftDown())
-            p = { std::round (p.x), std::round (p.y) };
+            p = { std::round (p.x / snapStep) * snapStep, std::round (p.y / snapStep) * snapStep };
 
         curve.movePoint (drag.index, p.x, p.y);
         commit();
