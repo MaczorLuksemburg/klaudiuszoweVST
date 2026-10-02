@@ -241,7 +241,6 @@ void CurveEditor::paint (juce::Graphics& g)
         const auto corner = toScreen (0.0f, 0.0f);
         g.setFont (klaud::font (9.5f, true));
         g.setColour (colours::master.withAlpha (0.75f));
-        g.drawText ("0 dBFS", (int) corner.x + 4, (int) a.getY() + 2, 50, 12, juce::Justification::centredLeft, false);
         g.drawText ("0 dBFS", (int) a.getX() + 34, (int) corner.y - 13, 50, 12, juce::Justification::centredLeft, false);
     }
 
