@@ -241,6 +241,15 @@ void Engine::prepare (double newSampleRate, int maxBlockSize)
     scratch.setSize (4, maxBlock);
     sidechainDelayed.setSize (2, maxBlock);
     sidechainInput.setSize (2, maxBlock);
+    referenceBands.setSize (maxBands * 2, maxBlock);
+    deltaReference.setSize (2, maxBlock);
+
+    for (int slot = 0; slot < maxBands; ++slot)
+        for (int ch = 0; ch < 2; ++ch)
+            referencePointers[(size_t) slot][(size_t) ch] = referenceBands.getWritePointer (slot * 2 + ch);
+
+    referenceSplitter.prepare (sampleRate);
+    deltaWasOn = false;
 
     for (int slot = 0; slot < maxBands; ++slot)
         for (int ch = 0; ch < 2; ++ch)
@@ -286,7 +295,6 @@ void Engine::prepare (double newSampleRate, int maxBlockSize)
     inGain.reset (sampleRate, 0.02);
     sidechainGain.reset (sampleRate, 0.02);
     outGain.reset (sampleRate, 0.02);
-    globalMix.reset (sampleRate, 0.02);
     clipFade.reset (sampleRate, 0.02);
     autoGain.reset (sampleRate, 0.3);
 
@@ -340,7 +348,7 @@ StageSettings Engine::readStage (int stage) const
     s.mode = toIndex (p.mode);
     s.preDb = p.pre->load();
     s.postDb = p.post->load();
-    s.mix = p.mix->load() * 0.01f;
+    s.mix = p.mix->load() * 0.01f * mixParam->load() * 0.01f;   // stage mix x global mix
     s.attackMs = p.attack->load();
     s.holdMs = p.hold->load();
     s.releaseMs = p.release->load();
@@ -780,10 +788,41 @@ void Engine::processOutput (float* left, float* right, int n)
     const float agTarget = juce::Decibels::decibelsToGain (autoGainDb);
     if (firstBlock) autoGain.setCurrentAndTargetValue (agTarget); else autoGain.setTargetValue (agTarget);
 
-    // Global mix and delta.
-    const float mixTarget = mixParam->load() * 0.01f;
-    if (firstBlock) globalMix.setCurrentAndTargetValue (mixTarget); else globalMix.setTargetValue (mixTarget);
+    // Delta: what the plugin changes, against the input as it would come out with everything neutral.
     const bool delta = isOn (deltaParam);
+    const float* refL = dryL;
+    const float* refR = dryR;
+
+    if (delta && phase == phaseMinimum && layout.numBands > 1)
+    {
+        if (! deltaWasOn)
+            referenceSplitter.reset();
+
+        std::array<float* const*, maxBands> refBands {};
+        for (int slot = 0; slot < maxBands; ++slot)
+            refBands[(size_t) slot] = referencePointers[(size_t) slot].data();
+
+        const float* dryIn[2] { dryL, dryR };
+        referenceSplitter.setLayout (layout, ! deltaWasOn);
+        referenceSplitter.process (dryIn, refBands.data(), n);
+
+        auto* sumL = deltaReference.getWritePointer (0);
+        auto* sumR = deltaReference.getWritePointer (1);
+        juce::FloatVectorOperations::clear (sumL, n);
+        juce::FloatVectorOperations::clear (sumR, n);
+
+        for (int p = 0; p < layout.numBands; ++p)
+        {
+            const auto slot = (size_t) layout.slots[(size_t) p];
+            juce::FloatVectorOperations::add (sumL, refBands[slot][0], n);
+            juce::FloatVectorOperations::add (sumR, refBands[slot][1], n);
+        }
+
+        refL = sumL;
+        refR = sumR;
+    }
+
+    deltaWasOn = delta;
     const bool agActive = autoGain.isSmoothing() || agTarget != 1.0f;
     float peakL = 0.0f, peakR = 0.0f, truePeak = 0.0f;
 
@@ -798,17 +837,10 @@ void Engine::processOutput (float* left, float* right, int n)
             r *= g;
         }
 
-        const float m = globalMix.getNextValue();
-        if (m < 1.0f)
-        {
-            l = dryL[i] + m * (l - dryL[i]);
-            r = dryR[i] + m * (r - dryR[i]);
-        }
-
         if (delta)
         {
-            l -= dryL[i];
-            r -= dryR[i];
+            l -= refL[i];
+            r -= refR[i];
         }
 
         left[i] = l;

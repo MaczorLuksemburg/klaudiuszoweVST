@@ -39,7 +39,9 @@ AI-made VST plugins for testing and fun.
 ## DynMap (plugins/DynMap)
 - Multiband "dynamic mapping" (FabFilter Saturn's band system + Image-Line Maximus's drawn compressor curves).
   Chain: in gain -> Input stage -> band split -> band stages (solo/mute) -> sum -> Master stage -> out gain
-  -> clipper -> true-peak limiter -> auto gain -> global mix / delta.
+  -> clipper -> true-peak limiter -> auto gain -> delta. The global Mix scales every stage's own dry/wet
+  (never a dry signal around the whole plugin: min-phase crossovers shift phase, so that would cancel);
+  Delta subtracts the dry input run through a copy of the band split, so neutral settings give silence.
 - A stage (`Source/Stage.*`) = pre gain -> detector -> level curve (input dB -> output dB, gain = out - in,
   bottom edge = silence) + transient curve (x = attack/tail measure, y = gain) -> x Amount, clamp to max
   boost/cut, smoothing -> saturation or waveshaper mode (curve applied per sample), oversampled -> post, width, mix.

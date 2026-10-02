@@ -371,12 +371,14 @@ namespace
                 juce::Thread::sleep (5);
             }
 
-            // Let the convolution cross-fade finish, then measure.
-            for (int round = 0; round < 20; ++round)
+            // JUCE's convolution swaps the new filter in on its own background thread, then cross-fades
+            // over 50 ms: give both real time before measuring.
+            for (int round = 0; round < 40; ++round)
             {
                 juce::AudioBuffer<float> silence (2, 512);
                 silence.clear();
                 p.processBlock (silence, midi);
+                juce::Thread::sleep (10);
             }
 
             juce::AudioBuffer<float> response (2, 1 << 16);
@@ -650,10 +652,46 @@ namespace
             expect (peakDb (out, 0, out.getNumSamples()) <= -1.0f + 1.0e-4f, "soft clip + limiter stays under the ceiling");
         }
 
-        // Delta: only the difference comes out, so a neutral setup is silent.
+        // Delta: only the difference comes out, so a neutral setup is silent, with bands too.
         resetAll (p);
         setParam (p, ids::delta, 1.0f);
         expect (peakDb (run (p, makeNoise (24000, 6)), 0, 24000) < -200.0f + 1.0f, "delta of a neutral setup is silent");
+        for (int b = 1; b < 5; ++b)
+            addBand (p, b, 60.0f * std::pow (4.0f, (float) b), b % 2 == 0 ? slope48 : slope12);
+        {
+            const auto out = run (p, makeNoise (24000, 6));
+            const float residual = peakDb (out, 0, out.getNumSamples());
+            expect (residual < -100.0f, "delta of a neutral 5-band setup is silent (" + db (residual) + ")");
+        }
+
+        // Global mix blends inside the stages: at 0 % heavy band compression disappears completely,
+        // and the result is the same as a neutral multiband setup (no phase cancellation against
+        // an unfiltered dry signal).
+        {
+            const auto in = makeDrums (48000);
+
+            resetAll (p);
+            for (int b = 1; b < 4; ++b)
+                addBand (p, b, 100.0f * std::pow (5.0f, (float) b));
+            const auto neutral = run (p, in);
+
+            for (int b = 0; b < 4; ++b)
+                setCurve (p, bandStage (b), CurveKind::level, 6);   // Smash
+            setParam (p, ids::globalMix, 0.0f);
+            const auto dryMix = run (p, in);
+
+            float diff = 0.0f;
+            for (int i = 0; i < in.getNumSamples(); ++i)
+                diff = std::max (diff, std::abs (dryMix.getSample (0, i) - neutral.getSample (0, i)));
+            expect (diff < 1.0e-6f, "global mix 0 % equals the neutral multiband signal (max diff " + juce::String (diff, 8) + ")");
+
+            // Mix 50 % with the limiter on stays under the ceiling (the dry part is limited too).
+            setParam (p, ids::globalMix, 50.0f);
+            setParam (p, ids::limiter, 1.0f);
+            setParam (p, ids::outGain, 12.0f);
+            const auto half = run (p, in);
+            expect (peakDb (half, 0, half.getNumSamples()) <= -0.5f + 1.0e-4f, "global mix 50 % + limiter stays under the ceiling");
+        }
 
         // Auto gain matches loudness after heavy compression.
         resetAll (p);

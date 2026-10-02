@@ -63,7 +63,8 @@ DynMapMainView::DynMapMainView (DynMapProcessor& p, klaud::LookAndFeel& lookAndF
 
     amount.slider.setTooltip ("Scales every curve: 0 % is neutral, 100 % as drawn, 200 % exaggerated, below 0 % compression turns into expansion");
     time.slider.setTooltip ("Scales every attack, hold, release and transient time");
-    globalMix.slider.setTooltip ("Dry/wet of the whole plugin (parallel processing)");
+    globalMix.slider.setTooltip ("Dry/wet of the processing in every stage (input, bands, master). The dry part still goes "
+                                 "through the band split, so nothing cancels; the clipper and limiter stay on.");
     outGain.slider.setTooltip ("Output gain; drives the clipper and limiter when they are on");
     clip.box.setTooltip ("Clips peaks at the ceiling before the limiter (oversampled)");
     limiter.setTooltip ("True-peak limiter: the output never goes over the ceiling");

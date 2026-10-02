@@ -49,7 +49,9 @@ namespace dynmap
     //==============================================================================
     // Signal flow:
     //   in gain -> INPUT stage -> band split -> band stages (solo/mute) -> sum -> MASTER stage
-    //   -> output gain -> clipper -> true-peak limiter -> auto gain -> global mix / delta
+    //   -> output gain -> clipper -> true-peak limiter -> auto gain -> delta
+    // The global mix scales every stage's own dry/wet, so the dry part still goes through the
+    // band split and stays in phase with the processed part.
     class Engine
     {
     public:
@@ -141,7 +143,14 @@ namespace dynmap
         juce::AudioBuffer<float> sidechainDelayed, sidechainInput;
         juce::SmoothedValue<float> sidechainGain;
 
-        juce::SmoothedValue<float> inGain, outGain, globalMix;
+        juce::SmoothedValue<float> inGain, outGain;
+
+        // Delta reference: the dry signal through a copy of the band split, so a neutral setup
+        // gives silence even with minimum-phase crossovers.
+        MinimumPhaseSplitter referenceSplitter;
+        juce::AudioBuffer<float> referenceBands, deltaReference;
+        std::array<std::array<float*, 2>, maxBands> referencePointers {};
+        bool deltaWasOn = false;
 
         // Output section.
         std::array<std::unique_ptr<juce::dsp::Oversampling<float>>, Stage::numQualities> clipOversamplers;
