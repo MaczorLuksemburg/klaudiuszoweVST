@@ -829,6 +829,53 @@ namespace
         }
     }
 
+    // The display's timeline marks every cut between takes, and only those.
+    void testTimeline()
+    {
+        std::cout << "Timeline" << std::endl;
+        constexpr double fs = 48000.0;
+
+        auto check = [&] (const Track& track, float targetDb)
+        {
+            floormatch::dsp::Engine engine;
+            engine.prepare (fs, 1, floormatch::dsp::Engine::lookaheadNormal);
+            floormatch::dsp::Settings settings;
+            settings.targetDb = targetDb;
+            settings.match = 0.0f;
+            engine.setSettings (settings);
+
+            auto audio = track.audio;
+            audio.resize (audio.size() + (size_t) engine.getLatencySamples(), 0.0f);
+            std::vector<double> marks;
+            int64_t read = 0;
+            const double columnSeconds = std::round (0.05 * fs / engine.getHopSize()) * engine.getHopSize() / fs;
+            for (int start = 0; start + 512 <= (int) audio.size(); start += 512)
+            {
+                float* block[] { audio.data() + start };
+                engine.process (block, 1, 512);
+                for (; read < engine.getTimelineCount() - floormatch::dsp::Engine::timelineSettle; ++read)
+                    if (engine.getTimelineColumn (read).cut)
+                        marks.push_back ((double) read * columnSeconds);
+            }
+
+            int found = 0;
+            for (size_t i = 1; i < track.takes.size(); ++i)
+            {
+                const double cut = track.takes[i].getStart() / fs;
+                for (double m : marks)
+                    if (std::abs (m - cut) < 0.3) { ++found; break; }
+            }
+
+            juce::String where;
+            for (double m : marks) where << juce::String (m, 2) << " ";
+            expect (found == (int) track.takes.size() - 1 && marks.size() == track.takes.size() - 1,
+                    "a marker at each of the " + juce::String ((int) track.takes.size() - 1) + " cuts and nowhere else (at " + where.trim() + " s)");
+        };
+
+        check (makeTrack ({ { roomTone, -52.0 }, { pink, -58.0 }, { hiss, -49.0 }, { brown, -61.0 }, { white, -55.0 } }, 7.0, fs, 101), -64.0f);
+        check (makeTrack ({ { roomTone, -56.0 }, { hiss, -48.0 }, { pink, -52.0 } }, 5.0, fs, 72), -63.0f);
+    }
+
     void testColourAndFill()
     {
         std::cout << "Colour match, learn and fill" << std::endl;
@@ -1151,7 +1198,7 @@ namespace
         // A louder take of another colour, processed block by block without the silent tail.
         std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
         auto* view = dynamic_cast<FloorMatchEditor*> (editor.get());
-        const auto loud = makeTrack ({ { hiss, -50.0 } }, 5.0, fs, 72);
+        const auto loud = makeTrack ({ { roomTone, -56.0 }, { hiss, -48.0 }, { pink, -52.0 } }, 5.0, fs, 72);
         auto audio = toBuffer (loud.audio, 2);
         juce::MidiBuffer midi;
         p.prepareToPlay (fs, 512);
@@ -1313,7 +1360,6 @@ int main (int argc, char* argv[])
     if (args.contains ("--quality"))
     {
         testQuality();
-    testEvents();
         return 0;
     }
 
@@ -1396,6 +1442,7 @@ int main (int argc, char* argv[])
     testSpeechPreservation();
     testQuality();
     testEvents();
+    testTimeline();
     testColourAndFill();
     testQuietest();
     testRobustness();

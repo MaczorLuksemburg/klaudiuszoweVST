@@ -49,6 +49,10 @@ AI-made VST plugins for testing and fun.
   phrases hold the last estimate, rises without a cut are rate-limited. Gain = sqrt(beta) + (1 - sqrt(beta)) *
   speech gain (MMSE-LSA + presence, lookahead attack, 50 ms release).
 - Learned profile (61 bands of 1/6 octave, dB per Hz) is saved in the state tree property `profile`, not a parameter.
+- Display: 1/12-octave curves (+ live input spectrum, toggled by the state property `showInputSpectrum`) and a
+  ~15 s timeline from `Engine::TimelineColumn`s (~50 ms each): background in/out, target, input level, cut
+  markers (where the estimate steps across most bands; set up to `timelineSettle` columns late, so the
+  processor only copies settled columns), event-held shading and max-reduction-reached flags.
 - `FloorMatch_Tests` measures everything on synthetic takes (formant "speech" over different noises joined with
   cuts); `--quality` isolates speech and noise via shadow channels, `--bench` measures CPU,
   `--render in.wav out.wav [--target dB] [--quietest] ...` processes real recordings for listening tests,

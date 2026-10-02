@@ -235,6 +235,8 @@ void Engine::prepare (double newSampleRate, int channels, int lookahead)
         bandStart.push_back (numBins);
 
     bands.assign (bandStart.size() - 1, {});
+    markLength = 2 * std::max (2, juce::roundToInt (0.15 * framesPerSecond));
+    markHistory.assign ((size_t) markLength * bands.size(), 0.0f);
     cutHold.assign (bands.size(), 0);
 
     for (int i = 0; i < numProfileBands; ++i)
@@ -252,6 +254,20 @@ void Engine::prepare (double newSampleRate, int channels, int lookahead)
         map.fraction = position - (float) map.lower;
     }
 
+    for (int i = 0; i < numDisplayBands; ++i)
+    {
+        const float centre = displayBandFrequency (i);
+        const float low = centre * std::exp2 (-1.0f / 24.0f), high = centre * std::exp2 (1.0f / 24.0f);
+        auto& map = displayMap[(size_t) i];
+        map.start = std::max (1, (int) std::ceil (low / binWidth));
+        map.end = std::min (numBins, (int) std::ceil (high / binWidth));
+        map.width = high - low;
+        const float position = juce::jlimit (1.0f, (float) (numBins - 2), centre / binWidth);
+        map.lower = (int) position;
+        map.fraction = position - (float) map.lower;
+    }
+
+    columnFrames = std::max (1, juce::roundToInt (0.05 * framesPerSecond));
     releaseCoeff = (float) std::exp (-hop / (tuning.releaseSeconds * sampleRate));
 
     inputRing.assign ((size_t) numChannels, std::vector<float> ((size_t) fftSize, 0.0f));
@@ -282,6 +298,9 @@ void Engine::prepare (double newSampleRate, int channels, int lookahead)
     scratchFuture.assign ((size_t) futureWindow.length() + 1, 0.0f);
     pastSlots.clear();
     pastSlots.reserve ((size_t) (pastWindow.length() / decimation + 2));
+    nearFrames = std::max (2, juce::roundToInt (0.25 * framesPerSecond));
+    nearSlots.clear();
+    nearSlots.reserve (32);
     futureSlots.clear();
     futureSlots.reserve ((size_t) (futureWindow.length() / decimation + 2));
 
@@ -293,6 +312,7 @@ void Engine::prepare (double newSampleRate, int channels, int lookahead)
     beta.assign ((size_t) numBins, 1.0f);
     fillPower.assign ((size_t) numBins, 0.0f);
     latestNoise.assign ((size_t) numBins, 0.0f);
+    targetPower.assign ((size_t) numBins, 0.0f);
 
     updateTargetShape();
     reset();
@@ -326,6 +346,15 @@ void Engine::reset()
     frameSinceSnapshot = 0;
     snapshot.valid = false;
     latestNoiseValid = false;
+
+    timelineCount = 0;
+    framesInColumn = validInColumn = 0;
+    columnInput = columnNoise = columnOutput = 0.0;
+    columnCut = columnEvent = false;
+    markFrames = 0;
+    markPeak = 0.0f;
+    markPeakFrame = 0;
+    lastMarkFrame = -(1 << 30);
 }
 
 void Engine::setTuning (const Tuning& newTuning)
@@ -562,11 +591,22 @@ bool Engine::estimateNoise (int64_t frame, float* noise)
         if (t >= 0 && smoothedValid[(size_t) slotOf (t, smoothLength)] != 0)
             futureSlots.push_back (slotOf (t, smoothLength));
 
+    // Frames right around this one (0.25 s each way, or just before it without lookahead).
+    nearSlots.clear();
+    const int nearStep = std::max (1, nearFrames / 12);
+    for (int64_t t = frame - nearFrames; t <= frame + std::min (nearFrames, futureWindow.end); t += nearStep)
+        if (t >= 0 && smoothedValid[(size_t) slotOf (t, smoothLength)] != 0)
+            nearSlots.push_back (slotOf (t, smoothLength));
+
     const bool hasPast = (int) pastSlots.size() >= minBinFrames;
     const bool hasFuture = (int) futureSlots.size() >= minBinFrames;
 
     if (! hasPast && ! hasFuture)
+    {
+        markFrames = 0;
+        markPeak = 0.0f;
         return false;
+    }
 
     // ---- cut detection per band, at full frame resolution ----------------------------------
     int rises = 0, falls = 0, compared = 0;
@@ -688,13 +728,15 @@ bool Engine::estimateNoise (int64_t frame, float* noise)
             if (band.side != sidePast)
                 band.side = band.ratio < 1.0f ? sideBoundedPast : sidePast;
     }
-    else if (std::max (rises, falls) < std::max (4, compared / 4))
+    else if (rises < std::max (4, compared / 4))
     {
-        // Fewer than a quarter of the bands: an event. (Between a quarter and a half it is still a
-        // cut whose new take differs only in part of the spectrum, like hiss giving way to rumble:
-        // the bands that saw the step keep their decision.)
+        // A step up in fewer than a quarter of the bands is an event: those bands stay on the normal
+        // path. (Between a quarter and a half it is still a cut whose new take differs only in part
+        // of the spectrum, like hiss giving way to rumble.) Steps down keep their decision: until
+        // the cut, those bands still belong to the louder take.
         for (auto& band : bands)
-            band.side = sideNone;
+            if (band.side == sideFuture)
+                band.side = sideNone;
     }
 
     // With lookahead a cut up is seen while the new take fills the future window, but speech in
@@ -703,6 +745,7 @@ bool Engine::estimateNoise (int64_t frame, float* noise)
     if (lookaheadMode != lookaheadOff)
     {
         const bool cutUp = ! insideEvent && rises >= std::max (4, compared / 4) && rises >= falls;
+
 
         for (size_t b = 0; b < bands.size(); ++b)
         {
@@ -832,14 +875,31 @@ bool Engine::estimateNoise (int64_t frame, float* noise)
             }
             else
             {
-                // No cut: the speech-free frames of both sides, averaged when they agree, otherwise
-                // the lower one (speech can only raise a floor).
+                // No cut: the speech-free frames of both sides, averaged when they agree. When they
+                // don't, the side that matches the speech-free frames right around this one (a take
+                // change that wasn't detected as a cut lies on the other side); failing that, the
+                // lower one (speech can only raise a floor).
                 const float p = past (true), f = future (true);
                 const bool okPast = countPast >= minNoiseFrames, okFuture = countFuture >= minNoiseFrames;
 
                 if (okPast && okFuture)
-                    n = (f < p * 2.0f && p < f * 2.0f) ? (p * (float) countPast + f * (float) countFuture) / (float) (countPast + countFuture)
-                                                         : std::min (p, f);
+                {
+                    if (f < p * 2.0f && p < f * 2.0f)
+                    {
+                        n = (p * (float) countPast + f * (float) countFuture) / (float) (countPast + countFuture);
+                    }
+                    else
+                    {
+                        int countNear = 0;
+                        const float here = truncatedMean (row, labels, nearSlots, countNear);
+                        const bool nearPast = here < p * 2.0f && p < here * 2.0f;
+                        const bool nearFuture = here < f * 2.0f && f < here * 2.0f;
+                        if (k >= lowBins && countNear >= minNoiseFrames / 2 && nearPast != nearFuture)   // the lowest bins are too noisy for this
+                            n = nearPast ? p : f;
+                        else
+                            n = std::min (p, f);
+                    }
+                }
                 else if (okPast)   n = p;
                 else if (okFuture) n = f;
                 else
@@ -874,6 +934,8 @@ bool Engine::estimateNoise (int64_t frame, float* noise)
     }
 
     heldBins = diagnostics.holdingBins;
+
+    markCuts (frame, noise);
     std::copy (noise, noise + numBins, referenceNoise.begin());
     referenceValid = true;
 
@@ -989,6 +1051,7 @@ void Engine::synthesise (int64_t frame)
                 targetLog = (1.0f - match) * levelLog + match * (std::log (std::max (targetShape[(size_t) k], tiny) / n) + profileLog);
 
             const float ratio = std::exp (juce::jlimit (-60.0f, 60.0f, targetLog));
+            targetPower[(size_t) k] = ratio * n;
             beta[(size_t) k] = juce::jlimit (minBeta, 1.0f, ratio);
             fillPower[(size_t) k] = (settings.fill && ratio > 1.0f) ? (ratio - 1.0f) * n : 0.0f;
         }
@@ -1048,13 +1111,23 @@ void Engine::synthesise (int64_t frame)
     }
 
     // ---- metering, learning and the quietest floor -------------------------------------------
+    const float* inputPower = power.data() + slotOf (frame, powerLength) * numBins;
+    const float inputDb = inputAlive ? weightedLevelDb (inputPower) : -150.0f;
+
     latestNoiseValid = noiseValid;
     if (! noiseValid)
     {
         stableFrames = 0;
         snapshot.valid = false;
+        addTimelineFrame (false, inputDb, -150.0f, -150.0f);
         return;
     }
+
+    // Expected noise floor after processing: attenuated noise plus fill.
+    for (int k = 0; k < numBins; ++k)
+        noiseScratch[(size_t) k] = noise[k] * beta[(size_t) k] + (addFill ? fillPower[(size_t) k] : 0.0f);
+    const float outputNoiseDb = weightedLevelDb (noiseScratch.data());
+    addTimelineFrame (true, inputDb, noiseDb, outputNoiseDb);
 
     std::copy (noise, noise + numBins, latestNoise.begin());
 
@@ -1096,36 +1169,13 @@ void Engine::synthesise (int64_t frame)
     {
         frameSinceSnapshot = 0;
 
-        // Expected noise floor after processing: attenuated noise plus fill.
-        for (int k = 0; k < numBins; ++k)
-            noiseScratch[(size_t) k] = noise[k] * beta[(size_t) k] + (addFill ? fillPower[(size_t) k] : 0.0f);
-
-        std::array<float, numProfileBands> outputBands, targetBands;
-        binsToProfile (noiseScratch.data(), outputBands);
-
-        const float match = profile.valid ? juce::jlimit (0.0f, 1.0f, settings.match) : 0.0f;
-        const float levelScale = std::pow (10.0f, (settings.targetDb - noiseDb) / 10.0f);
-        const float profileScale = std::pow (10.0f, (settings.targetDb - targetShapeLevelDb) / 10.0f);
-
-        for (int i = 0; i < numProfileBands; ++i)
-        {
-            const float level = noiseBands[(size_t) i] * levelScale;
-            targetBands[(size_t) i] = match > 0.0f
-                ? std::exp ((1.0f - match) * std::log (std::max (level, tiny))
-                            + match * std::log (std::max (profile.psd[(size_t) i] * profileScale, tiny)))
-                : level;
-        }
-
-        for (int i = 0; i < numProfileBands; ++i)
-        {
-            const float width = bandMap[(size_t) i].width;
-            snapshot.noise[(size_t) i]  = toDb (noiseBands[(size_t) i] * width) + aes17;
-            snapshot.target[(size_t) i] = toDb (targetBands[(size_t) i] * width) + aes17;
-            snapshot.output[(size_t) i] = toDb (outputBands[(size_t) i] * width) + aes17;
-        }
+        binsToDisplay (noise, snapshot.noise);
+        binsToDisplay (targetPower.data(), snapshot.target);
+        binsToDisplay (noiseScratch.data(), snapshot.output);
+        binsToDisplay (inputPower, snapshot.input);
 
         snapshot.noiseDb = noiseDb;
-        snapshot.outputDb = weightedLevelDb (noiseScratch.data());
+        snapshot.outputDb = outputNoiseDb;
         snapshot.valid = true;
         ++snapshotCounter;
     }
@@ -1162,6 +1212,116 @@ void Engine::binsToProfile (const float* binPower, std::array<float, numProfileB
 
         psd[(size_t) i] = value * psdScale;
     }
+}
+
+void Engine::binsToDisplay (const float* binPower, std::array<float, numDisplayBands>& levelsDb) const
+{
+    for (int i = 0; i < numDisplayBands; ++i)
+    {
+        const auto& map = displayMap[(size_t) i];
+        float value;
+
+        if (map.end > map.start)
+        {
+            double sum = 0.0;
+            for (int k = map.start; k < map.end; ++k)
+                sum += binPower[k];
+            value = (float) (sum / (map.end - map.start));
+        }
+        else
+        {
+            value = binPower[map.lower] + map.fraction * (binPower[map.lower + 1] - binPower[map.lower]);
+        }
+
+        levelsDb[(size_t) i] = toDb (value * psdScale * map.width) + aes17;
+    }
+}
+
+// Timeline markers: when the estimator moves to a new take, its background estimate steps across
+// most of the spectrum and stays there (events are held and speech is skipped, so neither does).
+// The step is measured between the 0.15 s before and after each frame and marked at its peak.
+void Engine::markCuts (int64_t frame, const float* noise)
+{
+    const size_t numBands = bands.size();
+    const int slot = slotOf (frame, markLength);
+    for (size_t b = 0; b < numBands; ++b)
+    {
+        double sum = 0.0;
+        for (int k = bandStart[b]; k < bandStart[b + 1]; ++k)
+            sum += noise[k];
+        markHistory[(size_t) slot * numBands + b] = toDb ((float) sum);
+    }
+
+    // Wait until the windows hold real audio (after starting or after digital silence).
+    const int span = markLength / 2;
+    if (++markFrames < markLength + pastWindow.length() + futureWindow.length())
+        return;
+
+    float step = 0.0f;
+    for (size_t b = 0; b < numBands; ++b)
+    {
+        double before = 0.0, after = 0.0;
+        for (int j = 0; j < span; ++j)
+        {
+            before += markHistory[(size_t) slotOf (frame - markLength + 1 + j, markLength) * numBands + b];
+            after  += markHistory[(size_t) slotOf (frame - span + 1 + j, markLength) * numBands + b];
+        }
+        step += (float) std::abs (after - before) / (float) span;
+    }
+    step /= (float) numBands;
+
+    constexpr float markThresholdDb = 3.0f;
+    if (step > markThresholdDb && step > markPeak)
+    {
+        markPeak = step;
+        markPeakFrame = frame - span;
+    }
+    else if (markPeak > 0.0f && (step < markThresholdDb || step < 0.7f * markPeak))
+    {
+        // The estimate at frame c is output with frame c - attackFrames.
+        const int64_t outputFrame = markPeakFrame - attackFrames;
+        if (outputFrame - lastMarkFrame > (int64_t) (1.0 * sampleRate / hop))   // at most one per second
+        {
+            lastMarkFrame = outputFrame;
+            const int64_t column = outputFrame / columnFrames;
+            if (column >= timelineCount)
+                columnCut = true;
+            else if (column > timelineCount - timelineCapacity && column >= 0)
+                timeline[(size_t) (column % timelineCapacity)].cut = true;
+        }
+        markPeak = 0.0f;
+    }
+}
+
+// Collects output frames into ~50 ms timeline columns.
+
+void Engine::addTimelineFrame (bool valid, float inputDb, float noiseDb, float outputDb)
+{
+    columnInput += std::pow (10.0, inputDb / 10.0);
+    if (valid)
+    {
+        columnNoise += std::pow (10.0, noiseDb / 10.0);
+        columnOutput += std::pow (10.0, outputDb / 10.0);
+        ++validInColumn;
+    }
+    columnEvent = columnEvent || heldBins > numBins / 4;
+    if (++framesInColumn < columnFrames)
+        return;
+
+    auto& column = timeline[(size_t) (timelineCount % timelineCapacity)];
+    column.valid = validInColumn * 2 >= framesInColumn;
+    column.inputDb = toDb ((float) (columnInput / framesInColumn));
+    column.noiseDb = validInColumn > 0 ? toDb ((float) (columnNoise / validInColumn)) : -150.0f;
+    column.outputDb = validInColumn > 0 ? toDb ((float) (columnOutput / validInColumn)) : -150.0f;
+    column.targetDb = settings.targetDb;
+    column.cut = columnCut;   // markCuts may still set it on recent columns
+    column.event = columnEvent && column.valid;
+    column.limited = column.valid && column.noiseDb > settings.targetDb + 1.0f && column.outputDb > settings.targetDb + 1.0f;
+    ++timelineCount;
+
+    framesInColumn = validInColumn = 0;
+    columnInput = columnNoise = columnOutput = 0.0;
+    columnCut = columnEvent = false;
 }
 
 void Engine::setLearning (bool shouldLearn)

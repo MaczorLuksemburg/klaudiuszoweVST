@@ -103,9 +103,28 @@ void Choice::resized()
 }
 
 //==============================================================================
+namespace
+{
+    const juce::Identifier showInputId { "showInputSpectrum" };
+}
+
 SpectrumView::SpectrumView (FloorMatchProcessor& p) : processor (p)
 {
-    setInterceptsMouseClicks (false, false);
+    setInterceptsMouseClicks (true, false);
+}
+
+bool SpectrumView::showInput() const
+{
+    return (bool) processor.apvts.state.getProperty (showInputId, true);
+}
+
+void SpectrumView::mouseDown (const juce::MouseEvent& e)
+{
+    if (inputLegendArea.contains (e.position))
+    {
+        processor.apvts.state.setProperty (showInputId, ! showInput(), nullptr);
+        repaint();
+    }
 }
 
 void SpectrumView::update (const floormatch::dsp::Snapshot& snapshot, bool hasSnapshot)
@@ -130,10 +149,12 @@ void SpectrumView::update (const floormatch::dsp::Snapshot& snapshot, bool hasSn
     ease (shown.noise, snapshot.noise);
     ease (shown.target, snapshot.target);
     ease (shown.output, snapshot.output);
+    for (size_t i = 0; i < shown.input.size(); ++i)   // the live spectrum moves faster
+        shown.input[i] = shown.input[i] < -140.0f ? snapshot.input[i] : shown.input[i] + 0.6f * (snapshot.input[i] - shown.input[i]);
     shown.valid = true;
 
     float loudest = -150.0f;
-    for (int i = 6; i < floormatch::dsp::numProfileBands - 3; ++i)
+    for (int i = 12; i < floormatch::dsp::numDisplayBands - 6; ++i)
         loudest = std::max ({ loudest, shown.noise[(size_t) i], shown.target[(size_t) i] });
 
     const float desiredTop = juce::jlimit (-60.0f, 0.0f, std::ceil ((loudest + 8.0f) / 10.0f) * 10.0f);
@@ -151,14 +172,14 @@ float SpectrumView::yFor (float db) const
     return juce::jmap (db, topDb, topDb - rangeDb, 0.0f, (float) getHeight());
 }
 
-juce::Path SpectrumView::curve (const std::array<float, floormatch::dsp::numProfileBands>& levels, bool closed) const
+juce::Path SpectrumView::curve (const Bands& levels, bool closed) const
 {
     juce::Path path;
     const float bottom = (float) getHeight();
 
-    for (int i = 0; i < floormatch::dsp::numProfileBands; ++i)
+    for (int i = 0; i < floormatch::dsp::numDisplayBands; ++i)
     {
-        const float x = xFor (floormatch::dsp::profileBandFrequency (i));
+        const float x = xFor (floormatch::dsp::displayBandFrequency (i));
         const float y = juce::jlimit (-2.0f, bottom + 2.0f, yFor (levels[(size_t) i]));
 
         if (i == 0)
@@ -181,7 +202,7 @@ juce::Path SpectrumView::curve (const std::array<float, floormatch::dsp::numProf
 
     if (closed)
     {
-        path.lineTo (xFor (floormatch::dsp::profileBandFrequency (floormatch::dsp::numProfileBands - 1)), bottom);
+        path.lineTo (xFor (floormatch::dsp::displayBandFrequency (floormatch::dsp::numDisplayBands - 1)), bottom);
         path.closeSubPath();
     }
 
@@ -218,6 +239,14 @@ void SpectrumView::paint (juce::Graphics& g)
     // Curves.
     if (active && shown.valid)
     {
+        if (showInput())
+        {
+            g.setColour (pal.text.withAlpha (0.05f));
+            g.fillPath (curve (shown.input, true));
+            g.setColour (pal.text.withAlpha (0.28f));
+            g.strokePath (curve (shown.input, false), juce::PathStrokeType (1.0f, juce::PathStrokeType::curved));
+        }
+
         g.setColour (colours::input.withAlpha (0.16f));
         g.fillPath (curve (shown.noise, true));
         g.setColour (colours::input.withAlpha (0.85f));
@@ -243,8 +272,9 @@ void SpectrumView::paint (juce::Graphics& g)
 
     // Legend.
     auto legend = juce::Rectangle<float> (44.0f, 8.0f, 400.0f, 14.0f);
-    auto item = [&] (juce::Colour colour, const juce::String& text, bool dashedLine)
+    auto item = [&] (juce::Colour colour, const juce::String& text, bool dashedLine) -> juce::Rectangle<float>
     {
+        const float startX = legend.getX();
         g.setColour (colour);
         if (dashedLine)
         {
@@ -260,17 +290,190 @@ void SpectrumView::paint (juce::Graphics& g)
         const float width = juce::GlyphArrangement::getStringWidth (klaud::font (11.0f), text) + 8.0f;
         g.drawText (text, legend.withX (legend.getX() + 19.0f).withWidth (width), juce::Justification::centredLeft, false);
         legend.setX (legend.getX() + 19.0f + width + 12.0f);
+        return { startX, legend.getY() - 2.0f, legend.getX() - startX - 8.0f, legend.getHeight() + 4.0f };
     };
 
     item (colours::input, "noise in", false);
     item (juce::Colours::white.withAlpha (0.75f), "target", true);
     item (colours::accent, "noise out", false);
+    inputLegendArea = item (pal.text.withAlpha (showInput() ? 0.45f : 0.15f), showInput() ? "live input" : "live input (off)", false);
 
     // Profile status.
     g.setFont (klaud::font (11.0f));
     g.setColour (processor.hasProfile() ? colours::accent.withAlpha (0.85f) : pal.textDim);
     g.drawText (processor.hasProfile() ? "colour: learned profile" : "colour: each take's own (no profile)",
                 juce::Rectangle<float> (bounds.getRight() - 290.0f, 8.0f, 282.0f, 14.0f), juce::Justification::centredRight, false);
+}
+
+//==============================================================================
+TimelineView::TimelineView (FloorMatchProcessor& p) : processor (p)
+{
+    setInterceptsMouseClicks (false, false);
+}
+
+void TimelineView::refresh()
+{
+    filled = processor.getTimeline (columns);
+
+    // Range: the background and target levels on screen, with room above for the dialogue.
+    float low = 0.0f, high = -200.0f;
+    for (int i = std::max (0, filled - visibleColumns); i < filled; ++i)
+    {
+        const auto& c = columns[(size_t) i];
+        if (! c.valid)
+            continue;
+        low = std::min ({ low, c.outputDb, c.targetDb, c.noiseDb });
+        high = std::max ({ high, c.outputDb, c.targetDb, c.noiseDb });
+    }
+
+    if (high > low)
+    {
+        const float wantedBottom = std::floor ((low - 8.0f) / 10.0f) * 10.0f;
+        const float wantedTop = std::max (wantedBottom + 40.0f, std::ceil ((high + 18.0f) / 10.0f) * 10.0f);
+        bottomDb += 0.2f * (wantedBottom - bottomDb);
+        topDb += 0.2f * (wantedTop - topDb);
+    }
+
+    repaint();
+}
+
+float TimelineView::yFor (float db) const
+{
+    return juce::jmap (juce::jlimit (bottomDb, topDb, db), topDb, bottomDb, plot.getY(), plot.getBottom());
+}
+
+void TimelineView::paint (juce::Graphics& g)
+{
+    const auto& pal = palette();
+    plot = getLocalBounds().toFloat().withTrimmedLeft (30.0f).withTrimmedTop (18.0f).withTrimmedBottom (12.0f).withTrimmedRight (4.0f);
+    const float columnWidth = plot.getWidth() / (float) visibleColumns;
+
+    // Grid: dB lines and seconds ago.
+    g.setFont (klaud::font (9.5f));
+    const float gridStep = topDb - bottomDb > 50.0f ? 20.0f : 10.0f;
+    for (float db = std::ceil (bottomDb / gridStep) * gridStep; db < topDb; db += gridStep)
+    {
+        const float y = yFor (db);
+        g.setColour (juce::Colours::white.withAlpha (0.045f));
+        g.drawHorizontalLine (juce::roundToInt (y), plot.getX(), plot.getRight());
+        g.setColour (pal.textDim.withAlpha (0.7f));
+        g.drawText (juce::String (juce::roundToInt (db)), juce::Rectangle<float> (0.0f, y - 6.0f, 26.0f, 12.0f), juce::Justification::centredRight, false);
+    }
+    for (int seconds = 5; seconds < visibleColumns / 20; seconds += 5)
+    {
+        const float x = plot.getRight() - (float) (seconds * 20) * columnWidth;
+        g.setColour (juce::Colours::white.withAlpha (0.045f));
+        g.drawVerticalLine (juce::roundToInt (x), plot.getY(), plot.getBottom());
+        g.setColour (pal.textDim.withAlpha (0.7f));
+        g.drawText ("-" + juce::String (seconds) + " s", juce::Rectangle<float> (x - 20.0f, plot.getBottom(), 40.0f, 12.0f), juce::Justification::centred, false);
+    }
+
+    const int first = std::max (0, filled - visibleColumns);
+    auto xOf = [&] (int index) { return plot.getRight() - (float) (filled - index) * columnWidth; };
+
+    // Events held, input level (dialogue), cuts and limited spots.
+    for (int i = first; i < filled; ++i)
+    {
+        const auto& c = columns[(size_t) i];
+        const float x = xOf (i);
+
+        if (c.event)
+        {
+            g.setColour (colours::learn.withAlpha (0.13f));
+            g.fillRect (x, plot.getY(), columnWidth + 0.5f, plot.getHeight());
+        }
+
+        if (c.inputDb > bottomDb)
+        {
+            g.setColour (pal.text.withAlpha (0.10f));
+            g.fillRect (x, yFor (c.inputDb), columnWidth + 0.5f, plot.getBottom() - yFor (c.inputDb));
+        }
+
+        if (c.limited)
+        {
+            g.setColour (colours::learn.withAlpha (0.8f));
+            g.fillRect (x, plot.getY(), columnWidth + 0.5f, 2.0f);
+        }
+    }
+
+    // Background in, out and the target, broken over digital silence.
+    auto line = [&] (auto value, juce::Colour colour, float thickness, bool dashed)
+    {
+        juce::Path path;
+        bool drawing = false;
+        for (int i = first; i < filled; ++i)
+        {
+            const auto& c = columns[(size_t) i];
+            if (! c.valid)
+            {
+                drawing = false;
+                continue;
+            }
+            const float x = xOf (i) + columnWidth * 0.5f, y = yFor (value (c));
+            if (drawing) path.lineTo (x, y);
+            else         path.startNewSubPath (x, y);
+            drawing = true;
+        }
+
+        g.setColour (colour);
+        if (dashed)
+        {
+            juce::Path stroke;
+            const float dashes[] { 5.0f, 4.0f };
+            juce::PathStrokeType (thickness).createDashedStroke (stroke, path, dashes, 2);
+            g.fillPath (stroke);
+        }
+        else
+        {
+            g.strokePath (path, juce::PathStrokeType (thickness, juce::PathStrokeType::curved));
+        }
+    };
+
+    line ([] (const floormatch::dsp::TimelineColumn& c) { return c.targetDb; }, juce::Colours::white.withAlpha (0.6f), 1.0f, true);
+    line ([] (const floormatch::dsp::TimelineColumn& c) { return c.noiseDb; }, colours::input.withAlpha (0.9f), 1.3f, false);
+    line ([] (const floormatch::dsp::TimelineColumn& c) { return c.outputDb; }, colours::accent, 1.7f, false);
+
+    for (int i = first; i < filled; ++i)
+    {
+        if (! columns[(size_t) i].cut)
+            continue;
+        const float x = xOf (i) + columnWidth * 0.5f;
+        g.setColour (juce::Colours::white.withAlpha (0.55f));
+        g.drawLine (x, plot.getY(), x, plot.getBottom(), 1.0f);
+        juce::Path tick;
+        tick.addTriangle (x - 3.5f, plot.getY() - 5.0f, x + 3.5f, plot.getY() - 5.0f, x, plot.getY());
+        g.fillPath (tick);
+    }
+
+    // Legend.
+    g.setFont (klaud::font (10.0f));
+    float lx = plot.getX();
+    auto key = [&] (juce::Colour colour, const juce::String& text, int style)
+    {
+        g.setColour (colour);
+        if (style == 0)      g.fillRect (lx, 7.0f, 12.0f, 2.0f);                // line
+        else if (style == 1) g.fillRect (lx, 2.0f, 8.0f, 10.0f);                // area
+        else                 g.fillRect (lx + 4.0f, 2.0f, 1.2f, 10.0f);         // marker
+        const float width = juce::GlyphArrangement::getStringWidth (klaud::font (10.0f), text);
+        g.setColour (pal.textDim);
+        g.drawText (text, juce::Rectangle<float> (lx + 16.0f, 0.0f, width + 4.0f, 14.0f), juce::Justification::centredLeft, false);
+        lx += 16.0f + width + 14.0f;
+    };
+
+    key (pal.text.withAlpha (0.25f), "input", 1);
+    key (colours::input, "background in", 0);
+    key (colours::accent, "out", 0);
+    key (juce::Colours::white.withAlpha (0.6f), "target", 0);
+    key (juce::Colours::white.withAlpha (0.7f), "cut", 2);
+    key (colours::learn.withAlpha (0.4f), "event held", 1);
+    key (colours::learn, "max reduction reached", 0);
+
+    if (filled == 0)
+    {
+        g.setColour (pal.textDim);
+        g.setFont (klaud::font (12.0f));
+        g.drawText ("The last 15 seconds appear here while audio plays", plot, juce::Justification::centred, false);
+    }
 }
 
 //==============================================================================
@@ -364,15 +567,17 @@ namespace
     constexpr int headerHeight = 56;
     const juce::Identifier uiWidthId { "uiWidth" };
 
-    const juce::Rectangle<int> spectrumPanel { 16, 68, 620, 290 };
-    const juce::Rectangle<int> meterPanel    { 648, 68, 196, 290 };
-    const juce::Rectangle<int> controlPanel  { 16, 370, 828, 116 };
+    const juce::Rectangle<int> spectrumPanel { 16, 68, 620, 226 };
+    const juce::Rectangle<int> timelinePanel { 16, 302, 620, 108 };
+    const juce::Rectangle<int> meterPanel    { 648, 68, 196, 342 };
+    const juce::Rectangle<int> controlPanel  { 16, 422, 828, 116 };
 }
 
 FloorMatchMainView::FloorMatchMainView (FloorMatchProcessor& p, klaud::LookAndFeel& lookAndFeel)
     : processor (p),
       lookAndFeelSetter (*this, lookAndFeel),
       spectrum (p),
+      timelineView (p),
       meter (p.apvts),
       target (p.apvts, ids::target, "TARGET", true),
       maxReduction (p.apvts, ids::maxReduction, "MAX REDUCTION", true),
@@ -380,7 +585,7 @@ FloorMatchMainView::FloorMatchMainView (FloorMatchProcessor& p, klaud::LookAndFe
       lookahead (p.apvts, ids::lookahead, "LOOKAHEAD"),
       listen (p.apvts, ids::listen, "LISTEN")
 {
-    for (auto* c : std::initializer_list<juce::Component*> { &spectrum, &meter, &target, &maxReduction, &match, &lookahead, &listen,
+    for (auto* c : std::initializer_list<juce::Component*> { &spectrum, &timelineView, &meter, &target, &maxReduction, &match, &lookahead, &listen,
                                                              &learnButton, &quietestButton, &resetQuietestButton, &fillButton,
                                                              &clearProfileButton })
         addAndMakeVisible (c);
@@ -442,6 +647,7 @@ void FloorMatchMainView::refresh()
     const bool hasSnapshot = processor.getSnapshot (snapshot);
     spectrum.update (snapshot, hasSnapshot);
     meter.update (snapshot, hasSnapshot);
+    timelineView.refresh();
 
     if (++blink % 6 == 0)
         updateButtons();
@@ -484,7 +690,7 @@ void FloorMatchMainView::paint (juce::Graphics& g)
     g.setColour (juce::Colours::white.withAlpha (0.05f));
     g.fillRect (0, headerHeight - 1, getWidth(), 1);
 
-    for (auto panel : { spectrumPanel, meterPanel, controlPanel })
+    for (auto panel : { spectrumPanel, timelinePanel, meterPanel, controlPanel })
         ui::drawPanel (g, panel);
 
     ui::drawCaption (g, "NOISE FLOOR", meterPanel.withHeight (26).withTrimmedTop (8));
@@ -493,6 +699,7 @@ void FloorMatchMainView::paint (juce::Graphics& g)
 void FloorMatchMainView::resized()
 {
     spectrum.setBounds (spectrumPanel.reduced (6));
+    timelineView.setBounds (timelinePanel.reduced (6, 4));
     meter.setBounds (meterPanel.withTrimmedTop (30).reduced (14, 8));
 
     auto area = controlPanel.reduced (14, 8);

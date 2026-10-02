@@ -55,6 +55,7 @@ void FloorMatchProcessor::prepareEngine (int lookaheadIndex)
     engine.prepare (currentSampleRate, currentChannels, lookaheadIndex);
     appliedProfileVersion = -1;   // hand the profile to the fresh engine again
     publishedSnapshot = -1;
+    copiedColumns = 0;
     setLatencySamples (engine.getLatencySamples());
 }
 
@@ -107,6 +108,18 @@ void FloorMatchProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
     const int channels = std::min (buffer.getNumChannels(), currentChannels);
     if (channels == currentChannels)
         engine.process (buffer.getArrayOfWritePointers(), channels, buffer.getNumSamples());
+
+    const int64_t columns = std::max<int64_t> (0, engine.getTimelineCount() - floormatch::dsp::Engine::timelineSettle);
+    if (columns != copiedColumns)
+    {
+        const juce::SpinLock::ScopedTryLockType lock (sharedLock);
+        if (lock.isLocked())
+        {
+            for (int64_t i = std::max (copiedColumns, columns - floormatch::dsp::Engine::timelineCapacity); i < columns; ++i)
+                sharedTimeline[(size_t) (sharedTimelineCount++ % timelineLength)] = engine.getTimelineColumn (i);
+            copiedColumns = columns;
+        }
+    }
 
     if (engine.getSnapshotCounter() != publishedSnapshot)
     {
@@ -223,6 +236,15 @@ bool FloorMatchProcessor::getSnapshot (dsp::Snapshot& result) const
     const juce::SpinLock::ScopedLockType lock (sharedLock);
     result = sharedSnapshot;
     return result.valid;
+}
+
+int FloorMatchProcessor::getTimeline (Timeline& columns) const
+{
+    const juce::SpinLock::ScopedLockType lock (sharedLock);
+    const int filled = (int) std::min<int64_t> (sharedTimelineCount, timelineLength);
+    for (int i = 0; i < filled; ++i)
+        columns[(size_t) i] = sharedTimeline[(size_t) ((sharedTimelineCount - filled + i) % timelineLength)];
+    return filled;
 }
 
 juce::String FloorMatchProcessor::profileToString (const dsp::Profile& profile)

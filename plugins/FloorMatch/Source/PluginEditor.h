@@ -48,7 +48,8 @@ namespace floormatch::ui
         std::unique_ptr<APVTS::ComboBoxAttachment> attachment;
     };
 
-    // Noise spectra per 1/6 octave: input noise floor, target and output noise floor.
+    // Noise spectra per 1/12 octave: input noise floor, target and output noise floor, with the
+    // live input spectrum faintly behind (click "live input" in the legend to hide it).
     class SpectrumView : public juce::Component
     {
     public:
@@ -56,17 +57,43 @@ namespace floormatch::ui
 
         void update (const floormatch::dsp::Snapshot&, bool hasSnapshot);
         void paint (juce::Graphics&) override;
+        void mouseDown (const juce::MouseEvent&) override;
 
     private:
+        using Bands = std::array<float, floormatch::dsp::numDisplayBands>;
+
         float xFor (float hz) const;
         float yFor (float db) const;
-        juce::Path curve (const std::array<float, floormatch::dsp::numProfileBands>&, bool closed) const;
+        juce::Path curve (const Bands&, bool closed) const;
+        bool showInput() const;
 
         FloorMatchProcessor& processor;
         floormatch::dsp::Snapshot shown;
         bool active = false;
         float topDb = -40.0f;
+        juce::Rectangle<float> inputLegendArea;
         static constexpr float rangeDb = 80.0f;
+    };
+
+    // The last ~15 s: input level (dialogue), background in and out against the target, cuts
+    // between takes, events held through, and where the max reduction stops the background short.
+    class TimelineView : public juce::Component
+    {
+    public:
+        explicit TimelineView (FloorMatchProcessor&);
+
+        void refresh();
+        void paint (juce::Graphics&) override;
+
+    private:
+        float yFor (float db) const;
+
+        FloorMatchProcessor& processor;
+        FloorMatchProcessor::Timeline columns {};
+        int filled = 0;
+        juce::Rectangle<float> plot;
+        float topDb = -30.0f, bottomDb = -80.0f;     // follows the background levels on screen
+        static constexpr int visibleColumns = 300;   // 50 ms each
     };
 
     // Vertical in/out noise floor meters with the target marked across both.
@@ -93,7 +120,7 @@ class FloorMatchMainView : public juce::Component, private juce::Timer
 {
 public:
     static constexpr int baseWidth = 860;
-    static constexpr int baseHeight = 500;
+    static constexpr int baseHeight = 556;
 
     FloorMatchMainView (FloorMatchProcessor&, klaud::LookAndFeel&);
     ~FloorMatchMainView() override;
@@ -115,6 +142,7 @@ private:
     LookAndFeelSetter lookAndFeelSetter;
 
     floormatch::ui::SpectrumView spectrum;
+    floormatch::ui::TimelineView timelineView;
     floormatch::ui::FloorMeter meter;
     floormatch::ui::Knob target, maxReduction, match;
     floormatch::ui::Choice lookahead, listen;

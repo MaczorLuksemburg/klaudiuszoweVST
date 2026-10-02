@@ -31,6 +31,10 @@ namespace floormatch::dsp
 
     inline float profileBandFrequency (int band) { return 20.0f * std::exp2 ((float) band / 6.0f); }
 
+    // The display works in finer 1/12-octave bands (narrow hum lines stay visible).
+    inline constexpr int numDisplayBands = 121;  // 20 Hz to 20.2 kHz
+    inline float displayBandFrequency (int band) { return 20.0f * std::exp2 ((float) band / 12.0f); }
+
     // A-weighting as a power factor (1.0 at 1 kHz).
     float aWeighting (float hz);
 
@@ -62,7 +66,21 @@ namespace floormatch::dsp
         bool valid = false;
         float noiseDb = -150.0f;        // A-weighted level of the noise floor in the input
         float outputDb = -150.0f;       // ... and after processing
-        std::array<float, numProfileBands> noise {}, target {}, output {};   // band levels in dB
+        std::array<float, numDisplayBands> noise {}, target {}, output {};   // band levels in dB
+        std::array<float, numDisplayBands> input {};                         // live input spectrum, dB
+    };
+
+    // One column of the timeline (about 50 ms): what happened to the background.
+    struct TimelineColumn
+    {
+        float inputDb = -150.0f;        // A-weighted level of the whole input (dialogue included)
+        float noiseDb = -150.0f;        // background in
+        float outputDb = -150.0f;       // background out
+        float targetDb = -150.0f;
+        bool valid = false;             // false over digital silence
+        bool cut = false;               // a cut between takes was detected here
+        bool event = false;             // the background is being held through an event
+        bool limited = false;           // max reduction stops the background reaching the target
     };
 
     class Engine
@@ -103,6 +121,12 @@ namespace floormatch::dsp
 
         const Snapshot& getSnapshot() const noexcept { return snapshot; }
         int getSnapshotCounter() const noexcept      { return snapshotCounter; }
+
+        // Timeline columns written so far; the last timelineCapacity of them can be read. A cut is
+        // marked up to timelineSettle columns after its column was written.
+        static constexpr int timelineCapacity = 64, timelineSettle = 10;
+        int64_t getTimelineCount() const noexcept                       { return timelineCount; }
+        const TimelineColumn& getTimelineColumn (int64_t index) const   { return timeline[(size_t) (index % timelineCapacity)]; }
 
         // While learning, the estimated noise of every output frame is averaged into a profile.
         void setLearning (bool shouldLearn);
@@ -147,6 +171,8 @@ namespace floormatch::dsp
         float truncatedMean (const float* row, const uint8_t* labels, const std::vector<int>& slots, int& count) const;
         float weightedLevelDb (const float* binPower) const;
         void binsToProfile (const float* binPower, std::array<float, numProfileBands>& psd) const;
+        void binsToDisplay (const float* binPower, std::array<float, numDisplayBands>& levelsDb) const;
+        void addTimelineFrame (bool valid, float inputDb, float noiseDb, float outputDb);
         void updateTargetShape();
 
         static int slotOf (int64_t frame, int length) { return (int) (frame % length); }
@@ -197,7 +223,8 @@ namespace floormatch::dsp
         std::vector<float> scratchPast, scratchFuture;
         std::vector<float> spanLevels, spanReversed, sharpTrack, sharpWindow;   // cut sharpness test
         int cutTrackHalfWidth = 9, maxCutFrames = 28;
-        std::vector<int> pastSlots, futureSlots;
+        std::vector<int> pastSlots, futureSlots, nearSlots;
+        int nearFrames = 47;
 
         // Speech gain state
         std::vector<float> previousSpeech, releasedGain, tempGain, noiseScratch;
@@ -219,6 +246,22 @@ namespace floormatch::dsp
         // Profile band mapping: bins [start, end) or, for narrow bands, interpolation at the centre.
         struct BandMap { int start = 0, end = 0, lower = 0; float fraction = 0.0f, width = 1.0f; };
         std::array<BandMap, numProfileBands> bandMap {};
+        std::array<BandMap, numDisplayBands> displayMap {};
+        std::vector<float> targetPower;              // per bin, what the target asks for (before the max reduction)
+
+        // Timeline
+        std::array<TimelineColumn, timelineCapacity> timeline {};
+        int64_t timelineCount = 0;
+        int columnFrames = 9, framesInColumn = 0, validInColumn = 0;
+        double columnInput = 0.0, columnNoise = 0.0, columnOutput = 0.0;
+        bool columnCut = false, columnEvent = false;
+
+        // Cut markers: recent background estimates per decision band, in dB.
+        void markCuts (int64_t frame, const float* noise);
+        std::vector<float> markHistory;
+        int markLength = 56, markFrames = 0;
+        float markPeak = 0.0f;
+        int64_t markPeakFrame = 0, lastMarkFrame = -(1 << 30);
 
         Diagnostics diagnostics;
 

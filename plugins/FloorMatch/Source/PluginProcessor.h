@@ -57,6 +57,11 @@ public:
 
     bool getSnapshot (floormatch::dsp::Snapshot&) const;
 
+    // The last ~20 s of timeline columns, oldest first; returns how many are filled.
+    static constexpr int timelineLength = 400;
+    using Timeline = std::array<floormatch::dsp::TimelineColumn, timelineLength>;
+    int getTimeline (Timeline&) const;
+
     static juce::String profileToString (const floormatch::dsp::Profile&);
     static floormatch::dsp::Profile profileFromString (const juce::String&);
 
@@ -81,6 +86,8 @@ private:
     floormatch::dsp::Profile sharedProfile, sharedLearned, sharedQuietest;
     floormatch::dsp::Snapshot sharedSnapshot;
     float sharedQuietestLevel = 0.0f;
+    Timeline sharedTimeline {};
+    int64_t sharedTimelineCount = 0, copiedColumns = 0;
     bool sharedLearnedValid = false, sharedQuietestValid = false;
 
     std::atomic<int> profileVersion { 0 };
