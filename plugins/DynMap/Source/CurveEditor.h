@@ -39,6 +39,7 @@ namespace dynmap::ui
         juce::Point<float> fromScreen (juce::Point<float>) const;
         Hit hitTest (juce::Point<float>) const;
         juce::Point<float> handlePosition (int segment) const;
+        bool isNearlyFlat (int segment) const;
         void commit();
         void load (const Curve&);
         float curveXForDb (float db) const;

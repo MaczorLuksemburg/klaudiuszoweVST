@@ -101,6 +101,15 @@ juce::Point<float> CurveEditor::handlePosition (int segment) const
     return toScreen (x, Curve::segmentValue (a, b, x));
 }
 
+// A segment within 3 degrees of flat on screen: its bend handle can't do anything visible there.
+bool CurveEditor::isNearlyFlat (int segment) const
+{
+    const auto& points = curve.getPoints();
+    const auto a = toScreen (points[(size_t) segment].x, points[(size_t) segment].y);
+    const auto b = toScreen (points[(size_t) segment + 1].x, points[(size_t) segment + 1].y);
+    return std::abs (b.y - a.y) <= 0.0524f * std::abs (b.x - a.x);   // tan (3 degrees)
+}
+
 CurveEditor::Hit CurveEditor::hitTest (juce::Point<float> position) const
 {
     const auto& points = curve.getPoints();
@@ -534,9 +543,9 @@ void CurveEditor::mouseDoubleClick (const juce::MouseEvent& e)
 
     if (h.type == Hit::point)
         curve.removePoint (h.index);
-    else if (h.type == Hit::handle)
+    else if (h.type == Hit::handle && ! isNearlyFlat (h.index))
         curve.setTension (h.index, 0.0f);
-    else
+    else    // empty space, or the handle of a (nearly) flat segment: add a point there
     {
         const auto p = fromScreen (e.position);
         curve.addPoint (p.x, p.y);

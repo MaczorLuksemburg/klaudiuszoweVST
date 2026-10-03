@@ -258,6 +258,10 @@ namespace
                     && Curve::fromString (CurveKind::level, maximus.toString()) == maximus,
                 "identity stays neutral across scales; linear curves round-trip as text");
 
+        const Curve flat (CurveKind::transient);
+        expect (flat.getNumPoints() == 3 && flat.getPoints()[1].x == 0.0f && flat.isNeutral(),
+                "a new transient curve is neutral with a point at 0, so attacks and tails edit separately");
+
         CurveTable table;
         table.bake (comp);
         expect (std::abs (table.lookup (-6.0f) - comp.gainAt (-6.0f)) < 0.02f && std::abs (table.lookup (-100.0f)) < 0.01f,

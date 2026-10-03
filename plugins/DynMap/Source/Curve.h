@@ -45,7 +45,7 @@ namespace dynmap
     class Curve
     {
     public:
-        explicit Curve (CurveKind = CurveKind::level, bool linearScale = false);   // neutral: identity (level) or flat 0 dB (transient)
+        explicit Curve (CurveKind = CurveKind::level, bool linearScale = false);   // neutral: identity (level) or flat 0 dB with a point at 0 (transient)
 
         CurveKind getKind() const { return kind; }
         bool isLinear() const { return linear; }

@@ -37,7 +37,7 @@ Curve::Curve (CurveKind k, bool linearScale) : kind (k), linear (linearScale && 
     if (kind == CurveKind::level)
         points = { { r.xMin, r.yMin }, { r.xMax, r.yMax } };
     else
-        points = { { r.xMin, 0.0f }, { r.xMax, 0.0f } };
+        points = { { r.xMin, 0.0f }, { 0.0f, 0.0f }, { r.xMax, 0.0f } };   // a point at 0 splits tails from attacks
 }
 
 int Curve::stepCount (float tension)
