@@ -314,12 +314,12 @@ const std::vector<DetectorStyle>& detectorStyles()
     //                                                                                    att    hold  rel    shape rms  link la sm   trans
     static const std::vector<DetectorStyle> styles {
         { "Clean",     "Even and general purpose: follows the music without drawing attention.",   5.0f,  0.0f, 120.0f, 0.0f,  0.0f,  100.0f, 0, 0.5f, 40.0f },
-        { "Punchy",    "Slower attack lets each hit through before the curve acts.",               30.0f, 0.0f, 120.0f, 30.0f, 0.0f,  100.0f, 0, 0.5f, 30.0f },
-        { "Glue",      "Averaged (RMS) with a slow release: bus glue and gentle levelling.",       30.0f, 0.0f, 400.0f, 60.0f, 20.0f, 100.0f, 0, 1.0f, 60.0f },
-        { "Smooth",    "Very slow and averaged, for vocals, pads and long notes.",                 60.0f, 20.0f, 900.0f, 80.0f, 50.0f, 100.0f, 0, 2.0f, 80.0f },
-        { "Fast",      "Quick attack and release: grabs every peak, can add grit.",                1.0f,  0.0f, 40.0f,  0.0f,  0.0f,  100.0f, 0, 0.3f, 20.0f },
+        { "Punchy",    "Slower attack lets each hit through before the curve acts.",               25.0f, 0.0f, 100.0f, 30.0f, 0.0f,  100.0f, 0, 0.5f, 30.0f },
+        { "Glue",      "Bus glue: 10 ms attack, 150 ms release, a little averaging, 1 ms lookahead.", 10.0f, 0.0f, 150.0f, 40.0f, 5.0f, 100.0f, 2, 1.0f, 50.0f },
+        { "Smooth",    "Gentle levelling for vocals, pads and long notes, with 2 ms lookahead.",   20.0f, 10.0f, 300.0f, 60.0f, 20.0f, 100.0f, 3, 1.5f, 60.0f },
+        { "Fast",      "Quick attack and release with 0.5 ms lookahead: grabs every peak, can add grit.", 0.5f, 0.0f, 40.0f, 0.0f, 0.0f, 100.0f, 1, 0.3f, 20.0f },
         { "Brickwall", "Lookahead and instant attack: nothing slips past the curve (2 ms latency).", 0.05f, 5.0f, 80.0f, 0.0f, 0.0f, 100.0f, 3, 0.2f, 30.0f },
-        { "Pump",      "Audible, breathing release for sidechain and EDM pumping.",                5.0f,  0.0f, 250.0f, 70.0f, 0.0f,  100.0f, 0, 0.5f, 40.0f },
+        { "Pump",      "Breathing release for sidechain ducking and EDM pumping; 1 ms lookahead so the duck lands with the kick.", 2.0f, 0.0f, 220.0f, 70.0f, 0.0f, 100.0f, 2, 0.5f, 40.0f },
         { "Waveform",  "Follows the waveform itself, so the curve becomes distortion (the Maximus trick).", 0.01f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0.0f, 5.0f },
         // Measured from Maximus's default master band (ATT 2 ms, REL 85.53 ms): its attack is a 2 ms
         // lookahead and its release recovers like our 31 ms.

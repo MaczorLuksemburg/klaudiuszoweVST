@@ -30,6 +30,9 @@ namespace dynmap
     // for quiet signals. Processing always reads the curve in dB (see gainAt).
     inline constexpr CurveRange linearLevelRange { 0.0f, 2.0f, 0.0f, 2.0f };
 
+    // Baked level tables cover this much (past the graph the curve's end value holds).
+    inline constexpr float levelTableMaxDb = 36.0f;
+
     struct CurvePoint
     {
         float x = 0.0f, y = 0.0f;

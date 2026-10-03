@@ -56,7 +56,10 @@ AI-made VST plugins for testing and fun.
   sidechain). Sidechain copies are delayed to line up with the audio each stage sees. `g_sclisten` outputs it.
 - Level curves can use linear amplitude axes (0..2, i.e. up to +6 dBFS) like Maximus, whose graph is not in dB:
   measured, its default curve gives +10.6 dB to quiet signals. `Curve::gainAt` converts, so the engine only
-  ever sees dB tables. Maximus's REL 85.53 ms behaves like our 31 ms release ("Maximus" detector style).
+  ever sees dB tables. Past a linear curve's right edge the output holds its end value (Maximus limits there),
+  and level tables reach +36 dB so pre gain can push past the edge. Maximus's REL 85.53 ms behaves like our
+  31 ms release ("Maximus" detector style). The "Maximus ..." presets were rebuilt from screenshots and fitted
+  to renders of the kit (static curves within ~1 dB); its graph is linear 0..2 on both axes.
 - Curves are not parameters: `CurveBank` keeps them in the state tree child `CURVES` and hands baked tables
   to the audio thread through `CurveSlot` (spin lock, try-lock on the audio side).
 - Latency is reported exactly (lookahead, oversampling, linear phase, limiter) and changes only with those settings.

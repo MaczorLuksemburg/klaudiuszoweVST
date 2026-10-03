@@ -131,12 +131,21 @@ float Curve::gainAt (float x) const
 
     if (linear)
     {
-        // x is a level in dB; the curve works on amplitude. Beyond the right edge the gain stays.
+        // x is a level in dB; the curve works on amplitude.
         const auto r = getRange();
-        const float a = std::pow (10.0f, x / 20.0f);
-        const float in = juce::jmin (a, r.xMax);
-        const float out = evaluate (in);
-        return out <= 1.0e-7f ? silenceDb : 20.0f * std::log10 (out / in);
+        const float edgeDb = 20.0f * std::log10 (r.xMax);
+
+        if (x <= edgeDb)
+        {
+            const float a = std::pow (10.0f, x / 20.0f);
+            const float out = evaluate (a);
+            return out <= 1.0e-7f ? silenceDb : 20.0f * std::log10 (out / a);
+        }
+
+        // Past the right edge the output holds the curve's end value (it limits), as measured on
+        // Maximus. A neutral curve never gets here: its table is baked flat.
+        const float outEdge = evaluate (r.xMax);
+        return outEdge <= 1.0e-7f ? silenceDb : 20.0f * std::log10 (outEdge) - x;
     }
 
     // The bottom edge means silence, except at the bottom-left corner itself (where an identity
@@ -271,6 +280,9 @@ Curve Curve::withScale (bool linearScale) const
     if (kind != CurveKind::level || linearScale == linear)
         return *this;
 
+    if (isNeutral())
+        return Curve (kind, linearScale);
+
     Curve converted (kind, linearScale);
     converted.points = points;
 
@@ -283,16 +295,15 @@ Curve Curve::withScale (bool linearScale) const
     converted.sanitise();
 
     // The two graphs end at different levels (+6 / +12 dB): the new right edge takes what this
-    // curve does there (beyond its own edge the gain stays the same).
+    // curve does there (past its own edge, see gainAt).
     if (linearScale)
     {
         converted.points.back().y = toLinear (evaluate (20.0f * std::log10 (linearLevelRange.xMax)));
     }
     else
     {
-        const float edge = std::pow (10.0f, levelRange.xMax / 20.0f);
-        const float gain = evaluate (linearLevelRange.xMax) / linearLevelRange.xMax;
-        converted.points.back().y = toDb (edge * gain);
+        const float gain = gainAt (levelRange.xMax);
+        converted.points.back().y = gain <= silenceDb + 1.0f ? levelRange.yMin : toDb (std::pow (10.0f, (levelRange.xMax + gain) / 20.0f));
     }
 
     return converted;
@@ -400,9 +411,12 @@ Curve Curve::preset (CurveKind kind, int index)
 //==============================================================================
 void CurveTable::bake (const Curve& curve)
 {
+    // Level tables reach well past the graph (+36 dB), so pre gain can push a signal beyond the
+    // right edge and the curve's end still holds there.
     const auto r = curveRange (curve.getKind());
+    const float xMax = curve.getKind() == CurveKind::level ? levelTableMaxDb : r.xMax;
     xMin = r.xMin;
-    stepsPerDb = (float) (size - 1) / (r.xMax - r.xMin);
+    stepsPerDb = (float) (size - 1) / (xMax - r.xMin);
     neutral = curve.isNeutral();
 
     for (int i = 0; i < size; ++i)
