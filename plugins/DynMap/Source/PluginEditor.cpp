@@ -84,7 +84,10 @@ DynMapMainView::DynMapMainView (DynMapProcessor& p, klaud::LookAndFeel& lookAndF
     attack.slider.setTooltip ("How fast the detector follows rising levels");
     hold.slider.setTooltip ("How long the detector holds a peak before releasing");
     release.slider.setTooltip ("How fast the detector follows falling levels");
-    relShape.slider.setTooltip ("Release shape: 0 % steady (dB per second), 100 % fast at first then slowing down");
+    relShape.slider.setTooltip ("Classic release shape: 0 % steady, 100 % fast at first then slowing down");
+    relLaw.box.setTooltip ("Classic: the release follows REL SHAPE. Accel 1-8: the release leaves peaks slowly and speeds up, "
+                           "like Image-Line Maximus's release curves 1-8 (1 = straight in dB); RELEASE then means the same "
+                           "as Maximus's REL");
     rms.slider.setTooltip ("0 = peak detection; above 0 the detector averages (RMS) over this time");
     link.slider.setTooltip ("How much the two channels share one detector (100 % = same gain on both)");
     trTime.slider.setTooltip ("Time scale of the transient detector: short catches clicks, long catches whole hits");
@@ -101,7 +104,7 @@ DynMapMainView::DynMapMainView (DynMapProcessor& p, klaud::LookAndFeel& lookAndF
              &presetBar, &quality, &phase, &inputTab, &masterTab, &sidechainTab, &bandDisplay, &levelEditor, &transientEditor,
              &mode, &bypass, &solo, &mute, &pre, &post, &mix, &width, &satType, &satPos, &drive,
              &attack, &hold, &release, &relShape, &rms, &link, &trTime, &smooth, &maxBoost, &maxCut, &scFilter,
-             &lookahead, &stereo, &scSource, &amount, &time, &globalMix, &inGain, &outGain, &clip, &limiter,
+             &lookahead, &stereo, &scSource, &relLaw, &amount, &time, &globalMix, &inGain, &outGain, &clip, &limiter,
              &autoGain, &delta, &ceiling, &limRelease, &meter, &readout, &detectorStyles, &advanced })
         addAndMakeVisible (c);
 
@@ -183,6 +186,7 @@ void DynMapMainView::updateStageControls()
     lookahead.attach (apvts, id (ids::lookahead));
     stereo.attach (apvts, id (ids::stereo));
     scSource.attach (apvts, id (ids::scSource));
+    relLaw.attach (apvts, id (ids::relLaw));
 
     const bool band = isBandStage (stage);
     width.setVisible (band);
@@ -211,7 +215,7 @@ void DynMapMainView::updateDetectorView()
     detectorStyles.setVisible (! showAll);
 
     for (auto* c : std::initializer_list<juce::Component*> { &attack, &hold, &release, &relShape, &rms, &link, &trTime,
-                                                             &smooth, &maxBoost, &maxCut, &scFilter, &lookahead })
+                                                             &smooth, &maxBoost, &maxCut, &scFilter, &lookahead, &relLaw })
         c->setVisible (showAll);
 
     resized();
@@ -386,7 +390,8 @@ void DynMapMainView::resized()
             area.removeFromTop (spacing);
             row (area.removeFromTop (knobH), { &rms, &link, &trTime, &smooth }, knobW);
             area.removeFromTop (spacing);
-            row (area.removeFromTop (knobH), { &maxBoost, &maxCut, &scFilter }, knobW);
+            row (area.removeFromTop (knobH), { &maxBoost, &maxCut, &scFilter, &relLaw }, knobW);
+            relLaw.setBounds (relLaw.getBounds().withSizeKeepingCentre (knobW - 6, 40));
             area.removeFromTop (spacing);
             auto combos = area.removeFromTop (42).reduced (6, 0);
             const int w = (combos.getWidth() - 12) / 3;

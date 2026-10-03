@@ -321,9 +321,9 @@ const std::vector<DetectorStyle>& detectorStyles()
         { "Brickwall", "Lookahead and instant attack: nothing slips past the curve (2 ms latency).", 0.05f, 5.0f, 80.0f, 0.0f, 0.0f, 100.0f, 3, 0.2f, 30.0f },
         { "Pump",      "Breathing release for sidechain ducking and EDM pumping; 1 ms lookahead so the duck lands with the kick.", 2.0f, 0.0f, 220.0f, 70.0f, 0.0f, 100.0f, 2, 0.5f, 40.0f },
         { "Waveform",  "Follows the waveform itself, so the curve becomes distortion (the Maximus trick).", 0.01f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0.0f, 5.0f },
-        // Measured from Maximus's default master band (ATT 2 ms, REL 85.53 ms): its attack is a 2 ms
-        // lookahead and its release recovers like our 31 ms.
-        { "Maximus",   "Behaves like Maximus's default timing: 2 ms lookahead, peak detection, quick release.", 0.2f, 0.0f, 31.0f, 0.0f, 0.0f, 100.0f, 3, 0.5f, 40.0f },
+        // Maximus's default master band, measured on the VST: ATT 2 ms is a 2 ms lookahead, REL 85.53 ms with
+        // release curve 3 is our Accel 3 at the same time, and its 10 ms sustain is our built-in peak window.
+        { "Maximus",   "Maximus's default timing: 2 ms lookahead, peak detection, REL 85.53 ms with its slow-start release curve.", 0.2f, 0.0f, 85.53f, 0.0f, 0.0f, 100.0f, 3, 0.5f, 40.0f, 3 },
     };
 
     return styles;
@@ -367,7 +367,7 @@ int DetectorStylePicker::matchingStyle() const
         if (near (value (ids::attack), s.attack) && near (value (ids::hold), s.hold) && near (value (ids::release), s.release)
             && near (value (ids::relShape), s.relShape) && near (value (ids::rms), s.rms) && near (value (ids::link), s.link)
             && juce::roundToInt (value (ids::lookahead)) == s.lookahead && near (value (ids::smooth), s.smooth)
-            && near (value (ids::trTime), s.trTime))
+            && near (value (ids::trTime), s.trTime) && juce::roundToInt (value (ids::relLaw)) == s.relLaw)
             return i;
     }
 
@@ -388,6 +388,7 @@ void DetectorStylePicker::apply (int index)
     set (ids::lookahead, (float) s.lookahead);
     set (ids::smooth, s.smooth);
     set (ids::trTime, s.trTime);
+    set (ids::relLaw, (float) s.relLaw);
     timerCallback();
 }
 

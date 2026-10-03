@@ -46,6 +46,10 @@ namespace dynmap
         inline constexpr const char* satType   = "sat";
         inline constexpr const char* drive     = "drive";
         inline constexpr const char* satPos    = "satpos";
+        inline constexpr const char* relLaw    = "rellaw";    // classic one-pole or Maximus-style accelerating
+
+        // Release modes: classic (one-pole, shaped by relShape) or accelerating curves 1-8.
+        inline constexpr int numReleaseCurves = 8;
 
         // Band stages only.
         inline constexpr const char* width = "width";

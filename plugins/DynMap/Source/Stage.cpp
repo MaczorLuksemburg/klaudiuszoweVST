@@ -82,6 +82,7 @@ void Stage::reset()
     meanSquare = {};
     smoothedGain = {};
     holdCounter = {};
+    releaseCount = {};
     detectorPrimed = false;
     shaperWasActive = false;
     snapNext = true;
@@ -130,6 +131,19 @@ void Stage::updateCoefficients()
     releaseCoef = coefFor (settings.releaseMs * msToSamples);
     holdSamples = (int) (settings.holdMs * msToSamples);
     rmsCoef     = coefFor (settings.rmsMs * msToSamples);
+
+    // Accelerating release (measured from Image-Line Maximus, whose REL curves 1-8 these are):
+    // the envelope falls A * (t / release)^p dB from where the release started, so it leaves peaks
+    // slowly and speeds up. Curve 1 is a straight line in dB (about 35 dB per release time).
+    if (settings.relLaw > 0)
+    {
+        static constexpr float fallDb[ids::numReleaseCurves] = { 35.5f, 38.0f, 38.0f, 36.5f, 35.0f, 32.5f, 30.0f, 27.0f };
+        static constexpr float power[ids::numReleaseCurves]  = { 1.0f, 1.45f, 1.8f, 2.1f, 2.4f, 2.65f, 2.9f, 3.1f };
+        const int curve = juce::jlimit (1, ids::numReleaseCurves, settings.relLaw) - 1;
+        relLawScale = fallDb[curve] * 0.16609640474436813f;   // dB to log2 units
+        relLawPower = power[curve];
+        relLawInvLength = (float) (1.0 / juce::jmax (1.0, settings.releaseMs * msToSamples));
+    }
 
     levelPeakLength = juce::jlimit (1, (int) (maxPeakHoldMs * 0.001 * sampleRate), (int) std::round (settings.releaseMs * msToSamples));
     for (auto& peak : levelPeak)
@@ -273,6 +287,7 @@ void Stage::processChunk (float* left, float* right, const float* scLeft, const 
                 envelope[(size_t) c] = level[(size_t) c];
                 fastEnv[(size_t) c] = slowEnv[(size_t) c] = sustainEnv[(size_t) c] = transientLevel[(size_t) c];
                 holdCounter[(size_t) c] = 0;
+                releaseCount[(size_t) c] = 0;
             }
         }
 
@@ -285,10 +300,32 @@ void Stage::processChunk (float* left, float* right, const float* scLeft, const 
             {
                 env = x + attackCoef * (env - x);
                 holdCounter[(size_t) c] = holdSamples;
+                releaseCount[(size_t) c] = 0;
             }
             else if (holdCounter[(size_t) c] > 0)
             {
                 --holdCounter[(size_t) c];
+            }
+            else if (settings.relLaw > 0)
+            {
+                auto& count = releaseCount[(size_t) c];
+                if (count == 0)
+                    releaseStartLog2[(size_t) c] = dsp::fastLog2 (env);
+
+                ++count;
+                const float fallen = relLawScale * std::exp2 (relLawPower * dsp::fastLog2 ((float) count * relLawInvLength));
+                const float next = fallen > 40.0f ? 0.0f : std::exp2 (releaseStartLog2[(size_t) c] - fallen);
+
+                // Reaching the input ends this release; the next fall starts a new one from there.
+                if (next <= x)
+                {
+                    env = x;
+                    count = 0;
+                }
+                else
+                {
+                    env = next;
+                }
             }
             else
             {

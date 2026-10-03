@@ -219,23 +219,27 @@ namespace
             }
 
             // Maximus's default patch (master band, bend at 25 %), matched by measurement: linear curve
-            // giving +10.6 dB to quiet signals and bending into 0 dBFS, 2 ms lookahead, quick release.
+            // giving +10.6 dB to quiet signals and bending into 0 dBFS, 2 ms lookahead, REL 85.53 ms with
+            // release curve 3 (Accel 3).
             list.push_back ({ "Maximus Default",
                               { sp (masterStage, ids::lookahead, 3.0f), sp (masterStage, ids::attack, 0.2f),
-                                sp (masterStage, ids::release, 31.0f) },
+                                sp (masterStage, ids::release, 85.53f), sp (masterStage, ids::relLaw, 3.0f) },
                               { { masterStage, level, 15 } } });
 
             // Maximus factory presets rebuilt from screenshots (curves on linear axes, bands at 187 Hz and
             // 2.79 kHz) and fitted to renders of the measurement kit: static curves within about 1 dB.
+            // Release times are the presets' own REL values (read from the .fst files) with release curve 3.
             auto maximusBands = [&] (Values& v)
             {
                 addBand (v, 1, 187.0f);
                 addBand (v, 2, 2790.0f);
                 v.push_back (sp (masterStage, ids::lookahead, 3.0f));
                 v.push_back (sp (masterStage, ids::attack, 0.2f));
-                v.push_back (sp (masterStage, ids::release, 31.0f));
-                for (int s : { b0, b1, b2 })
-                    v.push_back (sp (s, ids::release, 31.0f));
+                for (int s : { b0, b1, b2, masterStage })
+                {
+                    v.push_back (sp (s, ids::release, 85.53f));
+                    v.push_back (sp (s, ids::relLaw, 3.0f));
+                }
             };
 
             auto bandGains = [&] (Values& v, int stage, float pre, float post)
@@ -250,9 +254,12 @@ namespace
                 bandGains (v, b0, 15.0f, -3.8f);
                 bandGains (v, b1, 16.0f, -8.3f);
                 bandGains (v, b2, 16.0f, -12.9f);
-                v.push_back (sp (b0, ids::attack, 2.0f));
-                v.push_back (sp (b1, ids::attack, 12.0f));
-                v.push_back (sp (b1, ids::release, 60.0f));
+                // Maximus: ATT 68 / 44 / 2 ms, REL 174 / 154 / 85.53 ms. Its attack eases in, so the mid band's
+                // 44 ms matches our 30 ms (fitted to the render); the low band is scaled the same way.
+                v.push_back (sp (b0, ids::attack, 46.0f));
+                v.push_back (sp (b0, ids::release, 174.0f));
+                v.push_back (sp (b1, ids::attack, 30.0f));
+                v.push_back (sp (b1, ids::release, 154.0f));
                 v.push_back (sp (b2, ids::attack, 2.0f));
                 list.push_back ({ "Maximus Punchy Drums", v,
                                   { { b0, level, 0, "lin;0,0,0,0;0.703,0.696,0,0.5;2,1" },
@@ -267,6 +274,7 @@ namespace
                 bandGains (v, b0, 14.0f, 0.3f);
                 bandGains (v, b1, 8.0f, -3.1f);
                 bandGains (v, b2, 15.0f, -1.6f);
+                v.push_back (sp (b0, ids::release, 137.5f));
                 for (int s : { b0, b1, b2 })
                 {
                     v.push_back (sp (s, ids::attack, 0.5f));

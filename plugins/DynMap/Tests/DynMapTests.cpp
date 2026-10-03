@@ -495,6 +495,35 @@ namespace
             const float onset2 = peakDb (caught, at2 - 240, at2 + 240), settled2 = peakDb (caught, at2 + 9600, at2 + 14400);
             expect (onset2 - settled2 < 1.5f, "fast attack + lookahead catches the step: onset " + db (onset2) + ", settled " + db (settled2));
         }
+
+        // Accelerating release (Maximus's REL curves): the envelope falls A * (t / release)^p dB after the
+        // built-in 10 ms peak window. 4:1 above -24, -6 -> -30 dB drop, release 100 ms: 13.5 dB to recover.
+        resetAll (p);
+        setParam (p, ids::quality, 0.0f);
+        setCurve (p, inputStage, CurveKind::level, 2);
+        setStage (p, inputStage, ids::attack, 0.1f);
+        setStage (p, inputStage, ids::release, 100.0f);
+        {
+            auto drop = makeSine (n, 1000.0f, -6.0f);
+            drop.applyGain (n / 2, n / 2, juce::Decibels::decibelsToGain (-24.0f));
+            auto reductionAt = [&] (const juce::AudioBuffer<float>& out, double ms)
+            {
+                const int at = n / 2 + p.getLatencySamples() + (int) (ms * 0.001 * testSampleRate);
+                return -30.0f - peakDb (out, at - 48, at + 48);
+            };
+
+            setStage (p, inputStage, ids::relLaw, 1.0f);   // straight in dB, 35.5 dB per release time
+            const auto straight = run (p, drop);
+            const float early = reductionAt (straight, 30.0), late = reductionAt (straight, 80.0);
+            expect (std::abs (early - 8.2f) < 1.5f && late < 0.5f, "release Accel 1 is straight in dB: reduction "
+                                                                       + db (early) + " at 30 ms (expected 8.2), " + db (late) + " at 80 ms");
+
+            setStage (p, inputStage, ids::relLaw, 8.0f);   // slow start: 27 * (t / release)^3.1 dB
+            const auto slow = run (p, drop);
+            const float held = reductionAt (slow, 60.0), done = reductionAt (slow, 130.0);
+            expect (std::abs (held - 11.1f) < 1.5f && done < 0.5f, "release Accel 8 starts slowly: reduction "
+                                                                       + db (held) + " at 60 ms (expected 11.1), " + db (done) + " at 130 ms");
+        }
     }
 
     // Pink-ish noise (three one-pole-filtered layers) at a given RMS, for level experiments.

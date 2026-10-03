@@ -168,6 +168,7 @@ Engine::Engine (juce::AudioProcessorValueTreeState& state) : apvts (state)
         p.mix = get (id (ids::mix));             p.attack = get (id (ids::attack));
         p.hold = get (id (ids::hold));           p.release = get (id (ids::release));
         p.relShape = get (id (ids::relShape));   p.rms = get (id (ids::rms));
+        p.relLaw = get (id (ids::relLaw));
         p.lookahead = get (id (ids::lookahead)); p.link = get (id (ids::link));
         p.stereo = get (id (ids::stereo));       p.scFilter = get (id (ids::scFilter));
         p.scSource = get (id (ids::scSource));   p.trTime = get (id (ids::trTime));
@@ -353,6 +354,7 @@ StageSettings Engine::readStage (int stage) const
     s.holdMs = p.hold->load();
     s.releaseMs = p.release->load();
     s.relShape = p.relShape->load() * 0.01f;
+    s.relLaw = juce::jlimit (0, ids::numReleaseCurves, toIndex (p.relLaw));
     s.rmsMs = p.rms->load();
     s.lookaheadSamples = (int) std::round (lookaheadMs[(size_t) juce::jlimit (0, numLookaheads - 1, toIndex (p.lookahead))] * 0.001 * sampleRate);
     s.link = p.link->load() * 0.01f;

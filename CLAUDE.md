@@ -57,9 +57,14 @@ AI-made VST plugins for testing and fun.
 - Level curves can use linear amplitude axes (0..2, i.e. up to +6 dBFS) like Maximus, whose graph is not in dB:
   measured, its default curve gives +10.6 dB to quiet signals. `Curve::gainAt` converts, so the engine only
   ever sees dB tables. Past a linear curve's right edge the output holds its end value (Maximus limits there),
-  and level tables reach +36 dB so pre gain can push past the edge. Maximus's REL 85.53 ms behaves like our
-  31 ms release ("Maximus" detector style). The "Maximus ..." presets were rebuilt from screenshots and fitted
-  to renders of the kit (static curves within ~1 dB); its graph is linear 0..2 on both axes.
+  and level tables reach +36 dB so pre gain can push past the edge. The "Maximus ..." presets were rebuilt
+  from screenshots and fitted to renders of the kit (static curves within ~1 dB); its graph is linear 0..2.
+- Release mode (`rellaw`): Classic (one-pole, shaped by `relshape`) or Accel 1-8 = Maximus's release curves
+  1-8, measured on the Maximus VST: after the 10 ms peak window the envelope falls A * (t / release)^p dB
+  (curve 1 straight in dB, ~35 dB per release time; p up to 3.1). DynMap's release in Accel n = Maximus REL
+  with release curve n (within ~0.2 dB); Maximus SUSTAIN s ms (peak mode) = DynMap hold s - 10 ms. Maximus
+  knob laws: ATT/SUSTAIN ms = 2 * (501^v - 1), REL = twice that; master ATT is a lookahead. Its band attack
+  eases in (overshoot capped near 6 dB) and isn't modelled: DynMap attack ~0.7 x Maximus ATT is closest.
 - Curves are not parameters: `CurveBank` keeps them in the state tree child `CURVES` and hands baked tables
   to the audio thread through `CurveSlot` (spin lock, try-lock on the audio side).
 - Latency is reported exactly (lookahead, oversampling, linear phase, limiter) and changes only with those settings.
@@ -68,8 +73,11 @@ AI-made VST plugins for testing and fun.
   runs one group, `--snapshot <dir>` renders the editor. `--kit <wav>` writes a measurement signal and
   `--compare <render.wav> [--preset <name>]` measures another plugin's render of it (static curves, attack/
   release, frequency response) next to DynMap: used to match FL Studio's Maximus, which can't be hosted here.
-  `PluginMeasure --plugin <x.vst3> [--list] [--set "<name>=<text>"] --render <in> <out>` (Windows) hosts a
-  VST3 to render the kit: OTT Style / Extreme OTT were fitted to Xfer OTT this way (OTT detects RMS).
+  `PluginMeasure --plugin <x.vst3|x.dll> [--list] [--set "<name>=<text>|#<index>=[norm]"] [--state-in/-out <f>]
+  --render <in> <out>` (Windows) hosts a VST3, or a VST2 through its own minimal loader (`Tools/Vst2Host.h`,
+  no Steinberg SDK), to render the kit: OTT Style / Extreme OTT were fitted to Xfer OTT this way (OTT
+  detects RMS), the release modes to Image-Line's Maximus VST (a demo: it ignores loaded state, so only its
+  parameters can be set, and its curves stay at the default straight-to-0 dBFS limit).
 
 ## Targets
 - Systems: Windows, macOS, Linux. DAWs: Logic Pro, Cubase, FL Studio, Ableton Live, Reaper.

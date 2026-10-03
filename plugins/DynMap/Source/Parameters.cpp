@@ -113,7 +113,7 @@ namespace
                          msParam (id (ids::attack), label ("Attack"), logRange (0.01f, 500.0f), 5.0f),
                          msParam (id (ids::hold), label ("Hold"), skewed (0.0f, 500.0f, 30.0f), 0.0f),
                          msParam (id (ids::release), label ("Release"), logRange (1.0f, 5000.0f), 120.0f),
-                         percentParam (id (ids::relShape), label ("Release Curve"), 0.0f, 100.0f, 0.0f),
+                         percentParam (id (ids::relShape), label ("Release Shape"), 0.0f, 100.0f, 0.0f),
                          msParam (id (ids::rms), label ("RMS"), skewed (0.0f, 300.0f, 20.0f), 0.0f),
                          choiceParam (id (ids::lookahead), label ("Lookahead"), lookaheads, 0),
                          percentParam (id (ids::link), label ("Stereo Link"), 0.0f, 100.0f, 100.0f),
@@ -127,7 +127,9 @@ namespace
                          msParam (id (ids::smooth), label ("Smoothing"), skewed (0.0f, 50.0f, 2.0f), 0.5f),
                          choiceParam (id (ids::satType), label ("Saturation"), { "Off", "Tape", "Tube", "Hard", "Fold", "Crush" }, satOff),
                          dbParam (id (ids::drive), label ("Drive"), 0.0f, 36.0f, 0.0f),
-                         choiceParam (id (ids::satPos), label ("Saturation Position"), { "After dynamics", "Before dynamics" }, satAfter));
+                         choiceParam (id (ids::satPos), label ("Saturation Position"), { "After dynamics", "Before dynamics" }, satAfter),
+                         choiceParam (id (ids::relLaw), label ("Release Mode"),
+                                      { "Classic", "Accel 1", "Accel 2", "Accel 3", "Accel 4", "Accel 5", "Accel 6", "Accel 7", "Accel 8" }, 0));
 
         if (isBandStage (stage))
             group->addChild (percentParam (id (ids::width), label ("Width"), 0.0f, 200.0f, 100.0f),

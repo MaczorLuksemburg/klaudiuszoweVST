@@ -52,10 +52,10 @@ private:
     dynmap::ui::Knob pre { "PRE" }, post { "POST" }, mix { "MIX", true }, width { "WIDTH" };
     dynmap::ui::Choice satType { "SATURATION" }, satPos { "POSITION" };
     dynmap::ui::Knob drive { "DRIVE", true };
-    dynmap::ui::Knob attack { "ATTACK", true }, hold { "HOLD", true }, release { "RELEASE", true }, relShape { "REL CURVE", true };
+    dynmap::ui::Knob attack { "ATTACK", true }, hold { "HOLD", true }, release { "RELEASE", true }, relShape { "REL SHAPE", true };
     dynmap::ui::Knob rms { "RMS", true }, link { "LINK", true }, trTime { "TRANS TIME", true }, smooth { "SMOOTH", true };
     dynmap::ui::Knob maxBoost { "MAX BOOST", true }, maxCut { "MAX CUT", true }, scFilter { "DET HP", true };
-    dynmap::ui::Choice lookahead { "LOOKAHEAD" }, stereo { "STEREO" }, scSource { "DETECT FROM" };
+    dynmap::ui::Choice lookahead { "LOOKAHEAD" }, stereo { "STEREO" }, scSource { "DETECT FROM" }, relLaw { "REL MODE" };
     dynmap::ui::DetectorStylePicker detectorStyles;
     juce::TextButton advanced { "Advanced" };
 

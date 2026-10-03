@@ -13,7 +13,7 @@ namespace
     const char* const stageParamNames[] { ids::bypass, ids::mode, ids::pre, ids::post, ids::mix, ids::attack, ids::hold,
                                           ids::release, ids::relShape, ids::rms, ids::lookahead, ids::link, ids::stereo,
                                           ids::scFilter, ids::scSource, ids::trTime, ids::maxBoost, ids::maxCut, ids::smooth,
-                                          ids::satType, ids::drive, ids::satPos, ids::width };
+                                          ids::satType, ids::drive, ids::satPos, ids::width, ids::relLaw };
 
     juce::String slopeText (int slope) { return juce::String (6 << slope); }
 }

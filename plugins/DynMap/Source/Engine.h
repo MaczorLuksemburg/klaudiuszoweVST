@@ -83,7 +83,7 @@ namespace dynmap
         {
             std::atomic<float> *bypass, *mode, *pre, *post, *mix, *attack, *hold, *release, *relShape, *rms,
                                *lookahead, *link, *stereo, *scFilter, *scSource, *trTime, *maxBoost, *maxCut,
-                               *smooth, *satType, *drive, *satPos;
+                               *smooth, *satType, *drive, *satPos, *relLaw;
             std::atomic<float> *width = nullptr, *solo = nullptr, *mute = nullptr;
             std::atomic<float> *bandOn = nullptr, *freq = nullptr, *slope = nullptr;
         };
