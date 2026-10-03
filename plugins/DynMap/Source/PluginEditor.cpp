@@ -458,9 +458,11 @@ void DynMapMainView::resized()
         mute.setBounds (header.removeFromRight (26).reduced (0, 2));
         header.removeFromRight (4);
         solo.setBounds (header.removeFromRight (26).reduced (0, 2));
-        area.removeFromTop (2);
+        // Knobs and saturation as one block, centred in the space under the header.
+        const int content = 2 * knobH + 12;
+        area.removeFromTop (juce::jmax (2, (area.getHeight() - content) / 2));
         row (area.removeFromTop (knobH), { &pre, &post, &mix, &width }, knobW + 4);
-        area.removeFromTop (6);
+        area.removeFromTop (12);
         auto bottom = area.removeFromTop (knobH);
         auto left = bottom.removeFromLeft (bottom.getWidth() - knobW - 20).reduced (14, 0);
         satType.setBounds (left.removeFromTop (40));
@@ -517,11 +519,11 @@ void DynMapMainView::resized()
     {
         auto area = globalPanel.reduced (8, 6);
         area.removeFromTop (26);
-        auto top = area.removeFromTop (knobH + 6);
-        amount.setBounds (top.removeFromLeft (84));
-        row (top, { &time, &globalMix }, 58);
+        // Two rows on the same three columns, so the knobs line up.
+        const int column = area.getWidth() / 3;
+        row (area.removeFromTop (knobH + 6), { &amount, &time, &globalMix }, column);
         area.removeFromTop (2);
-        row (area.removeFromTop (knobH), { &inGain, &lowCut, &outGain }, 62);
+        row (area.removeFromTop (knobH), { &inGain, &lowCut, &outGain }, column);
         area.removeFromTop (4);
         auto toggles = area.removeFromTop (24).reduced (6, 0);
         autoGain.setBounds (toggles.removeFromLeft ((toggles.getWidth() - 6) / 2));
