@@ -68,6 +68,8 @@ AI-made VST plugins for testing and fun.
   runs one group, `--snapshot <dir>` renders the editor. `--kit <wav>` writes a measurement signal and
   `--compare <render.wav> [--preset <name>]` measures another plugin's render of it (static curves, attack/
   release, frequency response) next to DynMap: used to match FL Studio's Maximus, which can't be hosted here.
+  `PluginMeasure --plugin <x.vst3> [--list] [--set "<name>=<text>"] --render <in> <out>` (Windows) hosts a
+  VST3 to render the kit: OTT Style / Extreme OTT were fitted to Xfer OTT this way (OTT detects RMS).
 
 ## Targets
 - Systems: Windows, macOS, Linux. DAWs: Logic Pro, Cubase, FL Studio, Ableton Live, Reaper.

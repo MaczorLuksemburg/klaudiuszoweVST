@@ -564,8 +564,8 @@ namespace
         expect (tighten.tail < dry.tail - 3.0f, "Tighten cuts the tails: " + db (dry.tail) + " -> " + db (tighten.tail));
         expect (bloom.tail > dry.tail + 3.0f, "Bloom lifts the tails: " + db (dry.tail) + " -> " + db (bloom.tail));
 
-        // OTT presets bring any input to one loud level (louder than a typical -18 dB RMS mix) and
-        // lift the quiet tails.
+        // OTT presets (fitted to the real OTT) bring any input to about one level and lift the
+        // quiet tails.
         for (const char* name : { "OTT Style", "Extreme OTT" })
         {
             loadPresetNamed (p, name);
@@ -574,7 +574,7 @@ namespace
             const float quietOut = rmsDb (quiet, 48000, 48000 * 3), loudOut = rmsDb (loud, 48000, 48000 * 3);
             const auto hits = drumStats (run (p, drums), p.getLatencySamples());
 
-            expect (std::abs (quietOut - loudOut) < 2.0f && quietOut > -16.0f && hits.tail > dry.tail + 2.0f,
+            expect (std::abs (quietOut - loudOut) < 3.0f && hits.tail > dry.tail + 2.0f,
                     juce::String (name) + ": -30 and -8 dB RMS in -> " + db (quietOut) + " / " + db (loudOut)
                         + " out, drum tails " + db (dry.tail) + " -> " + db (hits.tail));
         }

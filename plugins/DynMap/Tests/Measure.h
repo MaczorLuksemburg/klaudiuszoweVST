@@ -11,6 +11,7 @@
 
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <iostream>
+#include <limits>
 #include <map>
 
 namespace measure
@@ -20,12 +21,13 @@ namespace measure
     constexpr double stepLength = 0.4;
     constexpr int numSteps = 21;                        // -60 .. 0 dBFS in 3 dB steps (sine peak level)
     struct Staircase { const char* name; float freq; double start; };
-    constexpr Staircase staircases[] { { "1 kHz", 1000.0f, 2.0 }, { "100 Hz", 100.0f, 11.4 }, { "8 kHz", 8000.0f, 20.8 } };
+    constexpr Staircase staircases[] { { "1 kHz", 1000.0f, 2.0 }, { "100 Hz", 100.0f, 11.4 }, { "8 kHz", 8000.0f, 20.8 },
+                                       { "40 Hz", 40.0f, 50.6 } };   // added later, at the end, so older renders still line up
     constexpr double timingStart = 30.2;                // 3 x (1 s at -30 dB, 1 s at -6 dB), then 1 s at -30 dB, 1 kHz
     constexpr int timingCycles = 3;
     constexpr double sweepStart = 38.2, sweepLength = 6.0, sweepLevelDb = -40.0;
     constexpr double drumsStart = 45.2, drumsLength = 4.0;
-    constexpr double kitLength = 50.2;
+    constexpr double kitLength = 60.0;
 
     inline float stepLevelDb (int step) { return -60.0f + 3.0f * (float) step; }
 
@@ -145,7 +147,10 @@ namespace measure
             for (int step = 0; step < numSteps; ++step)
             {
                 const double t = s.start + step * stepLength;
-                curve.push_back (rmsDb (d, index (t + stepLength * 0.5), index (t + stepLength)) + 3.0103f);
+                const int to = at (t + stepLength) + r.offset;
+                // Renders of an older, shorter kit don't have every staircase.
+                curve.push_back (to > n ? std::numeric_limits<float>::quiet_NaN()
+                                        : rmsDb (d, index (t + stepLength * 0.5), index (t + stepLength)) + 3.0103f);
             }
         }
 
@@ -254,7 +259,7 @@ namespace measure
 
     inline void printComparison (const Result& a, const char* nameA, const Result& b, const char* nameB)
     {
-        auto f1 = [] (float v) { return juce::String (v, 1).paddedLeft (' ', 8); };
+        auto f1 = [] (float v) { return (std::isnan (v) ? juce::String ("n/a") : juce::String (v, 1)).paddedLeft (' ', 8); };
 
         std::cout << "\nStatic curve (sine peak dBFS in -> out)" << std::endl;
         for (const auto& s : staircases)

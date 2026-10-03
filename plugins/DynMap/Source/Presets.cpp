@@ -55,55 +55,43 @@ namespace
 
             list.push_back ({ "Init", {}, {} });
 
-            // Ableton's original OTT: bands at 88.3 Hz and 2.5 kHz, +5.2 dB into each band, RMS thresholds,
-            // 4.17:1 upward below about -41 dB, 66:1 (high band: brick wall) downward above -34/-30/-35 dB,
-            // then +10.3 / +5.7 / +10.3 dB band makeup. That lands any input at about -20 dB RMS, quieter
-            // than most mixes, so the output gain adds 7 dB (limiter as a safety net). Turn Mix down for the
-            // usual "OTT at 30 %".
-            auto ottBands = [&] (Values& v, float timeScale)
+            // Xfer OTT, measured: the kit was rendered through the real plugin (PluginMeasure) and each
+            // band's curve fitted to it. OTT detects RMS (noisy material like drums gets ~10 dB less
+            // compression than peak detection would give), so OTT Style uses a 5 ms RMS detector: tones
+            // within 0.7 dB, drum hits within ~3 dB. Bands at 88.3 Hz and 2.5 kHz; times keep OTT's band
+            // ratios. Like the original it pins loud material at about -25 dB per band: turn Out up to
+            // taste, Mix down for the usual "OTT at 30 %".
+            auto ottBands = [&] (Values& v)
             {
                 addBand (v, 1, 88.3f);
                 addBand (v, 2, 2500.0f);
-                setTimes (v, b0, 47.8f, 282.0f);
-                setTimes (v, b1, 22.4f, 282.0f);
-                setTimes (v, b2, 13.5f, 132.0f);
+                setTimes (v, b0, 6.4f, 42.0f);
+                setTimes (v, b1, 3.0f, 42.0f);
+                setTimes (v, b2, 1.8f, 20.0f);
                 for (int s : { b0, b1, b2 })
-                {
-                    v.push_back (sp (s, ids::pre, 5.2f));
-                    v.push_back (sp (s, ids::rms, 10.0f));
-                }
-                v.push_back ({ ids::time, timeScale });
+                    v.push_back (sp (s, ids::maxBoost, 48.0f));
             };
 
             {
                 Values v;
-                ottBands (v, 100.0f);
-                v.push_back (sp (b0, ids::post, 10.3f));
-                v.push_back (sp (b1, ids::post, 5.7f));
-                v.push_back (sp (b2, ids::post, 10.3f));
-                v.push_back ({ ids::outGain, 7.0f });
-                v.push_back ({ ids::limiter, 1.0f });
-                list.push_back ({ "OTT Style", v, { { b0, level, 0, "-72,-48.28;-40.8,-40.8;-33.8,-33.8;12,-33.11" },
-                                                    { b1, level, 0, "-72,-49.04;-41.8,-41.8;-30.3,-30.3;12,-29.67" },
-                                                    { b2, level, 0, "-72,-48.28;-40.8,-40.8;-35.5,-35.5;12,-35.5" } } });
+                ottBands (v);
+                for (int s : { b0, b1, b2 })
+                    v.push_back (sp (s, ids::rms, 5.0f));
+                list.push_back ({ "OTT Style", v,
+                                  { { b0, level, 0, "-72,-37.4;-60,-34.4;-54,-33.5;-48,-32.8;-42,-30;-36,-24;-30,-26.8;-24,-26;-18,-26.1;-12,-25;-6,-24.4;0,-25;12,-25" },
+                                    { b1, level, 0, "-72,-40.6;-60,-37.6;-54,-36.8;-48,-36;-42,-32.2;-36,-27;-30,-27.3;-24,-27.7;-18,-27.3;-12,-27.6;-6,-25.1;0,-28.8;12,-28.8" },
+                                    { b2, level, 0, "-72,-39.9;-60,-36.1;-54,-34.2;-48,-32.6;-42,-28.5;-36,-26.9;-30,-29.5;-24,-28.7;-18,-29.1;-12,-29.1;-6,-29;0,-28.4;12,-28.4" } } });
             }
 
-            // Everything squeezed into a 6 dB window (8:1 up, brick wall down), faster, more makeup, and the
-            // clipper + limiter to keep it from running away.
+            // OTT with upward and downward strength at 200 %, measured the same way (peak detection: the
+            // RMS fit of this one wasn't stable).
             {
                 Values v;
-                ottBands (v, 60.0f);
-                for (int s : { b0, b1, b2 })
-                    v.push_back (sp (s, ids::maxBoost, 36.0f));
-                v.push_back (sp (b0, ids::post, 13.0f));
-                v.push_back (sp (b1, ids::post, 8.0f));
-                v.push_back (sp (b2, ids::post, 13.0f));
-                v.push_back ({ ids::outGain, 5.0f });
-                v.push_back ({ ids::clip, (float) clipSoft });
-                v.push_back ({ ids::limiter, 1.0f });
-                v.push_back ({ ids::ceiling, -1.0f });
-                const juce::String squeeze = "-72,-42.25;-38,-38;-32,-32;12,-32";
-                list.push_back ({ "Extreme OTT", v, { { b0, level, 0, squeeze }, { b1, level, 0, squeeze }, { b2, level, 0, squeeze } } });
+                ottBands (v);
+                list.push_back ({ "Extreme OTT", v,
+                                  { { b0, level, 0, "-72,-19.7;-60,-22.9;-54,-25.8;-48,-28.4;-42,-25;-36,-23.1;-30,-24.2;-24,-24.7;-18,-26.3;-12,-27.7;-6,-26.9;0,-25.5;12,-25.5" },
+                                    { b1, level, 0, "-72,-27.2;-60,-28.4;-54,-30.8;-48,-32;-42,-28.3;-36,-22.5;-30,-23.2;-24,-23.6;-18,-23.9;-12,-25.4;-6,-23.6;0,-25;12,-25" },
+                                    { b2, level, 0, "-72,-17.8;-60,-23.4;-54,-26.4;-48,-29.4;-42,-28.4;-36,-25.1;-30,-25.1;-24,-23.6;-18,-25.8;-12,-26.3;-6,-27.1;0,-29;12,-29" } } });
             }
 
             {

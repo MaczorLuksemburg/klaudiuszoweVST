@@ -57,3 +57,19 @@ if(KLAUD_BUILD_TESTS)
     # `ctest` runs the DSP checks only; run DynMap_Tests without --no-gui locally for screenshots.
     add_test(NAME DynMap_Tests COMMAND DynMap_Tests --no-gui)
 endif()
+
+# PluginMeasure: hosts another VST3 and runs the measurement kit through it (see Tools/PluginMeasure.cpp),
+# used to match DynMap's presets to other plugins. A local calibration tool, so Windows only.
+if(KLAUD_BUILD_TESTS AND WIN32)
+    juce_add_console_app(PluginMeasure PRODUCT_NAME "PluginMeasure")
+    target_sources(PluginMeasure PRIVATE Tools/PluginMeasure.cpp)
+    target_compile_definitions(PluginMeasure PRIVATE
+        JUCE_PLUGINHOST_VST3=1
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0)
+    target_link_libraries(PluginMeasure PRIVATE
+        juce::juce_audio_processors
+        juce::juce_audio_formats
+        juce::juce_recommended_config_flags
+        juce::juce_recommended_warning_flags)
+endif()
