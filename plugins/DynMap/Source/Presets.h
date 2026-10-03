@@ -17,6 +17,7 @@ namespace dynmap
 
         int getNumFactoryPresets() const;
         juce::StringArray getPresetNames() const;   // factory first, then user presets
+        juce::String getCategory (int index) const; // menu section of a preset ("User" for user presets)
 
         void loadPreset (int index);
         bool saveUserPreset (const juce::String& name);

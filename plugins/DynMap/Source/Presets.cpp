@@ -1,4 +1,5 @@
 #include "Presets.h"
+#include <map>
 
 namespace dynmap
 {
@@ -44,6 +45,80 @@ namespace
         v.push_back (sp (stage, ids::release, release));
     }
 
+    // The detector styles' settings (see detectorStyles() in Components.cpp).
+    void glueTiming (Values& v, int s)
+    {
+        setTimes (v, s, 10.0f, 120.0f);
+        v.push_back (sp (s, ids::relShape, 40.0f));
+        v.push_back (sp (s, ids::rms, 5.0f));
+        v.push_back (sp (s, ids::lookahead, 2.0f));
+        v.push_back (sp (s, ids::smooth, 1.0f));
+        v.push_back (sp (s, ids::trTime, 50.0f));
+        v.push_back (sp (s, ids::release2, 600.0f));
+    }
+
+    void masterTiming (Values& v, int s)
+    {
+        setTimes (v, s, 1.0f, 120.0f);
+        v.push_back (sp (s, ids::attLaw, 2.0f));
+        v.push_back (sp (s, ids::relLaw, (float) ids::accelRelease (3)));
+        v.push_back (sp (s, ids::release2, 400.0f));
+        v.push_back (sp (s, ids::lookahead, 3.0f));
+    }
+
+    void autoTiming (Values& v, int s, float attack = 3.0f, float release = 100.0f)
+    {
+        setTimes (v, s, attack, release);
+        v.push_back (sp (s, ids::relLaw, (float) ids::relLawAuto));
+        v.push_back (sp (s, ids::lookahead, 2.0f));
+    }
+
+    void vocalTiming (Values& v, int s)
+    {
+        setTimes (v, s, 15.0f, 150.0f);
+        v.push_back (sp (s, ids::attLaw, 2.0f));
+        v.push_back (sp (s, ids::relShape, 40.0f));
+        v.push_back (sp (s, ids::rms, 10.0f));
+        v.push_back (sp (s, ids::smooth, 1.0f));
+        v.push_back (sp (s, ids::trTime, 50.0f));
+        v.push_back (sp (s, ids::release2, 700.0f));
+    }
+
+    // Menu sections, in order; presets not listed here go under "Basics".
+    const char* const categoryOrder[] { "Basics", "Mastering", "Mix & Bus", "Vocals", "Drums", "Sidechain",
+                                        "OTT & Upward", "Sound Design", "Maximus" };
+
+    juce::String categoryOf (const juce::String& name)
+    {
+        static const std::map<juce::String, juce::String> categories {
+            { "Loud Master", "Mastering" }, { "Transparent Master", "Mastering" }, { "Mastering Glue", "Mastering" },
+            { "Loud & Calm Master", "Mastering" },
+            { "Mix Bus Glue", "Mix & Bus" }, { "Drum Bus Glue", "Mix & Bus" }, { "NY Compression", "Mix & Bus" },
+            { "Mid/Side Glue", "Mix & Bus" }, { "Bass Control", "Mix & Bus" }, { "Sub Glue", "Mix & Bus" },
+            { "Vocal Leveler", "Vocals" }, { "Vocal Presence", "Vocals" }, { "Smooth De-esser", "Vocals" },
+            { "Narrow De-esser", "Vocals" },
+            { "Drum Punch", "Drums" }, { "Multiband Drum Punch", "Drums" }, { "Drum Snap Extreme", "Drums" },
+            { "Breakbeat Slam", "Drums" }, { "Transient Softener", "Drums" }, { "Tight Drums", "Drums" },
+            { "Room Bloom", "Drums" }, { "Hard Gate", "Drums" },
+            { "Sidechain Pump", "Sidechain" }, { "Kick Ducks Bass", "Sidechain" }, { "Multiband Sidechain Duck", "Sidechain" },
+            { "OTT Style", "OTT & Upward" }, { "Extreme OTT", "OTT & Upward" }, { "Upward Glue", "OTT & Upward" },
+            { "Stair Steps", "Sound Design" }, { "Fold Waveshaper", "Sound Design" }, { "Soft Clip Waveshaper", "Sound Design" },
+            { "Inverted Dynamics", "Sound Design" }, { "Multiband Mangle", "Sound Design" }, { "Gated Mid", "Sound Design" },
+            { "Dirty Behind Clean", "Sound Design" }, { "Lo-Fi Crush", "Sound Design" },
+            { "Maximus Default", "Maximus" }, { "Maximus Punchy Drums", "Maximus" }, { "Maximus Max Loudness", "Maximus" } };
+
+        const auto it = categories.find (name);
+        return it != categories.end() ? it->second : juce::String ("Basics");
+    }
+
+    int categoryRank (const juce::String& category)
+    {
+        for (int i = 0; i < (int) std::size (categoryOrder); ++i)
+            if (category == categoryOrder[i])
+                return i;
+        return 0;
+    }
+
     const std::vector<FactoryPreset>& factoryPresets()
     {
         static const std::vector<FactoryPreset> presets = []
@@ -55,12 +130,13 @@ namespace
 
             list.push_back ({ "Init", {}, {} });
 
-            // Xfer OTT, measured: the kit was rendered through the real plugin (PluginMeasure) and each
-            // band's curve fitted to it. OTT detects RMS (noisy material like drums gets ~10 dB less
-            // compression than peak detection would give), so OTT Style uses a 5 ms RMS detector: tones
-            // within 0.7 dB, drum hits within ~3 dB. Bands at 88.3 Hz and 2.5 kHz; times keep OTT's band
-            // ratios. Like the original it pins loud material at about -25 dB per band: turn Out up to
-            // taste, Mix down for the usual "OTT at 30 %".
+            // Xfer OTT, measured: test material was rendered through the real plugin (PluginMeasure) and each
+            // band got a simple 4-point curve that only rises, fitted to both a music-like kit (drums, bass,
+            // pads, quiet passages, noise steps, vocal: per-band loudness within ~1.5 dB) and the sine kit
+            // (~1 dB). Fitting tones alone gave exact but bumpy curves that were 2-5 dB off on music. OTT
+            // detects RMS (5 ms here; 2 ms lookahead matches it better still). Bands at 88.3 Hz and 2.5 kHz; times keep OTT's band ratios. Like the
+            // original it pins loud material at about -25 dB per band: turn Out up to taste, Mix down for the
+            // usual "OTT at 30 %".
             auto ottBands = [&] (Values& v)
             {
                 addBand (v, 1, 88.3f);
@@ -69,29 +145,30 @@ namespace
                 setTimes (v, b1, 3.0f, 42.0f);
                 setTimes (v, b2, 1.8f, 20.0f);
                 for (int s : { b0, b1, b2 })
+                {
                     v.push_back (sp (s, ids::maxBoost, 48.0f));
+                    v.push_back (sp (s, ids::rms, 5.0f));
+                    v.push_back (sp (s, ids::lookahead, 3.0f));   // 2 ms: hits after silence don't get the full upward boost
+                }
             };
 
             {
                 Values v;
                 ottBands (v);
-                for (int s : { b0, b1, b2 })
-                    v.push_back (sp (s, ids::rms, 5.0f));
                 list.push_back ({ "OTT Style", v,
-                                  { { b0, level, 0, "-72,-37.4;-60,-34.4;-54,-33.5;-48,-32.8;-42,-30;-36,-24;-30,-26.8;-24,-26;-18,-26.1;-12,-25;-6,-24.4;0,-25;12,-25" },
-                                    { b1, level, 0, "-72,-40.6;-60,-37.6;-54,-36.8;-48,-36;-42,-32.2;-36,-27;-30,-27.3;-24,-27.7;-18,-27.3;-12,-27.6;-6,-25.1;0,-28.8;12,-28.8" },
-                                    { b2, level, 0, "-72,-39.9;-60,-36.1;-54,-34.2;-48,-32.6;-42,-28.5;-36,-26.9;-30,-29.5;-24,-28.7;-18,-29.1;-12,-29.1;-6,-29;0,-28.4;12,-28.4" } } });
+                                  { { b0, level, 0, "-72,-34.25;-44.34,-31.67;-41.34,-25.68;12,-23.25" },
+                                    { b1, level, 0, "-72,-43.54;-47.04,-36.44;-34.27,-26.16;12,-25.49" },
+                                    { b2, level, 0, "-72,-38.57;-46.98,-32.14;-37.71,-26.57;12,-25.65" } } });
             }
 
-            // OTT with upward and downward strength at 200 %, measured the same way (peak detection: the
-            // RMS fit of this one wasn't stable).
+            // OTT with upward and downward strength at 200 %, fitted the same way.
             {
                 Values v;
                 ottBands (v);
                 list.push_back ({ "Extreme OTT", v,
-                                  { { b0, level, 0, "-72,-19.7;-60,-22.9;-54,-25.8;-48,-28.4;-42,-25;-36,-23.1;-30,-24.2;-24,-24.7;-18,-26.3;-12,-27.7;-6,-26.9;0,-25.5;12,-25.5" },
-                                    { b1, level, 0, "-72,-27.2;-60,-28.4;-54,-30.8;-48,-32;-42,-28.3;-36,-22.5;-30,-23.2;-24,-23.6;-18,-23.9;-12,-25.4;-6,-23.6;0,-25;12,-25" },
-                                    { b2, level, 0, "-72,-17.8;-60,-23.4;-54,-26.4;-48,-29.4;-42,-28.4;-36,-25.1;-30,-25.1;-24,-23.6;-18,-25.8;-12,-26.3;-6,-27.1;0,-29;12,-29" } } });
+                                  { { b0, level, 0, "-72,-24.45;-9.05,-24.19;-6.05,-21.8;12,-16.86" },
+                                    { b1, level, 0, "-72,-33.14;-36.3,-30.12;-33.3,-26.6;12,-24.52" },
+                                    { b2, level, 0, "-72,-26.06;-38.14,-26.04;-35.14,-25.21;12,-25.08" } } });
             }
 
             {
@@ -319,6 +396,173 @@ namespace
                                     { b4, transient, 2 } } });
             }
 
+            // ---- Mastering ------------------------------------------------------------------------
+            // Three gentle bands with program-dependent release, then a calm Maximus-style master limit.
+            {
+                Values v;
+                addBand (v, 1, 120.0f);
+                addBand (v, 2, 3500.0f);
+                for (int s : { b0, b1, b2 })
+                    autoTiming (v, s, 10.0f, 120.0f);
+                masterTiming (v, masterStage);
+                v.push_back ({ ids::lowCut, 25.0f });
+                v.push_back ({ ids::limiter, 1.0f });
+                v.push_back ({ ids::ceiling, -1.0f });
+                const juce::String gentle = "-72,-72;-20,-20;12,-4";
+                list.push_back ({ "Transparent Master", v, { { b0, level, 0, gentle }, { b1, level, 0, gentle }, { b2, level, 0, gentle },
+                                                             { masterStage, level, 0, "-72,-72;-4,-4;12,-1" } } });
+            }
+
+            // One band of 2:1 glue: quick release that settles slowly (REL 2), so it holds the mix together
+            // without pumping.
+            {
+                Values v;
+                glueTiming (v, b0);
+                v.push_back ({ ids::lowCut, 20.0f });
+                v.push_back ({ ids::limiter, 1.0f });
+                v.push_back ({ ids::ceiling, -1.0f });
+                list.push_back ({ "Mastering Glue", v, { { b0, level, 0, "-72,-72;-18,-18;12,-3" } } });
+            }
+
+            // Loud but not crushed: four bands with eased attacks (transients keep half their edge) and the
+            // Maximus-style release, soft clipper and limiter.
+            {
+                Values v;
+                addBand (v, 1, 120.0f);
+                addBand (v, 2, 1000.0f);
+                addBand (v, 3, 6000.0f);
+                for (int s : { b0, b1, b2, b3 })
+                    masterTiming (v, s);
+                v.push_back ({ ids::lowCut, 25.0f });
+                v.push_back ({ ids::outGain, 4.0f });
+                v.push_back ({ ids::clip, (float) clipSoft });
+                v.push_back ({ ids::limiter, 1.0f });
+                v.push_back ({ ids::ceiling, -0.3f });
+                v.push_back ({ ids::quality, 2.0f });
+                const juce::String firm = "-72,-72;-16,-16;12,-6";
+                list.push_back ({ "Loud & Calm Master", v, { { b0, level, 0, firm }, { b1, level, 0, firm },
+                                                             { b2, level, 0, firm }, { b3, level, 0, firm } } });
+            }
+
+            // ---- Mix and bus ----------------------------------------------------------------------
+            {
+                Values v;
+                autoTiming (v, b0, 10.0f, 150.0f);
+                v.push_back (sp (b0, ids::rms, 5.0f));
+                list.push_back ({ "Mix Bus Glue", v, { { b0, level, 0, "-72,-72;-24,-24;12,-6" } } });
+            }
+
+            {
+                Values v;
+                setTimes (v, b0, 10.0f, 100.0f);
+                v.push_back (sp (b0, ids::attLaw, 1.0f));
+                v.push_back (sp (b0, ids::release2, 300.0f));
+                v.push_back (sp (b0, ids::lookahead, 2.0f));
+                v.push_back (sp (b0, ids::post, 5.0f));
+                list.push_back ({ "Drum Bus Glue", v, { { b0, level, 0, "-72,-72;-20,-20;12,-11" } } });
+            }
+
+            // Parallel ("New York") compression: a crushed copy under the dry signal, inside the stage.
+            {
+                Values v;
+                setTimes (v, b0, 2.0f, 100.0f);
+                v.push_back (sp (b0, ids::lookahead, 2.0f));
+                v.push_back (sp (b0, ids::mix, 40.0f));
+                v.push_back (sp (b0, ids::post, 10.0f));
+                list.push_back ({ "NY Compression", v, { { b0, level, 0, "-72,-72;-30,-30;12,-24" } } });
+            }
+
+            // The sub band held steady (Auto release, so long bass notes don't pump), everything above untouched.
+            {
+                Values v;
+                addBand (v, 1, 90.0f, slope48);
+                autoTiming (v, b0, 15.0f, 120.0f);
+                v.push_back ({ ids::lowCut, 20.0f });
+                list.push_back ({ "Sub Glue", v, { { b0, level, 0, "-72,-72;-24,-24;12,-15" } } });
+            }
+
+            // ---- Vocals ---------------------------------------------------------------------------
+            // Levels in both directions: quiet words come up a little, loud ones down 3:1, with the soft
+            // vocal detector (eased attack, short RMS, quick release that settles slowly).
+            {
+                Values v;
+                vocalTiming (v, b0);
+                v.push_back (sp (b0, ids::maxBoost, 12.0f));
+                v.push_back ({ ids::lowCut, 80.0f });
+                list.push_back ({ "Vocal Leveler", v, { { b0, level, 0, "-72,-60;-40,-34;-24,-24;12,-12" } } });
+            }
+
+            // Only the sibilance band (4.5-9 kHz) is pressed down, hard and fast; the air above stays open.
+            {
+                Values v;
+                addBand (v, 1, 4500.0f);
+                addBand (v, 2, 9000.0f);
+                setTimes (v, b1, 0.5f, 50.0f);
+                v.push_back (sp (b1, ids::lookahead, 1.0f));
+                list.push_back ({ "Narrow De-esser", v, { { b1, level, 0, "-72,-72;-36,-36;12,-28" } } });
+            }
+
+            // Boxy low mids held 2:1, presence and air lifted when quiet (detail without harshness).
+            {
+                Values v;
+                addBand (v, 1, 250.0f);
+                addBand (v, 2, 3000.0f);
+                vocalTiming (v, b1);
+                vocalTiming (v, b2);
+                v.push_back (sp (b2, ids::maxBoost, 8.0f));
+                v.push_back ({ ids::lowCut, 80.0f });
+                list.push_back ({ "Vocal Presence", v, { { b1, level, 0, "-72,-72;-28,-28;12,-8" },
+                                                         { b2, level, 0, "-72,-60;-36,-36;12,12" } } });
+            }
+
+            // ---- Drums ----------------------------------------------------------------------------
+            // Smashed in three bands, but the eased attack keeps half of every hit, and the clipper takes
+            // what's left.
+            {
+                Values v;
+                addBand (v, 1, 150.0f);
+                addBand (v, 2, 3000.0f);
+                for (int s : { b0, b1, b2 })
+                {
+                    setTimes (v, s, 10.0f, 60.0f);
+                    v.push_back (sp (s, ids::attLaw, 1.0f));
+                    v.push_back (sp (s, ids::relLaw, (float) ids::accelRelease (3)));
+                }
+                v.push_back ({ ids::outGain, 3.0f });
+                v.push_back ({ ids::clip, (float) clipSoft });
+                v.push_back ({ ids::limiter, 1.0f });
+                v.push_back ({ ids::quality, 2.0f });
+                list.push_back ({ "Breakbeat Slam", v, { { b0, level, 6 }, { b1, level, 6 }, { b2, level, 6 } } });
+            }
+
+            // ---- Sound design ---------------------------------------------------------------------
+            // Only the mid band is gated: the lows and highs ring on, the middle chops.
+            {
+                Values v;
+                addBand (v, 1, 200.0f);
+                addBand (v, 2, 3000.0f);
+                v.push_back (sp (b1, ids::attack, 0.5f));
+                v.push_back (sp (b1, ids::hold, 30.0f));
+                v.push_back (sp (b1, ids::release, 80.0f));
+                list.push_back ({ "Gated Mid", v, { { b1, level, 8 } } });
+            }
+
+            // A smashed, driven copy tucked under the clean signal.
+            list.push_back ({ "Dirty Behind Clean",
+                              { sp (inputStage, ids::satType, (float) satTape), sp (inputStage, ids::drive, 18.0f),
+                                sp (inputStage, ids::mix, 35.0f), sp (inputStage, ids::attack, 2.0f), sp (inputStage, ids::release, 60.0f),
+                                { ids::quality, 2.0f } },
+                              { { inputStage, level, 6 } } });
+
+            list.push_back ({ "Lo-Fi Crush",
+                              { sp (inputStage, ids::satType, (float) satCrush), sp (inputStage, ids::drive, 18.0f),
+                                sp (inputStage, ids::mix, 60.0f), { ids::lowCut, 150.0f } },
+                              { { inputStage, level, 1 } } });
+
+            // Group by category (the menu shows them in sections; previous/next follow this order).
+            std::stable_sort (list.begin() + 1, list.end(), [] (const FactoryPreset& a, const FactoryPreset& b)
+                              { return categoryRank (categoryOf (a.name)) < categoryRank (categoryOf (b.name)); });
+
             return list;
         }();
 
@@ -481,5 +725,14 @@ int PresetManager::getCurrentPresetIndex() const
 void PresetManager::setCurrentPresetName (const juce::String& name)
 {
     apvts.state.setProperty (presetNameId, name, nullptr);
+}
+}
+
+namespace dynmap
+{
+juce::String PresetManager::getCategory (int index) const
+{
+    return juce::isPositiveAndBelow (index, getNumFactoryPresets()) ? categoryOf (factoryPresets()[(size_t) index].name)
+                                                                     : juce::String ("User");
 }
 }

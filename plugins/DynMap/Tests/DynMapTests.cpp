@@ -1203,33 +1203,24 @@ int makeKit (const juce::File& file)
     return ok ? 0 : 1;
 }
 
-// Measures a render of the kit made with another plugin and compares it with DynMap.
-int compare (const juce::StringArray& args)
+// A processor set up from the command line: --preset <name>, then overrides for calibration:
+// --set <param id>=<value>, --curve <stage>:<l|t>:<curve text>. Null when the preset doesn't exist.
+std::unique_ptr<DynMapProcessor> configuredProcessor (const juce::StringArray& args, juce::String& presetName)
 {
     const auto value = [&args] (const char* flag) { const int i = args.indexOf (flag); return i >= 0 && i + 1 < args.size() ? args[i + 1] : juce::String(); };
-
-    juce::AudioBuffer<float> other;
-    double sr = 48000.0;
-    if (! measure::readAudio (juce::File (value ("--compare")), other, sr))
-    {
-        std::cout << "Could not read " << value ("--compare") << std::endl;
-        return 1;
-    }
-
     auto owner = std::make_unique<DynMapProcessor>();
     auto& p = *owner;
-    const auto presetName = value ("--preset").isNotEmpty() ? value ("--preset") : juce::String ("Init");
+    presetName = value ("--preset").isNotEmpty() ? value ("--preset") : juce::String ("Init");
     const int presetIndex = p.presets.getPresetNames().indexOf (presetName);
 
     if (presetIndex < 0)
     {
         std::cout << "No preset called \"" << presetName << "\". Presets: " << p.presets.getPresetNames().joinIntoString (", ") << std::endl;
-        return 1;
+        return nullptr;
     }
 
     p.presets.loadPreset (presetIndex);
 
-    // Overrides for calibration: --set <param id>=<value>, --curve <stage>:<l|t>:<curve text>.
     for (int i = 0; i + 1 < args.size(); ++i)
     {
         if (args[i] == "--set")
@@ -1248,14 +1239,40 @@ int compare (const juce::StringArray& args)
         }
     }
 
-    auto ours = measure::makeKit (sr);
+    return owner;
+}
+
+void runThrough (DynMapProcessor& p, juce::AudioBuffer<float>& audio, double sr)
+{
     juce::MidiBuffer midi;
     p.prepareToPlay (sr, 512);
-    for (int start = 0; start < ours.getNumSamples(); start += 512)
+    for (int start = 0; start < audio.getNumSamples(); start += 512)
     {
-        juce::AudioBuffer<float> block (ours.getArrayOfWritePointers(), 2, start, juce::jmin (512, ours.getNumSamples() - start));
+        juce::AudioBuffer<float> block (audio.getArrayOfWritePointers(), 2, start, juce::jmin (512, audio.getNumSamples() - start));
         p.processBlock (block, midi);
     }
+}
+
+// Measures a render of the kit made with another plugin and compares it with DynMap.
+int compare (const juce::StringArray& args)
+{
+    const auto value = [&args] (const char* flag) { const int i = args.indexOf (flag); return i >= 0 && i + 1 < args.size() ? args[i + 1] : juce::String(); };
+
+    juce::AudioBuffer<float> other;
+    double sr = 48000.0;
+    if (! measure::readAudio (juce::File (value ("--compare")), other, sr))
+    {
+        std::cout << "Could not read " << value ("--compare") << std::endl;
+        return 1;
+    }
+
+    juce::String presetName;
+    auto owner = configuredProcessor (args, presetName);
+    if (owner == nullptr)
+        return 1;
+
+    auto ours = measure::makeKit (sr);
+    runThrough (*owner, ours, sr);
 
     if (value ("--out").isNotEmpty())
         measure::writeWav (ours, sr, juce::File (value ("--out")));
@@ -1263,6 +1280,39 @@ int compare (const juce::StringArray& args)
     std::cout << "Render: " << value ("--compare") << " (" << sr << " Hz)   DynMap preset: " << presetName << std::endl;
     measure::printComparison (measure::analyse (other, sr), "other", measure::analyse (ours, sr), "DynMap");
     return 0;
+}
+
+// Runs any file through DynMap: --render <in.wav> <out.wav> [--preset] [--set] [--curve] (output written
+// without the plugin's latency, so it lines up with the input).
+int renderFile (const juce::StringArray& args)
+{
+    const int at = args.indexOf ("--render");
+    juce::AudioBuffer<float> audio;
+    double sr = 48000.0;
+    if (at + 2 >= args.size() || ! measure::readAudio (juce::File (args[at + 1]), audio, sr))
+    {
+        std::cout << "Usage: --render <in.wav> <out.wav>" << std::endl;
+        return 1;
+    }
+
+    juce::String presetName;
+    auto owner = configuredProcessor (args, presetName);
+    if (owner == nullptr)
+        return 1;
+
+    owner->prepareToPlay (sr, 512);
+    const int latency = owner->getLatencySamples();
+    juce::AudioBuffer<float> padded (2, audio.getNumSamples() + latency);
+    padded.clear();
+    for (int ch = 0; ch < 2; ++ch)
+        padded.copyFrom (ch, 0, audio, juce::jmin (ch, audio.getNumChannels() - 1), 0, audio.getNumSamples());
+
+    runThrough (*owner, padded, sr);
+
+    for (int ch = 0; ch < 2; ++ch)
+        audio.copyFrom (juce::jmin (ch, audio.getNumChannels() - 1), 0, padded, ch, latency, audio.getNumSamples());
+
+    return measure::writeWav (audio, sr, juce::File (args[at + 2])) ? 0 : 1;
 }
 
 int main (int argc, char* argv[])
@@ -1279,6 +1329,9 @@ int main (int argc, char* argv[])
 
     if (args.contains ("--compare"))
         return compare (args);
+
+    if (args.contains ("--render"))
+        return renderFile (args);
 
     if (args.contains ("--bench"))
     {

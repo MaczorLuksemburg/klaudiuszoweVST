@@ -245,9 +245,18 @@ void PresetBar::refresh()
     const auto names = presets.getPresetNames();
     const int numFactory = presets.getNumFactoryPresets();
 
-    list.addSectionHeading ("Factory");
+    juce::String section;
     for (int i = 0; i < numFactory; ++i)
+    {
+        if (const auto category = presets.getCategory (i); category != section)
+        {
+            if (section.isNotEmpty())
+                list.addSeparator();
+            list.addSectionHeading (category);
+            section = category;
+        }
         list.addItem (names[i], i + 1);
+    }
 
     if (names.size() > numFactory)
     {
