@@ -61,6 +61,8 @@ namespace dynmap::ui
         juce::Point<float> dragStart;
 
         // Live position trail.
+        juce::String dragBefore;   // the curve when the current drag started (for undo)
+
         static constexpr int trailLength = 40;
         std::array<float, trailLength> trail {};
         int trailHead = 0;

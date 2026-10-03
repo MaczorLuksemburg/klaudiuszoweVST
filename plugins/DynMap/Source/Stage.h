@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Curve.h"
+#include "History.h"
 #include "Dsp.h"
 #include "Parameters.h"
 
@@ -71,6 +72,7 @@ namespace dynmap
         void pullCurves (CurveSlot& levelSlot, CurveSlot& transientSlot);
 
         StageMeter meter;
+        HistoryFifo history;     // ~5 ms frames for the history view
 
     private:
         void processChunk (float* left, float* right, const float* scLeft, const float* scRight, int n);
@@ -116,6 +118,11 @@ namespace dynmap
         OnePoleCoeffs scFilterCoeffs;
         std::array<OnePoleState, 2> scFilterState {};
         bool scFilterOn = false;
+
+        // History frame being gathered.
+        HistoryFrame pendingFrame;
+        float pendingIn = 0.0f, pendingOut = 0.0f;
+        int pendingSamples = 0, frameLength = 240;
 
         // Delays.
         std::array<dsp::DelayLine, 2> audioDelay, detectorDelay, dryDelay, shaperDelay;

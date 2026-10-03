@@ -989,6 +989,23 @@ namespace
         auto owner = std::make_unique<DynMapProcessor>();
         auto& p = *owner;
 
+        // Curve undo/redo, and a preset load clearing the history.
+        {
+            auto& curves = p.engine.curves;
+            const auto original = curves.get (masterStage, CurveKind::level).toString();
+            const auto edited = Curve::preset (CurveKind::level, 3);
+            curves.set (masterStage, CurveKind::level, edited);
+            p.curveUndo.record (masterStage, CurveKind::level, original, edited.toString());
+
+            const int undone = p.curveUndo.undo (curves);
+            const bool backToOriginal = curves.get (masterStage, CurveKind::level).toString() == original;
+            p.curveUndo.redo (curves);
+            const bool redone = curves.get (masterStage, CurveKind::level).toString() == edited.toString();
+            loadPresetNamed (p, "Init");
+            expect (undone == masterStage && backToOriginal && redone && ! p.curveUndo.canUndo() && ! p.curveUndo.canRedo(),
+                    "curve undo restores, redo reapplies, loading a preset clears the history");
+        }
+
         loadPresetNamed (p, "Loud Master");   // bands + curves
         juce::MemoryBlock state;
         p.getStateInformation (state);
@@ -1147,6 +1164,34 @@ namespace
         p.apvts.state.setProperty ("selectedStage", masterStage, nullptr);
         editor.reset (p.createEditor());
         saveSnapshot (*editor, folder.getChildFile ("dynmap-linear.png"));
+        editor.reset();
+
+        // History view of the master stage after a few seconds of drums.
+        p.apvts.state.setProperty ("historyView", true, nullptr);
+        editor.reset (p.createEditor());
+        {
+            dynmap::ui::HistoryView* view = nullptr;
+            std::function<void (juce::Component&)> find = [&] (juce::Component& c)
+            {
+                if (auto* h = dynamic_cast<dynmap::ui::HistoryView*> (&c)) view = h;
+                for (auto* child : c.getChildren()) find (*child);
+            };
+            find (*editor);
+            expect (view != nullptr && view->isVisible(), "history view is shown when switched on");
+
+            auto drums = makeDrums (48000 * 4);
+            drums.applyGain (2.0f);
+            juce::MidiBuffer noMidi;
+            for (int start = 0; start + 512 <= drums.getNumSamples(); start += 512)
+            {
+                juce::AudioBuffer<float> block (drums.getArrayOfWritePointers(), 2, start, 512);
+                p.processBlock (block, noMidi);
+                if (view != nullptr && start % (512 * 32) == 0) view->pull();
+            }
+            if (view != nullptr) view->pull();
+        }
+        saveSnapshot (*editor, folder.getChildFile ("dynmap-history.png"));
+        p.apvts.state.setProperty ("historyView", false, nullptr);
     }
 }
 

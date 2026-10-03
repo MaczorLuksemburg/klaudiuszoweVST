@@ -59,6 +59,7 @@ CurveEditor::CurveEditor (DynMapProcessor& p, CurveKind k)
                       "to a gain (up = boost). Drag points (hold Shift to snap to 3 dB), double-click to add or delete, "
                       "right-click for shapes and presets.");
     setRepaintsOnMouseActivity (false);
+    setWantsKeyboardFocus (true);   // so Ctrl+Z reaches the editor after a click here
     startTimerHz (30);
 }
 
@@ -184,7 +185,12 @@ juce::String CurveEditor::levelText (float v) const
 
 void CurveEditor::commit()
 {
+    const auto before = processor.engine.curves.get (stage, kind).toString();
     processor.engine.curves.set (stage, kind, curve);
+
+    if (drag.type == Hit::none)   // a drag is recorded once, when it ends
+        processor.curveUndo.record (stage, kind, before, curve.toString());
+
     seenChanges = processor.engine.curves.getChangeCount();
     repaint();
 }
@@ -480,6 +486,7 @@ void CurveEditor::mouseExit (const juce::MouseEvent&)
 void CurveEditor::mouseDown (const juce::MouseEvent& e)
 {
     const auto h = hitTest (e.position);
+    dragBefore = processor.engine.curves.get (stage, kind).toString();
 
     if (e.mods.isPopupMenu())
     {
@@ -533,6 +540,9 @@ void CurveEditor::mouseDrag (const juce::MouseEvent& e)
 
 void CurveEditor::mouseUp (const juce::MouseEvent&)
 {
+    if (drag.type != Hit::none)
+        processor.curveUndo.record (stage, kind, dragBefore, processor.engine.curves.get (stage, kind).toString());
+
     drag = {};
     repaint();
 }

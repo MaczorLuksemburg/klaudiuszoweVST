@@ -26,6 +26,7 @@ target_sources(DynMap PRIVATE
     Source/Components.cpp
     Source/CurveEditor.cpp
     Source/BandDisplay.cpp
+    Source/HistoryView.cpp
     Source/PluginEditor.cpp)
 
 target_compile_definitions(DynMap PUBLIC

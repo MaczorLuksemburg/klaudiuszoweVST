@@ -2,6 +2,7 @@
 
 #include "Engine.h"
 #include "Presets.h"
+#include "CurveUndo.h"
 
 // DynMap - multiband dynamic mapping. Drawn input->output level curves (Maximus style) plus
 // transient curves on an input stage, up to 12 bands and a master stage, followed by a
@@ -38,6 +39,7 @@ public:
     juce::AudioProcessorValueTreeState apvts;
     dynmap::Engine engine;
     dynmap::PresetManager presets;
+    dynmap::CurveUndo curveUndo;
 
 private:
     juce::AudioBuffer<float> sidechain;

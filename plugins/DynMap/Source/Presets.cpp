@@ -5,7 +5,7 @@ namespace dynmap
 namespace
 {
     const juce::Identifier presetNameId { "presetName" };
-    const juce::StringArray uiProperties { "uiWidth", "selectedStage", "detectorAdvanced" };   // kept when presets load
+    const juce::StringArray uiProperties { "uiWidth", "selectedStage", "detectorAdvanced", "historyView" };   // kept when presets load
     constexpr const char* fileExtension = ".dynmappreset";
 
     struct CurveDef
@@ -394,6 +394,9 @@ void PresetManager::loadPreset (int index)
                                                                     : Curve::preset (def.kind, def.presetIndex));
 
         setCurrentPresetName (preset.name);
+
+        if (onStateReplaced)
+            onStateReplaced();
         return;
     }
 
@@ -460,6 +463,9 @@ void PresetManager::replaceState (const juce::ValueTree& tree)
 {
     apvts.replaceState (tree);
     curves.readFrom (tree);
+
+    if (onStateReplaced)
+        onStateReplaced();
 }
 
 juce::String PresetManager::getCurrentPresetName() const

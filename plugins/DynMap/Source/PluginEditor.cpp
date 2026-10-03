@@ -11,6 +11,7 @@ namespace
     const juce::Identifier uiWidthId { "uiWidth" };
     const juce::Identifier selectedStageId { "selectedStage" };
     const juce::Identifier detectorAdvancedId { "detectorAdvanced" };
+    const juce::Identifier historyViewId { "historyView" };
 
     // Lays components out left to right in a row of equal cells.
     void row (juce::Rectangle<int> area, std::initializer_list<juce::Component*> items, int cellWidth)
@@ -36,6 +37,7 @@ DynMapMainView::DynMapMainView (DynMapProcessor& p, klaud::LookAndFeel& lookAndF
       masterTab (p, masterStage, [this] { return selectedStage; }, [this] (int s) { selectStage (s); }),
       sidechainTab (p),
       bandDisplay (p, [this] { return selectedStage; }, [this] (int s) { selectStage (s); }),
+      history (p, [this] { return selectedStage; }, [this] (int s) { selectStage (s); }),
       levelEditor (p, CurveKind::level),
       transientEditor (p, CurveKind::transient),
       detectorStyles (p),
@@ -134,6 +136,48 @@ DynMapMainView::DynMapMainView (DynMapProcessor& p, klaud::LookAndFeel& lookAndF
     };
     updateDetectorView();
 
+    // Curve undo/redo (buttons next to Save, Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y).
+    {
+        juce::Path arrow;
+        arrow.addCentredArc (0.0f, 0.0f, 6.0f, 6.0f, 0.0f, -2.4f, 1.3f, true);
+        juce::Path stroked;
+        juce::PathStrokeType (1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded).createStrokedPath (stroked, arrow);
+        const juce::Point<float> tip (6.0f * std::sin (-2.4f), -6.0f * std::cos (-2.4f));
+        stroked.addTriangle (tip.translated (-3.5f, -1.0f), tip.translated (3.0f, -2.5f), tip.translated (0.5f, 3.5f));
+
+        const auto& pal = dynmap::ui::palette();
+        for (auto* b : { &undoButton, &redoButton })
+        {
+            b->setColours (pal.textDim, pal.text, pal.accent);
+            auto shape = stroked;
+            if (b == &redoButton)
+                shape.applyTransform (juce::AffineTransform::scale (-1.0f, 1.0f));
+            b->setShape (shape, false, true, false);
+            b->setBorderSize (juce::BorderSize<int> (5));
+            addAndMakeVisible (b);
+        }
+
+        undoButton.setTooltip ("Undo the last curve edit (Ctrl+Z)");
+        redoButton.setTooltip ("Redo (Ctrl+Shift+Z)");
+        undoButton.onClick = [this] { undoCurve (false); };
+        redoButton.onClick = [this] { undoCurve (true); };
+        setWantsKeyboardFocus (true);
+    }
+
+    // The band display and the history view share their place; the toggle sits in its corner.
+    addChildComponent (history);
+    addAndMakeVisible (historyToggle);
+    historyToggle.setClickingTogglesState (true);
+    historyToggle.setTooltip ("Switch between the bands (crossovers and spectrum) and the history of the selected stage "
+                              "(levels and gain over the last 5 seconds)");
+    historyToggle.setToggleState ((bool) p.apvts.state.getProperty (historyViewId, false), juce::dontSendNotification);
+    historyToggle.onClick = [this]
+    {
+        processor.apvts.state.setProperty (historyViewId, historyToggle.getToggleState(), nullptr);
+        updateHistoryView();
+    };
+    updateHistoryView();
+
     const int saved = (int) p.apvts.state.getProperty (selectedStageId, bandStage (0));
     selectStage (juce::jlimit (0, numStages - 1, saved));
 
@@ -219,6 +263,43 @@ void DynMapMainView::updateStageControls()
         t->setAccent (stageAccent);
 }
 
+void DynMapMainView::undoCurve (bool redo)
+{
+    auto& undo = processor.curveUndo;
+    const int stage = redo ? undo.redo (processor.engine.curves) : undo.undo (processor.engine.curves);
+    if (stage >= 0 && stage != selectedStage)
+        selectStage (stage);   // show what changed
+}
+
+bool DynMapMainView::keyPressed (const juce::KeyPress& key)
+{
+    const auto mods = key.getModifiers();
+    if (! mods.isCommandDown())
+        return false;
+
+    if (key.getKeyCode() == 'Z' || key.getKeyCode() == 'z')
+    {
+        undoCurve (mods.isShiftDown());
+        return true;
+    }
+
+    if (key.getKeyCode() == 'Y' || key.getKeyCode() == 'y')
+    {
+        undoCurve (true);
+        return true;
+    }
+
+    return false;
+}
+
+void DynMapMainView::updateHistoryView()
+{
+    const bool on = historyToggle.getToggleState();
+    history.setVisible (on);
+    bandDisplay.setVisible (! on);
+    historyToggle.setButtonText (on ? "Bands" : "History");
+}
+
 void DynMapMainView::updateDetectorView()
 {
     // Styles by default; every knob (what the styles set, plus limits and filters) under Advanced.
@@ -235,6 +316,11 @@ void DynMapMainView::updateDetectorView()
 
 void DynMapMainView::timerCallback()
 {
+    undoButton.setEnabled (processor.curveUndo.canUndo());
+    redoButton.setEnabled (processor.curveUndo.canRedo());
+    undoButton.setAlpha (undoButton.isEnabled() ? 1.0f : 0.35f);
+    redoButton.setAlpha (redoButton.isEnabled() ? 1.0f : 0.35f);
+
     // Keep the selection valid and the colours in step with band changes.
     if (isBandStage (selectedStage) && processor.engine.getLayout().positionOf (selectedStage - 1) < 0)
     {
@@ -320,7 +406,9 @@ void DynMapMainView::paint (juce::Graphics& g)
 void DynMapMainView::resized()
 {
     // Header.
-    presetBar.setBounds (330, 15, 430, 26);
+    presetBar.setBounds (286, 15, 430, 26);
+    undoButton.setBounds (722, 15, 26, 26);
+    redoButton.setBounds (750, 15, 26, 26);
     quality.setBounds (862, 15, 70, 26);
     phase.setBounds (996, 15, 142, 26);
 
@@ -330,6 +418,8 @@ void DynMapMainView::resized()
     sidechainTab.setBounds (margin, rowY + rowH - 16 - 56, 74, 56);
     masterTab.setBounds (baseWidth - margin - 74, rowY, 74, rowH - 16);
     bandDisplay.setBounds (margin + 74 + 12, rowY, baseWidth - 2 * (margin + 74 + 12), rowH);
+    history.setBounds (bandDisplay.getBounds());
+    historyToggle.setBounds (bandDisplay.getRight() - 26 - 64, bandDisplay.getY() + 6, 58, 20);
 
     // Lower area.
     const int lowerY = rowY + rowH + 10, lowerH = baseHeight - lowerY - margin;

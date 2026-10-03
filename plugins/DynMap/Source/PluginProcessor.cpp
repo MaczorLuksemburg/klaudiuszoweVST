@@ -12,6 +12,7 @@ DynMapProcessor::DynMapProcessor()
       engine (apvts),
       presets (apvts, engine.curves)
 {
+    presets.onStateReplaced = [this] { curveUndo.clear(); };
 }
 
 bool DynMapProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const

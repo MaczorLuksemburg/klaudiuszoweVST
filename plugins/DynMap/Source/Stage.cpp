@@ -23,6 +23,7 @@ namespace
 void Stage::prepare (double newSampleRate, int)
 {
     sampleRate = newSampleRate;
+    frameLength = juce::jmax (1, juce::roundToInt (sampleRate * 0.005));
 
     osLatency[0] = 0;
     for (int q = 1; q < numQualities; ++q)
@@ -393,6 +394,8 @@ void Stage::processChunk (float* left, float* right, const float* scLeft, const 
             const float transient = dsp::gainToDb ((fast + 1.0e-9f) * (fast + 1.0e-9f) / ((slow + 1.0e-9f) * (sustain + 1.0e-9f)));
 
             float gainDb = transientTable.lookup (transient);
+            if (const float shown = juce::jlimit (-maxCut, maxBoost, gainDb * amount); std::abs (shown) > std::abs (pendingFrame.transientDb))
+                pendingFrame.transientDb = shown;
 
             if (levelActive)
             {
@@ -434,6 +437,8 @@ void Stage::processChunk (float* left, float* right, const float* scLeft, const 
             blockLevel = juce::jmax (blockLevel, envDb);
             if (std::abs (transient) > std::abs (blockTransient)) blockTransient = juce::jlimit (-24.0f, 24.0f, transient);
             if (std::abs (smoothed) > std::abs (blockGain))       blockGain = smoothed;
+            pendingFrame.gainMinDb = juce::jmin (pendingFrame.gainMinDb, smoothed);
+            pendingFrame.gainMaxDb = juce::jmax (pendingFrame.gainMaxDb, smoothed);
         }
 
         detectorPrimed = true;
@@ -505,6 +510,20 @@ void Stage::processChunk (float* left, float* right, const float* scLeft, const 
             left[i]  = dry[0][(size_t) i] + mix * (y0 - dry[0][(size_t) i]);
             right[i] = dry[1][(size_t) i] + mix * (y1 - dry[1][(size_t) i]);
         }
+
+        pendingIn = juce::jmax (pendingIn, std::abs (dry[0][(size_t) i]), std::abs (dry[1][(size_t) i]));
+        pendingOut = juce::jmax (pendingOut, std::abs (left[i]), std::abs (right[i]));
+    }
+
+    pendingSamples += n;
+    if (pendingSamples >= frameLength)
+    {
+        pendingFrame.inDb = dsp::gainToDb (juce::jmax (pendingIn, 1.0e-8f));
+        pendingFrame.outDb = dsp::gainToDb (juce::jmax (pendingOut, 1.0e-8f));
+        history.push (pendingFrame);
+        pendingFrame = {};
+        pendingIn = pendingOut = 0.0f;
+        pendingSamples = 0;
     }
 }
 

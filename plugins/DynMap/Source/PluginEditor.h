@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BandDisplay.h"
+#include "HistoryView.h"
 #include "CurveEditor.h"
 
 // Everything is laid out at a fixed base size and scaled as a whole when the window resizes.
@@ -23,6 +24,9 @@ private:
     void timerCallback() override;
     void updateStageControls();
     void updateDetectorView();
+    void updateHistoryView();
+    void undoCurve (bool redo);
+    bool keyPressed (const juce::KeyPress&) override;
 
     // Declared first so the look and feel is in place before any child component is built.
     struct LookAndFeelSetter
@@ -43,6 +47,9 @@ private:
     dynmap::ui::StageTab inputTab, masterTab;
     dynmap::ui::SidechainTab sidechainTab;
     dynmap::ui::BandDisplay bandDisplay;
+    dynmap::ui::HistoryView history;
+    juce::TextButton historyToggle { "History" };
+    juce::ShapeButton undoButton { "Undo", {}, {}, {} }, redoButton { "Redo", {}, {}, {} };
 
     // Selected stage.
     dynmap::ui::CurveEditor levelEditor, transientEditor;

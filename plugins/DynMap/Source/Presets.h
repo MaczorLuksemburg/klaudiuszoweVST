@@ -27,6 +27,7 @@ namespace dynmap
         // Full state (parameters + curves), as saved in projects.
         juce::ValueTree copyState() const;
         void replaceState (const juce::ValueTree&);
+        std::function<void()> onStateReplaced;   // after a preset (factory or user) or a project loaded
 
         // Resets every parameter and curve to its default.
         void resetToDefaults();
