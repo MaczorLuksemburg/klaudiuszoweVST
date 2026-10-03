@@ -311,19 +311,34 @@ void PresetBar::showSaveDialog()
 //==============================================================================
 const std::vector<DetectorStyle>& detectorStyles()
 {
-    //                                                                                    att    hold  rel    shape rms  link la sm   trans
+    // att, hold, release, shape, rms, link, lookahead index, smooth, transient time, release mode, attack mode, release 2
     static const std::vector<DetectorStyle> styles {
-        { "Clean",     "Even and general purpose: follows the music without drawing attention.",   5.0f,  0.0f, 120.0f, 0.0f,  0.0f,  100.0f, 0, 0.5f, 40.0f },
-        { "Punchy",    "Slower attack lets each hit through before the curve acts.",               25.0f, 0.0f, 100.0f, 30.0f, 0.0f,  100.0f, 0, 0.5f, 30.0f },
-        { "Glue",      "Bus glue: 10 ms attack, 150 ms release, a little averaging, 1 ms lookahead.", 10.0f, 0.0f, 150.0f, 40.0f, 5.0f, 100.0f, 2, 1.0f, 50.0f },
-        { "Smooth",    "Gentle levelling for vocals, pads and long notes, with 2 ms lookahead.",   20.0f, 10.0f, 300.0f, 60.0f, 20.0f, 100.0f, 3, 1.5f, 60.0f },
-        { "Fast",      "Quick attack and release with 0.5 ms lookahead: grabs every peak, can add grit.", 0.5f, 0.0f, 40.0f, 0.0f, 0.0f, 100.0f, 1, 0.3f, 20.0f },
-        { "Brickwall", "Lookahead and instant attack: nothing slips past the curve (2 ms latency).", 0.05f, 5.0f, 80.0f, 0.0f, 0.0f, 100.0f, 3, 0.2f, 30.0f },
-        { "Pump",      "Breathing release for sidechain ducking and EDM pumping; 1 ms lookahead so the duck lands with the kick.", 2.0f, 0.0f, 220.0f, 70.0f, 0.0f, 100.0f, 2, 0.5f, 40.0f },
-        { "Waveform",  "Follows the waveform itself, so the curve becomes distortion (the Maximus trick).", 0.01f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0.0f, 5.0f },
+        { "Clean",     "Even and general purpose: follows the music without drawing attention.",
+          5.0f, 0.0f, 120.0f, 0.0f, 0.0f, 100.0f, 0, 0.5f, 40.0f },
+        { "Punchy",    "Slower attack lets each hit through before the curve acts.",
+          25.0f, 0.0f, 100.0f, 30.0f, 0.0f, 100.0f, 0, 0.5f, 30.0f },
+        { "Glue",      "Bus glue: 10 ms attack, quick release that settles slowly (REL 2), a little averaging, 1 ms lookahead.",
+          10.0f, 0.0f, 120.0f, 40.0f, 5.0f, 100.0f, 2, 1.0f, 50.0f, ids::relLawClassic, 0, 600.0f },
+        { "Smooth",    "Gentle levelling for pads and long notes: eased attack, slow second release, 2 ms lookahead.",
+          20.0f, 10.0f, 250.0f, 60.0f, 20.0f, 100.0f, 3, 1.5f, 60.0f, ids::relLawClassic, 2, 1000.0f },
+        { "Fast",      "Quick attack and release with 0.5 ms lookahead: grabs every peak, can add grit.",
+          0.5f, 0.0f, 40.0f, 0.0f, 0.0f, 100.0f, 1, 0.3f, 20.0f },
+        { "Brickwall", "Lookahead and instant attack: nothing slips past the curve (2 ms latency); REL 2 calms long notes.",
+          0.05f, 5.0f, 80.0f, 0.0f, 0.0f, 100.0f, 3, 0.2f, 30.0f, ids::relLawClassic, 0, 250.0f },
+        { "Pump",      "Breathing release for sidechain ducking and EDM pumping; 1 ms lookahead so the duck lands with the kick.",
+          2.0f, 0.0f, 220.0f, 70.0f, 0.0f, 100.0f, 2, 0.5f, 40.0f },
+        { "Waveform",  "Follows the waveform itself, so the curve becomes distortion (the Maximus trick).",
+          0.01f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0.0f, 5.0f },
         // Maximus's default master band, measured on the VST: ATT 2 ms is a 2 ms lookahead, REL 85.53 ms with
         // release curve 3 is our Accel 3 at the same time, and its 10 ms sustain is our built-in peak window.
-        { "Maximus",   "Maximus's default timing: 2 ms lookahead, peak detection, REL 85.53 ms with its slow-start release curve.", 0.2f, 0.0f, 85.53f, 0.0f, 0.0f, 100.0f, 3, 0.5f, 40.0f, 3 },
+        { "Maximus",   "Maximus's default timing: 2 ms lookahead, peak detection, REL 85.53 ms with its slow-start release curve.",
+          0.2f, 0.0f, 85.53f, 0.0f, 0.0f, 100.0f, 3, 0.5f, 40.0f, ids::accelRelease (3) },
+        { "Auto",      "Program-dependent: short peaks recover fast, long loud passages slowly, so it rarely pumps. A safe all-rounder.",
+          3.0f, 0.0f, 100.0f, 0.0f, 0.0f, 100.0f, 2, 0.5f, 40.0f, ids::relLawAuto },
+        { "Vocal",     "Vocal levelling: soft eased attack, short RMS, quick release that settles slowly, so words stay even.",
+          15.0f, 0.0f, 150.0f, 40.0f, 10.0f, 100.0f, 0, 1.0f, 50.0f, ids::relLawClassic, 2, 700.0f },
+        { "Master",    "Loud, calm masters: eased attack behind 2 ms lookahead, Maximus-style release with a slow second release.",
+          1.0f, 0.0f, 120.0f, 0.0f, 0.0f, 100.0f, 3, 0.5f, 40.0f, ids::accelRelease (3), 2, 400.0f },
     };
 
     return styles;
@@ -367,7 +382,8 @@ int DetectorStylePicker::matchingStyle() const
         if (near (value (ids::attack), s.attack) && near (value (ids::hold), s.hold) && near (value (ids::release), s.release)
             && near (value (ids::relShape), s.relShape) && near (value (ids::rms), s.rms) && near (value (ids::link), s.link)
             && juce::roundToInt (value (ids::lookahead)) == s.lookahead && near (value (ids::smooth), s.smooth)
-            && near (value (ids::trTime), s.trTime) && juce::roundToInt (value (ids::relLaw)) == s.relLaw)
+            && near (value (ids::trTime), s.trTime) && juce::roundToInt (value (ids::relLaw)) == s.relLaw
+            && juce::roundToInt (value (ids::attLaw)) == s.attLaw && near (value (ids::release2), s.release2))
             return i;
     }
 
@@ -389,6 +405,8 @@ void DetectorStylePicker::apply (int index)
     set (ids::smooth, s.smooth);
     set (ids::trTime, s.trTime);
     set (ids::relLaw, (float) s.relLaw);
+    set (ids::attLaw, (float) s.attLaw);
+    set (ids::release2, s.release2);
     timerCallback();
 }
 
@@ -431,7 +449,15 @@ void DetectorStylePicker::paint (juce::Graphics& g)
     auto value = [this] (const char* name) { return processor.apvts.getRawParameterValue (stageParamId (stage, name))->load(); };
     auto ms = [] (float v) { return v < 1.0f ? juce::String (v, 2) + " ms" : v < 10.0f ? juce::String (v, 1) + " ms" : juce::String (juce::roundToInt (v)) + " ms"; };
 
-    juce::String summary = "attack " + ms (value (ids::attack)) + ",  release " + ms (value (ids::release));
+    const int attMode = juce::roundToInt (value (ids::attLaw)), relMode = juce::roundToInt (value (ids::relLaw));
+    juce::String summary = "attack " + ms (value (ids::attack)) + (attMode > 0 ? " (ease " + juce::String (attMode) + ")" : juce::String())
+                         + ",  release " + ms (value (ids::release));
+    if (relMode == ids::relLawAuto)
+        summary << " (auto)";
+    else if (relMode >= ids::relLawFirstAccel)
+        summary << " (accel " << (relMode - ids::relLawFirstAccel + 1) << ")";
+    if (value (ids::release2) > 0.0f)
+        summary << " + " << ms (value (ids::release2));
     summary << ",  " << (value (ids::rms) > 0.0f ? "RMS " + ms (value (ids::rms)) : juce::String ("peak"));
     const int la = juce::roundToInt (value (ids::lookahead));
     if (la > 0)

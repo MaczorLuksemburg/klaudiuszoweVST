@@ -11,6 +11,7 @@ namespace
     }
 
     constexpr float floorDb = -150.0f;
+    constexpr float easeHeld = 0.55f;   // share of a gain drop an eased attack holds back (Maximus: about half)
 
     // The followers read the peak of the last few milliseconds, so a steady tone reads its true
     // peak instead of sagging between waveform peaks. The level window follows the release
@@ -135,15 +136,34 @@ void Stage::updateCoefficients()
     // Accelerating release (measured from Image-Line Maximus, whose REL curves 1-8 these are):
     // the envelope falls A * (t / release)^p dB from where the release started, so it leaves peaks
     // slowly and speeds up. Curve 1 is a straight line in dB (about 35 dB per release time).
-    if (settings.relLaw > 0)
+    if (settings.relLaw >= ids::relLawFirstAccel)
     {
         static constexpr float fallDb[ids::numReleaseCurves] = { 35.5f, 38.0f, 38.0f, 36.5f, 35.0f, 32.5f, 30.0f, 27.0f };
         static constexpr float power[ids::numReleaseCurves]  = { 1.0f, 1.45f, 1.8f, 2.1f, 2.4f, 2.65f, 2.9f, 3.1f };
-        const int curve = juce::jlimit (1, ids::numReleaseCurves, settings.relLaw) - 1;
+        const int curve = juce::jlimit (0, ids::numReleaseCurves - 1, settings.relLaw - ids::relLawFirstAccel);
         relLawScale = fallDb[curve] * 0.16609640474436813f;   // dB to log2 units
         relLawPower = power[curve];
         relLawInvLength = (float) (1.0 / juce::jmax (1.0, settings.releaseMs * msToSamples));
     }
+
+    // Eased attack and the second release share Maximus's curve numbers (its CURVE knob sets both),
+    // measured as a chain of one-pole filters on the gain: curve n -> poles, time constant = factor x time.
+    // A classic attack gives the second release curve 1 (one pole).
+    {
+        static constexpr int poles[ids::numReleaseCurves]          = { 1, 2, 2, 3, 4, 5, 6, 7 };
+        static constexpr float attFactor[ids::numReleaseCurves]  = { 0.197f, 0.138f, 0.158f, 0.13f, 0.105f, 0.095f, 0.085f, 0.076f };
+        static constexpr float rel2Factor[ids::numReleaseCurves] = { 0.140f, 0.114f, 0.150f, 0.119f, 0.102f, 0.092f, 0.085f, 0.078f };
+        const int curve = juce::jlimit (0, ids::numReleaseCurves - 1, settings.attLaw - 1);
+
+        chainOrder = poles[curve];
+        chainAttackCoef = coefFor (attFactor[curve] * settings.attackMs * msToSamples);
+        chainReleaseCoef = coefFor (rel2Factor[curve] * settings.release2Ms * msToSamples);
+    }
+
+    // Auto release: the slow follower charges over 3x and lets go over 6x the release time, so short
+    // peaks recover at the release speed and long loud passages recover slowly.
+    autoAttackCoef  = coefFor (3.0 * settings.releaseMs * msToSamples);
+    autoReleaseCoef = coefFor (6.0 * settings.releaseMs * msToSamples);
 
     levelPeakLength = juce::jlimit (1, (int) (maxPeakHoldMs * 0.001 * sampleRate), (int) std::round (settings.releaseMs * msToSamples));
     for (auto& peak : levelPeak)
@@ -288,6 +308,7 @@ void Stage::processChunk (float* left, float* right, const float* scLeft, const 
                 fastEnv[(size_t) c] = slowEnv[(size_t) c] = sustainEnv[(size_t) c] = transientLevel[(size_t) c];
                 holdCounter[(size_t) c] = 0;
                 releaseCount[(size_t) c] = 0;
+                autoEnv[(size_t) c] = juce::jmax (floorDb, dsp::gainToDb (level[(size_t) c]));
             }
         }
 
@@ -296,9 +317,18 @@ void Stage::processChunk (float* left, float* right, const float* scLeft, const 
             const float x = level[(size_t) c];
             auto& env = envelope[(size_t) c];
 
+            if (settings.relLaw == ids::relLawAuto)
+            {
+                // In dB, so a short burst barely charges it however loud it is.
+                auto& slowAuto = autoEnv[(size_t) c];
+                const float xDb = juce::jmax (floorDb, dsp::gainToDb (x));
+                slowAuto = xDb + (xDb > slowAuto ? autoAttackCoef : autoReleaseCoef) * (slowAuto - xDb);
+            }
+
             if (x > env)
             {
-                env = x + attackCoef * (env - x);
+                // An eased attack follows the level at once and does its easing on the gain (below).
+                env = settings.attLaw > 0 ? x : x + attackCoef * (env - x);
                 holdCounter[(size_t) c] = holdSamples;
                 releaseCount[(size_t) c] = 0;
             }
@@ -306,7 +336,7 @@ void Stage::processChunk (float* left, float* right, const float* scLeft, const 
             {
                 --holdCounter[(size_t) c];
             }
-            else if (settings.relLaw > 0)
+            else if (settings.relLaw >= ids::relLawFirstAccel)
             {
                 auto& count = releaseCount[(size_t) c];
                 if (count == 0)
@@ -345,6 +375,10 @@ void Stage::processChunk (float* left, float* right, const float* scLeft, const 
                 {
                     env = steady;
                 }
+
+                // Auto: sustained level holds the release up (the slow follower), peaks recover quickly.
+                if (settings.relLaw == ids::relLawAuto)
+                    env = juce::jmax (env, dsp::dbToGain (autoEnv[(size_t) c]));
             }
 
             auto& fast = fastEnv[(size_t) c];          // fast attack, fast release
@@ -359,8 +393,37 @@ void Stage::processChunk (float* left, float* right, const float* scLeft, const 
             const float transient = dsp::gainToDb ((fast + 1.0e-9f) * (fast + 1.0e-9f) / ((slow + 1.0e-9f) * (sustain + 1.0e-9f)));
 
             float gainDb = transientTable.lookup (transient);
+
             if (levelActive)
-                gainDb += levelTable.lookup (envDb);
+            {
+                float levelGain = levelTable.lookup (envDb);
+
+                // Gain smoothing measured from Maximus (a chain of one-poles in dB, 1-7 by curve number):
+                // gain going down = eased attack (45 % at once, the rest through the chain), gain coming
+                // back up = the second release. Each side follows at once when it's off.
+                auto& chain = gainChain[(size_t) c];
+                const bool down = levelGain < chain[(size_t) chainOrder - 1];
+                const bool smoothDown = down && settings.attLaw > 0;
+                const bool smoothUp = ! down && settings.release2Ms > 0.0f;
+
+                if (detectorPrimed && (smoothDown || smoothUp))
+                {
+                    const float a = smoothDown ? chainAttackCoef : chainReleaseCoef;
+                    float v = levelGain;
+                    for (int k = 0; k < chainOrder; ++k)
+                    {
+                        chain[(size_t) k] = v + a * (chain[(size_t) k] - v);
+                        v = chain[(size_t) k];
+                    }
+                    levelGain = smoothDown ? levelGain + easeHeld * (v - levelGain) : v;
+                }
+                else
+                {
+                    chain.fill (levelGain);
+                }
+
+                gainDb += levelGain;
+            }
 
             gainDb = juce::jlimit (-maxCut, maxBoost, gainDb * amount);
 

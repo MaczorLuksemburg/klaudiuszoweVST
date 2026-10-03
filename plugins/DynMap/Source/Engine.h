@@ -83,7 +83,7 @@ namespace dynmap
         {
             std::atomic<float> *bypass, *mode, *pre, *post, *mix, *attack, *hold, *release, *relShape, *rms,
                                *lookahead, *link, *stereo, *scFilter, *scSource, *trTime, *maxBoost, *maxCut,
-                               *smooth, *satType, *drive, *satPos, *relLaw;
+                               *smooth, *satType, *drive, *satPos, *relLaw, *attLaw, *release2;
             std::atomic<float> *width = nullptr, *solo = nullptr, *mute = nullptr;
             std::atomic<float> *bandOn = nullptr, *freq = nullptr, *slope = nullptr;
         };
@@ -144,6 +144,12 @@ namespace dynmap
         juce::SmoothedValue<float> sidechainGain;
 
         juce::SmoothedValue<float> inGain, outGain;
+
+        // Input low cut (12 dB/oct high-pass), skipped while off.
+        std::atomic<float>* lowCutParam = nullptr;
+        SvfCoeffs lowCutCoeffs;
+        std::array<SvfState, 2> lowCutState {};
+        float lowCutHz = 0.0f;
 
         // Delta reference: the dry signal through a copy of the band split, so a neutral setup
         // gives silence even with minimum-phase crossovers.

@@ -13,7 +13,9 @@ namespace dynmap
         int mode = modeDynamics;
         float preDb = 0.0f, postDb = 0.0f, mix = 1.0f;
         float attackMs = 5.0f, holdMs = 0.0f, releaseMs = 120.0f, relShape = 0.0f, rmsMs = 0.0f;
-        int relLaw = 0;              // 0 classic, 1-8 accelerating release curves
+        int relLaw = 0;              // ids::relLawClassic / relLawAuto / accelerating curves from relLawFirstAccel
+        int attLaw = 0;              // 0 classic, 1-8 eased attack curves
+        float release2Ms = 0.0f;     // second release stage, 0 = off
         int lookaheadSamples = 0;
         float link = 1.0f;
         int stereo = stereoLR;
@@ -24,7 +26,7 @@ namespace dynmap
         int satType = satOff;
         float driveDb = 0.0f;
         int satPos = satAfter;
-        float width = 1.0f;          // bands only
+        float width = 1.0f;
     };
 
     struct GlobalSettings
@@ -96,6 +98,18 @@ namespace dynmap
         std::array<int, 2> releaseCount {};          // samples since an accelerating release started
         std::array<float, 2> releaseStartLog2 {};    // log2 of the envelope where it started
         float relLawScale = 0.0f, relLawPower = 1.0f, relLawInvLength = 0.0f;
+
+        // Gain smoothing for the eased attack and the second release: a chain of one-poles (dB).
+        static constexpr int maxChainOrder = 8;
+        std::array<std::array<float, maxChainOrder>, 2> gainChain {};
+        int chainOrder = 1;
+        float chainAttackCoef = 0.0f, chainReleaseCoef = 0.0f;
+
+        // Auto release: a slow follower that only charges on sustained level and holds the release up.
+        std::array<float, 2> autoEnv {};             // dB
+        float autoAttackCoef = 0.0f, autoReleaseCoef = 0.0f;
+
+
         std::array<dsp::SlidingMax, 2> levelPeak, transientPeak;   // ripple-free level for the followers
         int levelPeakLength = 1;
         bool detectorPrimed = false;

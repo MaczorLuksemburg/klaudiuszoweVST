@@ -53,14 +53,17 @@ private:
     dynmap::ui::Choice satType { "SATURATION" }, satPos { "POSITION" };
     dynmap::ui::Knob drive { "DRIVE", true };
     dynmap::ui::Knob attack { "ATTACK", true }, hold { "HOLD", true }, release { "RELEASE", true }, relShape { "REL SHAPE", true };
+    dynmap::ui::Knob release2 { "REL 2", true };
     dynmap::ui::Knob rms { "RMS", true }, link { "LINK", true }, trTime { "TRANS TIME", true }, smooth { "SMOOTH", true };
     dynmap::ui::Knob maxBoost { "MAX BOOST", true }, maxCut { "MAX CUT", true }, scFilter { "DET HP", true };
     dynmap::ui::Choice lookahead { "LOOKAHEAD" }, stereo { "STEREO" }, scSource { "DETECT FROM" }, relLaw { "REL MODE" };
+    dynmap::ui::Choice attLaw { "ATT MODE" };
     dynmap::ui::DetectorStylePicker detectorStyles;
     juce::TextButton advanced { "Advanced" };
 
     // Global and output.
     dynmap::ui::Knob amount { "AMOUNT" }, time { "TIME" }, globalMix { "MIX", true }, inGain { "IN" }, outGain { "OUT" };
+    dynmap::ui::Knob lowCut { "LOW CUT", true };
     dynmap::ui::Choice clip { "CLIPPER" };
     dynmap::ui::Toggle limiter { "Limiter" }, autoGain { "Auto gain" }, delta { "Delta" };
     dynmap::ui::Knob ceiling { "CEILING" }, limRelease { "RELEASE", true };

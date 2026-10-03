@@ -168,7 +168,8 @@ Engine::Engine (juce::AudioProcessorValueTreeState& state) : apvts (state)
         p.mix = get (id (ids::mix));             p.attack = get (id (ids::attack));
         p.hold = get (id (ids::hold));           p.release = get (id (ids::release));
         p.relShape = get (id (ids::relShape));   p.rms = get (id (ids::rms));
-        p.relLaw = get (id (ids::relLaw));
+        p.relLaw = get (id (ids::relLaw));       p.attLaw = get (id (ids::attLaw));
+        p.release2 = get (id (ids::release2));   p.width = get (id (ids::width));
         p.lookahead = get (id (ids::lookahead)); p.link = get (id (ids::link));
         p.stereo = get (id (ids::stereo));       p.scFilter = get (id (ids::scFilter));
         p.scSource = get (id (ids::scSource));   p.trTime = get (id (ids::trTime));
@@ -178,7 +179,6 @@ Engine::Engine (juce::AudioProcessorValueTreeState& state) : apvts (state)
 
         if (isBandStage (stage))
         {
-            p.width = get (id (ids::width));
             p.solo = get (id (ids::solo));
             p.mute = get (id (ids::mute));
 
@@ -193,6 +193,7 @@ Engine::Engine (juce::AudioProcessorValueTreeState& state) : apvts (state)
 
     amountParam = get (ids::amount);     timeParam = get (ids::time);        mixParam = get (ids::globalMix);
     inGainParam = get (ids::inGain);     outGainParam = get (ids::outGain);  clipParam = get (ids::clip);
+    lowCutParam = get (ids::lowCut);
     limiterParam = get (ids::limiter);   ceilingParam = get (ids::ceiling);  limRelParam = get (ids::limRel);
     autoGainParam = get (ids::autoGain); deltaParam = get (ids::delta);      qualityParam = get (ids::quality);
     phaseParam = get (ids::phase);         scGainParam = get (ids::scGain);    scListenParam = get (ids::scListen);
@@ -354,7 +355,9 @@ StageSettings Engine::readStage (int stage) const
     s.holdMs = p.hold->load();
     s.releaseMs = p.release->load();
     s.relShape = p.relShape->load() * 0.01f;
-    s.relLaw = juce::jlimit (0, ids::numReleaseCurves, toIndex (p.relLaw));
+    s.relLaw = juce::jlimit (0, ids::relLawFirstAccel + ids::numReleaseCurves - 1, toIndex (p.relLaw));
+    s.attLaw = juce::jlimit (0, ids::numReleaseCurves, toIndex (p.attLaw));
+    s.release2Ms = p.release2->load();
     s.rmsMs = p.rms->load();
     s.lookaheadSamples = (int) std::round (lookaheadMs[(size_t) juce::jlimit (0, numLookaheads - 1, toIndex (p.lookahead))] * 0.001 * sampleRate);
     s.link = p.link->load() * 0.01f;
@@ -368,7 +371,7 @@ StageSettings Engine::readStage (int stage) const
     s.satType = toIndex (p.satType);
     s.driveDb = p.drive->load();
     s.satPos = toIndex (p.satPos);
-    s.width = p.width != nullptr ? p.width->load() * 0.01f : 1.0f;
+    s.width = p.width->load() * 0.01f;
     return s;
 }
 
@@ -475,6 +478,30 @@ void Engine::processBlock (float* left, float* right, const float* scLeft, const
             left[i] *= g;
             right[i] *= g;
         }
+
+    // Low cut.
+    {
+        const float hz = lowCutParam->load();
+
+        if (hz > lowCutOffHz + 0.05f)
+        {
+            if (lowCutHz <= 0.0f)
+                for (auto& s : lowCutState) s.reset();
+            if (hz != lowCutHz)
+                lowCutCoeffs.setup (hz, 0.70710678, sampleRate);
+            lowCutHz = hz;
+
+            for (int i = 0; i < n; ++i)
+            {
+                left[i] = lowCutState[0].highpass (left[i], lowCutCoeffs);
+                right[i] = lowCutState[1].highpass (right[i], lowCutCoeffs);
+            }
+        }
+        else
+        {
+            lowCutHz = 0.0f;
+        }
+    }
 
     // Input stage.
     auto& input = stages[inputStage];

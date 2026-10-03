@@ -114,7 +114,9 @@ namespace dynmap::ui
         float attack, hold, release, relShape, rms, link;
         int lookahead;
         float smooth, trTime;
-        int relLaw = 0;
+        int relLaw = 0;              // ids::relLawClassic, relLawAuto or accelRelease (n)
+        int attLaw = 0;              // 0 classic, 1-8 eased
+        float release2 = 0.0f;       // second release, 0 = off
     };
 
     const std::vector<DetectorStyle>& detectorStyles();

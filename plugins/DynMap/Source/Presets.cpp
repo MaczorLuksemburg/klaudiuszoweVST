@@ -223,7 +223,7 @@ namespace
             // release curve 3 (Accel 3).
             list.push_back ({ "Maximus Default",
                               { sp (masterStage, ids::lookahead, 3.0f), sp (masterStage, ids::attack, 0.2f),
-                                sp (masterStage, ids::release, 85.53f), sp (masterStage, ids::relLaw, 3.0f) },
+                                sp (masterStage, ids::release, 85.53f), sp (masterStage, ids::relLaw, (float) ids::accelRelease (3)) },
                               { { masterStage, level, 15 } } });
 
             // Maximus factory presets rebuilt from screenshots (curves on linear axes, bands at 187 Hz and
@@ -238,7 +238,7 @@ namespace
                 for (int s : { b0, b1, b2, masterStage })
                 {
                     v.push_back (sp (s, ids::release, 85.53f));
-                    v.push_back (sp (s, ids::relLaw, 3.0f));
+                    v.push_back (sp (s, ids::relLaw, (float) ids::accelRelease (3)));
                 }
             };
 

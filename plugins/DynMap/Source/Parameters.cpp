@@ -129,11 +129,14 @@ namespace
                          dbParam (id (ids::drive), label ("Drive"), 0.0f, 36.0f, 0.0f),
                          choiceParam (id (ids::satPos), label ("Saturation Position"), { "After dynamics", "Before dynamics" }, satAfter),
                          choiceParam (id (ids::relLaw), label ("Release Mode"),
-                                      { "Classic", "Accel 1", "Accel 2", "Accel 3", "Accel 4", "Accel 5", "Accel 6", "Accel 7", "Accel 8" }, 0));
+                                      { "Classic", "Auto", "Accel 1", "Accel 2", "Accel 3", "Accel 4", "Accel 5", "Accel 6", "Accel 7", "Accel 8" }, 0),
+                         choiceParam (id (ids::attLaw), label ("Attack Mode"),
+                                      { "Classic", "Ease 1", "Ease 2", "Ease 3", "Ease 4", "Ease 5", "Ease 6", "Ease 7", "Ease 8" }, 0),
+                         msParam (id (ids::release2), label ("Release 2"), skewed (0.0f, 5000.0f, 300.0f), 0.0f),
+                         percentParam (id (ids::width), label ("Width"), 0.0f, 200.0f, 100.0f));
 
         if (isBandStage (stage))
-            group->addChild (percentParam (id (ids::width), label ("Width"), 0.0f, 200.0f, 100.0f),
-                             boolParam (id (ids::solo), label ("Solo")),
+            group->addChild (boolParam (id (ids::solo), label ("Solo")),
                              boolParam (id (ids::mute), label ("Mute")));
 
         return group;
@@ -190,6 +193,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
                       floatParam (ids::time, "Time", logRange (25.0f, 400.0f), 100.0f, percentText),
                       percentParam (ids::globalMix, "Mix", 0.0f, 100.0f, 100.0f),
                       dbParam (ids::inGain, "Input Gain", -24.0f, 24.0f, 0.0f),
+                      floatParam (ids::lowCut, "Low Cut", logRange (lowCutOffHz, 300.0f), lowCutOffHz,
+                                  [] (float v, int) { return v <= lowCutOffHz + 0.05f ? juce::String ("Off") : formatHz (v); }),
                       dbParam (ids::outGain, "Output Gain", -24.0f, 24.0f, 0.0f),
                       choiceParam (ids::clip, "Clipper", { "Off", "Soft", "Hard" }, clipOff),
                       boolParam (ids::limiter, "Limiter"),

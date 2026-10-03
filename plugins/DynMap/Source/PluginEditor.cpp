@@ -53,6 +53,7 @@ DynMapMainView::DynMapMainView (DynMapProcessor& p, klaud::LookAndFeel& lookAndF
     time.attach (apvts, ids::time);
     globalMix.attach (apvts, ids::globalMix);
     inGain.attach (apvts, ids::inGain);
+    lowCut.attach (apvts, ids::lowCut);
     outGain.attach (apvts, ids::outGain);
     clip.attach (apvts, ids::clip);
     limiter.attach (apvts, ids::limiter);
@@ -66,6 +67,8 @@ DynMapMainView::DynMapMainView (DynMapProcessor& p, klaud::LookAndFeel& lookAndF
     globalMix.slider.setTooltip ("Dry/wet of the processing in every stage (input, bands, master). The dry part still goes "
                                  "through the band split, so nothing cancels; the clipper and limiter stay on.");
     outGain.slider.setTooltip ("Output gain; drives the clipper and limiter when they are on");
+    lowCut.slider.setTooltip ("High-pass at the input (12 dB/oct), before every stage: removes rumble and DC that would "
+                              "otherwise drive the curves. Off at the bottom.");
     clip.box.setTooltip ("Clips peaks at the ceiling before the limiter (oversampled)");
     limiter.setTooltip ("True-peak limiter: the output never goes over the ceiling");
     autoGain.setTooltip ("Matches the output loudness to the input, for fair comparisons");
@@ -85,9 +88,15 @@ DynMapMainView::DynMapMainView (DynMapProcessor& p, klaud::LookAndFeel& lookAndF
     hold.slider.setTooltip ("How long the detector holds a peak before releasing");
     release.slider.setTooltip ("How fast the detector follows falling levels");
     relShape.slider.setTooltip ("Classic release shape: 0 % steady, 100 % fast at first then slowing down");
-    relLaw.box.setTooltip ("Classic: the release follows REL SHAPE. Accel 1-8: the release leaves peaks slowly and speeds up, "
-                           "like Image-Line Maximus's release curves 1-8 (1 = straight in dB); RELEASE then means the same "
-                           "as Maximus's REL");
+    relLaw.box.setTooltip ("Classic: the release follows REL SHAPE. Auto: short peaks recover at RELEASE speed, long loud "
+                           "passages up to 6x slower (program-dependent, less pumping). Accel 1-8: the release leaves peaks "
+                           "slowly and speeds up, like Image-Line Maximus's release curves 1-8 (1 = straight in dB); RELEASE "
+                           "then means the same as Maximus's REL");
+    attLaw.box.setTooltip ("Classic: the detector rises with ATTACK. Ease 1-8: about half of each gain drop happens at once and "
+                           "the rest eases in over ATTACK, so peaks poke through at most half as far (Maximus's attack curves "
+                           "1-8; higher = softer start). The same number shapes REL 2.");
+    release2.slider.setTooltip ("Second release: after RELEASE, the gain coming back up is smoothed again over this time, so "
+                                "it recovers quickly at first and settles slowly (like Maximus's REL2). 0 = off.");
     rms.slider.setTooltip ("0 = peak detection; above 0 the detector averages (RMS) over this time");
     link.slider.setTooltip ("How much the two channels share one detector (100 % = same gain on both)");
     trTime.slider.setTooltip ("Time scale of the transient detector: short catches clicks, long catches whole hits");
@@ -104,6 +113,7 @@ DynMapMainView::DynMapMainView (DynMapProcessor& p, klaud::LookAndFeel& lookAndF
              &presetBar, &quality, &phase, &inputTab, &masterTab, &sidechainTab, &bandDisplay, &levelEditor, &transientEditor,
              &mode, &bypass, &solo, &mute, &pre, &post, &mix, &width, &satType, &satPos, &drive,
              &attack, &hold, &release, &relShape, &rms, &link, &trTime, &smooth, &maxBoost, &maxCut, &scFilter,
+             &release2, &attLaw, &lowCut,
              &lookahead, &stereo, &scSource, &relLaw, &amount, &time, &globalMix, &inGain, &outGain, &clip, &limiter,
              &autoGain, &delta, &ceiling, &limRelease, &meter, &readout, &detectorStyles, &advanced })
         addAndMakeVisible (c);
@@ -187,21 +197,22 @@ void DynMapMainView::updateStageControls()
     stereo.attach (apvts, id (ids::stereo));
     scSource.attach (apvts, id (ids::scSource));
     relLaw.attach (apvts, id (ids::relLaw));
+    attLaw.attach (apvts, id (ids::attLaw));
+    release2.attach (apvts, id (ids::release2));
+    width.attach (apvts, id (ids::width));
 
     const bool band = isBandStage (stage);
-    width.setVisible (band);
     solo.setVisible (band);
     mute.setVisible (band);
 
     if (band)
     {
-        width.attach (apvts, id (ids::width));
         solo.attach (apvts, id (ids::solo));
         mute.attach (apvts, id (ids::mute));
     }
 
     for (auto* k : { &pre, &post, &mix, &width, &drive, &attack, &hold, &release, &relShape, &rms, &link,
-                     &trTime, &smooth, &maxBoost, &maxCut, &scFilter })
+                     &trTime, &smooth, &maxBoost, &maxCut, &scFilter, &release2 })
         k->setAccent (stageAccent);
 
     for (auto* t : { &bypass, &solo, &mute })
@@ -215,7 +226,8 @@ void DynMapMainView::updateDetectorView()
     detectorStyles.setVisible (! showAll);
 
     for (auto* c : std::initializer_list<juce::Component*> { &attack, &hold, &release, &relShape, &rms, &link, &trTime,
-                                                             &smooth, &maxBoost, &maxCut, &scFilter, &lookahead, &relLaw })
+                                                             &smooth, &maxBoost, &maxCut, &scFilter, &lookahead, &relLaw,
+                                                             &attLaw, &release2 })
         c->setVisible (showAll);
 
     resized();
@@ -385,21 +397,29 @@ void DynMapMainView::resized()
         }
         else
         {
-            const int spacing = juce::jmin (18, (area.getHeight() - 3 * knobH - 42) / 4);
-            row (area.removeFromTop (knobH), { &attack, &hold, &release, &relShape }, knobW);
+            // Timing, then shaping, then limits; the modes and routing as menus underneath.
+            const int spacing = juce::jmax (2, juce::jmin (14, (area.getHeight() - 3 * knobH - 2 * 42) / 5));
+            row (area.removeFromTop (knobH), { &attack, &hold, &release, &release2 }, knobW);
             area.removeFromTop (spacing);
-            row (area.removeFromTop (knobH), { &rms, &link, &trTime, &smooth }, knobW);
+            row (area.removeFromTop (knobH), { &relShape, &rms, &link, &smooth }, knobW);
             area.removeFromTop (spacing);
-            row (area.removeFromTop (knobH), { &maxBoost, &maxCut, &scFilter, &relLaw }, knobW);
-            relLaw.setBounds (relLaw.getBounds().withSizeKeepingCentre (knobW - 6, 40));
+            row (area.removeFromTop (knobH), { &trTime, &maxBoost, &maxCut, &scFilter }, knobW);
             area.removeFromTop (spacing);
+
             auto combos = area.removeFromTop (42).reduced (6, 0);
             const int w = (combos.getWidth() - 12) / 3;
-            lookahead.setBounds (combos.removeFromLeft (w));
+            attLaw.setBounds (combos.removeFromLeft (w));
             combos.removeFromLeft (6);
-            stereo.setBounds (combos.removeFromLeft (w));
+            relLaw.setBounds (combos.removeFromLeft (w));
             combos.removeFromLeft (6);
-            scSource.setBounds (combos);
+            lookahead.setBounds (combos);
+            area.removeFromTop (spacing);
+
+            auto routing = area.removeFromTop (42).reduced (6, 0);
+            const int w2 = (routing.getWidth() - 6) / 2;
+            stereo.setBounds (routing.removeFromLeft (w2));
+            routing.removeFromLeft (6);
+            scSource.setBounds (routing);
         }
     }
 
@@ -409,15 +429,14 @@ void DynMapMainView::resized()
         area.removeFromTop (26);
         auto top = area.removeFromTop (knobH + 6);
         amount.setBounds (top.removeFromLeft (84));
-        row (top, { &time, &globalMix }, 60);
-        area.removeFromTop (6);
-        auto bottom = area.removeFromTop (knobH);
-        row (bottom.removeFromLeft (124), { &inGain, &outGain }, 60);
-        bottom.removeFromLeft (6);
-        auto toggles = bottom.withSizeKeepingCentre (bottom.getWidth(), 56);
-        autoGain.setBounds (toggles.removeFromTop (26));
-        toggles.removeFromTop (4);
-        delta.setBounds (toggles.removeFromTop (26));
+        row (top, { &time, &globalMix }, 58);
+        area.removeFromTop (2);
+        row (area.removeFromTop (knobH), { &inGain, &lowCut, &outGain }, 62);
+        area.removeFromTop (4);
+        auto toggles = area.removeFromTop (24).reduced (6, 0);
+        autoGain.setBounds (toggles.removeFromLeft ((toggles.getWidth() - 6) / 2));
+        toggles.removeFromLeft (6);
+        delta.setBounds (toggles);
     }
 
     // Output.

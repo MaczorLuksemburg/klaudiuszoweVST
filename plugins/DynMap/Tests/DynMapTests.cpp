@@ -516,17 +516,71 @@ namespace
                 return -30.0f - peakDb (out, at - 48, at + 48);
             };
 
-            setStage (p, inputStage, ids::relLaw, 1.0f);   // straight in dB, 35.5 dB per release time
+            setStage (p, inputStage, ids::relLaw, (float) ids::accelRelease (1));   // straight in dB, 35.5 dB per release time
             const auto straight = run (p, drop);
             const float early = reductionAt (straight, 30.0), late = reductionAt (straight, 80.0);
             expect (std::abs (early - 8.2f) < 1.5f && late < 0.5f, "release Accel 1 is straight in dB: reduction "
                                                                        + db (early) + " at 30 ms (expected 8.2), " + db (late) + " at 80 ms");
 
-            setStage (p, inputStage, ids::relLaw, 8.0f);   // slow start: 27 * (t / release)^3.1 dB
+            setStage (p, inputStage, ids::relLaw, (float) ids::accelRelease (8));   // slow start: 27 * (t / release)^3.1 dB
             const auto slow = run (p, drop);
             const float held = reductionAt (slow, 60.0), done = reductionAt (slow, 130.0);
             expect (std::abs (held - 11.1f) < 1.5f && done < 0.5f, "release Accel 8 starts slowly: reduction "
                                                                        + db (held) + " at 60 ms (expected 11.1), " + db (done) + " at 130 ms");
+
+            // Second release: quick first release, then the gain settles over REL 2.
+            setStage (p, inputStage, ids::relLaw, (float) ids::relLawClassic);
+            setStage (p, inputStage, ids::release, 10.0f);
+            const float quick = reductionAt (run (p, drop), 60.0);
+            setStage (p, inputStage, ids::release2, 300.0f);
+            const float settling = reductionAt (run (p, drop), 60.0);
+            expect (quick < 0.5f && settling > 2.0f && settling < 10.0f, "REL 2 keeps the gain settling after a quick release: "
+                                                                             + db (settling) + " at 60 ms (" + db (quick) + " without)");
+            setStage (p, inputStage, ids::release2, 0.0f);
+        }
+
+        // Eased attack: about half of the needed reduction lands at once, however slow the attack.
+        resetAll (p);
+        setParam (p, ids::quality, 0.0f);
+        setCurve (p, inputStage, CurveKind::level, 2);   // 4:1 above -24: -6 dB needs 13.5 dB
+        setStage (p, inputStage, ids::attack, 100.0f);
+        {
+            auto step = makeSine (n, 500.0f, -40.0f);
+            step.applyGain (n / 2, n / 2, juce::Decibels::decibelsToGain (34.0f));
+            auto overshoot = [&] (const juce::AudioBuffer<float>& out)
+            {
+                const int at = n / 2 + p.getLatencySamples();
+                return peakDb (out, at + 96, at + 480) - peakDb (out, at + 19200, at + 23000);
+            };
+
+            const float classic = overshoot (run (p, step));
+            setStage (p, inputStage, ids::attLaw, 2.0f);
+            const float eased = overshoot (run (p, step));
+            expect (classic > 11.0f && eased > 4.5f && eased < 9.0f, "eased attack lets about half through: overshoot "
+                                                                         + db (eased) + " (classic " + db (classic) + ", needed 13.5)");
+        }
+
+        // Auto release: a short burst recovers fast, a long loud passage slowly.
+        resetAll (p);
+        setParam (p, ids::quality, 0.0f);
+        setCurve (p, inputStage, CurveKind::level, 2);
+        setStage (p, inputStage, ids::attack, 0.1f);
+        setStage (p, inputStage, ids::release, 50.0f);
+        setStage (p, inputStage, ids::relLaw, (float) ids::relLawAuto);
+        {
+            auto burst = [&] (double seconds)
+            {
+                auto b = makeSine (n, 1000.0f, -30.0f);
+                const int from = n / 4, to = from + (int) (seconds * testSampleRate);
+                b.applyGain (from, to - from, juce::Decibels::decibelsToGain (24.0f));
+                const auto out = run (p, b);
+                const int at = to + p.getLatencySamples() + (int) (0.15 * testSampleRate);
+                return -30.0f - peakDb (out, at - 48, at + 48);   // reduction left 150 ms after the burst
+            };
+
+            const float shortBurst = burst (0.02), longBurst = burst (0.4);
+            expect (shortBurst < 0.5f && longBurst > 2.0f, "auto release: " + db (shortBurst) + " left 150 ms after a 20 ms burst, "
+                                                               + db (longBurst) + " after a 400 ms one");
         }
     }
 
@@ -747,6 +801,28 @@ namespace
             const int from = 48000 * 5, to = 48000 * 8;
             const float diff = rmsDb (out, from, to) - rmsDb (in, from, to);
             expect (std::abs (diff) < 2.0f, "auto gain brings the level back within 2 dB (" + db (diff) + ")");
+        }
+
+        // Low cut at the input: 12 dB/oct, leaves the mids alone.
+        resetAll (p);
+        setParam (p, ids::lowCut, 100.0f);
+        {
+            const float lows = peakDb (run (p, makeSine (48000, 25.0f, -6.0f)), 24000, 48000);
+            const float mids = peakDb (run (p, makeSine (48000, 2000.0f, -6.0f)), 24000, 48000);
+            expect (lows < -26.0f && std::abs (mids + 6.0f) < 0.05f, "low cut 100 Hz: 25 Hz comes out at " + db (lows)
+                                                                          + ", 2 kHz at " + db (mids));
+        }
+        setParam (p, ids::lowCut, lowCutOffHz);
+
+        // Width on the master stage (not only bands): 0 % folds the output to mono.
+        setStage (p, masterStage, ids::width, 0.0f);
+        {
+            auto in = makeNoise (24000, 11);
+            const auto out = run (p, in);
+            float side = 0.0f;
+            for (int i = 12000; i < 24000; ++i)
+                side = juce::jmax (side, std::abs (out.getSample (0, i) - out.getSample (1, i)));
+            expect (side < 1.0e-5f, "master width 0 % leaves no side signal (" + juce::String (side) + ")");
         }
     }
 

@@ -46,10 +46,15 @@ namespace dynmap
         inline constexpr const char* satType   = "sat";
         inline constexpr const char* drive     = "drive";
         inline constexpr const char* satPos    = "satpos";
-        inline constexpr const char* relLaw    = "rellaw";    // classic one-pole or Maximus-style accelerating
+        inline constexpr const char* relLaw    = "rellaw";    // classic, auto (program-dependent) or accelerating
+        inline constexpr const char* attLaw    = "attlaw";    // classic one-pole or Maximus-style eased attack
+        inline constexpr const char* release2  = "rel2";      // second, slower release stage (0 = off)
 
-        // Release modes: classic (one-pole, shaped by relShape) or accelerating curves 1-8.
+        // Release modes: classic (one-pole, shaped by relShape), auto, or accelerating curves 1-8.
+        // Attack modes: classic (one-pole) or eased curves 1-8 (these also shape the second release).
         inline constexpr int numReleaseCurves = 8;
+        inline constexpr int relLawClassic = 0, relLawAuto = 1, relLawFirstAccel = 2;
+        constexpr int accelRelease (int curve) { return relLawFirstAccel + curve - 1; }   // Maximus release curve 1-8
 
         // Band stages only.
         inline constexpr const char* width = "width";
@@ -66,6 +71,7 @@ namespace dynmap
         inline constexpr const char* time      = "g_time";
         inline constexpr const char* globalMix = "g_mix";
         inline constexpr const char* inGain    = "g_in";
+        inline constexpr const char* lowCut    = "g_lowcut";    // high-pass at the input (Off at the bottom)
         inline constexpr const char* outGain   = "out_gain";
         inline constexpr const char* clip      = "out_clip";
         inline constexpr const char* limiter   = "out_lim";
@@ -87,6 +93,8 @@ namespace dynmap
     enum Slope     { slope6, slope12, slope24, slope48 };
     enum ClipMode  { clipOff, clipSoft, clipHard };
     enum Phase     { phaseMinimum, phaseLinear };
+
+    inline constexpr float lowCutOffHz = 10.0f;   // the low cut's bottom position means off
 
     inline constexpr float lookaheadMs[] { 0.0f, 0.5f, 1.0f, 2.0f, 5.0f, 10.0f, 20.0f };
     inline constexpr int numLookaheads = (int) std::size (lookaheadMs);
