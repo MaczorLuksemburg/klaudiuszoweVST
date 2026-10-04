@@ -2,3 +2,6 @@ build/
 out/
 .vs/
 *.user
+
+# Installer build output
+installer/windows/output/
