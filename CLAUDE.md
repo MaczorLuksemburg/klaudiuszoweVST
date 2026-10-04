@@ -103,6 +103,9 @@ AI-made VST plugins for testing and fun.
   Publishing a release from GitHub's Releases page (which creates the tag) also works: the job then attaches
   the zips to that release and appends the install guide under the notes written there.
   Keep it up to date when plugins are added. Bump each plugin's `VERSION` in its CMakeLists before tagging.
+- Windows installer: `installer/windows/build-installer.ps1 [-PluginDir] [-Version]` (Inno Setup 6, installed with
+  winget) packs the .vst3 bundles found in `C:\gen plugins` into `installer/windows/output/MakiPlugins-Setup-<v>.exe`
+  (installs to Common Files\VST3, per-plugin choice, uninstaller). Not built by CI yet.
 - Licence: AGPLv3 (`LICENSE`), required because JUCE is used under its open-source licence.
 
 ## GitHub
