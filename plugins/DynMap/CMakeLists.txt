@@ -5,7 +5,7 @@ juce_add_plugin(DynMap
     FORMATS                  ${KLAUD_PLUGIN_FORMATS}
     PRODUCT_NAME             "DynMap"
     DESCRIPTION              "Multiband dynamic mapping"
-    VERSION                  1.0.0
+    VERSION                  1.0.1
     BUNDLE_ID                com.makiplugins.dynmap
     IS_SYNTH                 FALSE
     NEEDS_MIDI_INPUT         FALSE

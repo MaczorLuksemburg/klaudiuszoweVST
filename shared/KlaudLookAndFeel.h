@@ -2,7 +2,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
-// Dark, flat look shared by the Maki plugins (loosely FabFilter-inspired):
+// Dark, flat look shared by the Maki Plugins (loosely FabFilter-inspired):
 // a thin value arc drawn from the knob's default position, a soft gradient knob
 // body and small uppercase labels.
 namespace klaud

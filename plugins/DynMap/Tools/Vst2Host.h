@@ -225,7 +225,7 @@ namespace vst2
                 case audioMasterGetSampleRate:          return (intptr_t) currentSampleRate;
                 case audioMasterGetBlockSize:           return currentBlockSize;
                 case audioMasterGetCurrentProcessLevel: return 4; // offline
-                case audioMasterGetVendorString:        return copyString (ptr, "Maki plugins");
+                case audioMasterGetVendorString:        return copyString (ptr, "Maki Plugins");
                 case audioMasterGetProductString:       return copyString (ptr, "PluginMeasure");
                 case audioMasterGetVendorVersion:       return 1000;
                 case audioMasterCanDo:

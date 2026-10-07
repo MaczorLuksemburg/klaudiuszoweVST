@@ -1,4 +1,4 @@
-; Windows installer for the Maki plugins (Inno Setup 6). Installs each plugin's .vst3 bundle into the
+; Windows installer for the Maki Plugins (Inno Setup 6). Installs each plugin's .vst3 bundle into the
 ; standard VST3 folder (C:\Program Files\Common Files\VST3), with a page to pick which plugins to install
 ; and an uninstaller in Windows' "Apps" list.
 ;
@@ -17,15 +17,15 @@
 
 [Setup]
 AppId={{6E1B7A52-3C1D-4D8E-9A57-4D61B2C0F1A7}
-AppName=Maki plugins
+AppName=Maki Plugins
 AppVersion={#AppVersion}
-AppPublisher=Maki plugins
+AppPublisher=Maki Plugins
 AppPublisherURL=https://github.com/MaczorLuksemburg/klaudiuszoweVST
 DefaultDirName={commoncf64}\VST3
 DirExistsWarning=no
 DisableProgramGroupPage=yes
-UninstallFilesDir={autopf}\Maki plugins
-UninstallDisplayName=Maki plugins (VST3)
+UninstallFilesDir={autopf}\Maki Plugins
+UninstallDisplayName=Maki Plugins (VST3)
 LicenseFile=..\..\LICENSE
 OutputDir=output
 OutputBaseFilename=MakiPlugins-Setup-{#AppVersion}

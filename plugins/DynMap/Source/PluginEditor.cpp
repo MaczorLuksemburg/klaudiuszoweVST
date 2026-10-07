@@ -369,7 +369,7 @@ void DynMapMainView::paint (juce::Graphics& g)
 
     g.setColour (pal.textDim);
     g.setFont (klaud::font (11.0f));
-    g.drawText ("Maki plugins", getWidth() - 132, 21, 116, 18, juce::Justification::centredRight, false);
+    g.drawText ("Maki Plugins", getWidth() - 132, 21, 116, 18, juce::Justification::centredRight, false);
 
     drawCaption (g, "OVERSAMPLE", { quality.getX() - 90, quality.getY(), 84, quality.getHeight() }, juce::Justification::centredRight);
     drawCaption (g, "BANDS", { phase.getX() - 52, phase.getY(), 46, phase.getHeight() }, juce::Justification::centredRight);
