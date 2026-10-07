@@ -774,11 +774,15 @@ void DetectorStyleMenu::askName (int slot)
     juce::Component::SafePointer<DetectorStyleMenu> safeThis (this);
     nameDialog->enterModalState (true, juce::ModalCallbackFunction::create ([safeThis, slot] (int result)
     {
-        if (safeThis == nullptr)
+        if (safeThis == nullptr || safeThis->nameDialog == nullptr)
             return;
 
+        // Close the window either way; only Save (or Return) stores the slot.
+        const auto name = safeThis->nameDialog->getTextEditorContents ("name");
+        safeThis->nameDialog->setVisible (false);
+
         if (result == 1)
-            safeThis->bank.save (slot, safeThis->getStage(), safeThis->nameDialog->getTextEditorContents ("name"));
+            safeThis->bank.save (slot, safeThis->getStage(), name);
 
         safeThis->shown = -2;
         safeThis->timerCallback();
