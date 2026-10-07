@@ -40,7 +40,9 @@ DynMapMainView::DynMapMainView (DynMapProcessor& p, klaud::LookAndFeel& lookAndF
       history (p, [this] { return selectedStage; }, [this] (int s) { selectStage (s); }),
       levelEditor (p, CurveKind::level),
       transientEditor (p, CurveKind::transient),
-      detectorStyles (p),
+      styleBank (p),
+      detectorStyles (p, styleBank),
+      styleMenu (styleBank, [this] { return selectedStage; }),
       meter (p),
       readout (p)
 {
@@ -92,13 +94,12 @@ DynMapMainView::DynMapMainView (DynMapProcessor& p, klaud::LookAndFeel& lookAndF
     relShape.slider.setTooltip ("Classic release shape: 0 % steady, 100 % fast at first then slowing down");
     relLaw.box.setTooltip ("Classic: the release follows REL SHAPE. Auto: short peaks recover at RELEASE speed, long loud "
                            "passages up to 6x slower (program-dependent, less pumping). Accel 1-8: the release leaves peaks "
-                           "slowly and speeds up, like Image-Line Maximus's release curves 1-8 (1 = straight in dB); RELEASE "
-                           "then means the same as Maximus's REL");
+                           "slowly and then speeds up (1 = straight in dB, 8 = the slowest start)");
     attLaw.box.setTooltip ("Classic: the detector rises with ATTACK. Ease 1-8: about half of each gain drop happens at once and "
-                           "the rest eases in over ATTACK, so peaks poke through at most half as far (Maximus's attack curves "
-                           "1-8; higher = softer start). The same number shapes REL 2.");
+                           "the rest eases in over ATTACK, so peaks poke through at most half as far (higher = softer "
+                           "start). The same number shapes REL 2.");
     release2.slider.setTooltip ("Second release: after RELEASE, the gain coming back up is smoothed again over this time, so "
-                                "it recovers quickly at first and settles slowly (like Maximus's REL2). 0 = off.");
+                                "it recovers quickly at first and settles slowly. 0 = off.");
     rms.slider.setTooltip ("0 = peak detection; above 0 the detector averages (RMS) over this time");
     link.slider.setTooltip ("How much the two channels share one detector (100 % = same gain on both)");
     trTime.slider.setTooltip ("Time scale of the transient detector: short catches clicks, long catches whole hits");
@@ -122,7 +123,7 @@ DynMapMainView::DynMapMainView (DynMapProcessor& p, klaud::LookAndFeel& lookAndF
 
     addAndMakeVisible (linearScale);
     linearScale.setClickingTogglesState (true);
-    linearScale.setTooltip ("Draw this level curve on linear amplitude axes, like Image-Line Maximus (0 dBFS in the middle, "
+    linearScale.setTooltip ("Draw this level curve on linear amplitude axes (0 dBFS in the middle, "
                             "the slope at the bottom-left corner sets the gain for quiet signals). The curve is converted.");
     linearScale.onClick = [this] { levelEditor.setLinear (linearScale.getToggleState()); };
 
@@ -134,6 +135,7 @@ DynMapMainView::DynMapMainView (DynMapProcessor& p, klaud::LookAndFeel& lookAndF
         processor.apvts.state.setProperty (detectorAdvancedId, advanced.getToggleState(), nullptr);
         updateDetectorView();
     };
+    addChildComponent (styleMenu);
     updateDetectorView();
 
     // Curve undo/redo (buttons next to Save, Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y).
@@ -213,6 +215,7 @@ void DynMapMainView::updateStageControls()
 
     levelEditor.setStage (stage, stageAccent);
     detectorStyles.setStage (stage, stageAccent);
+    styleMenu.refresh();
     advanced.setColour (juce::TextButton::buttonOnColourId, stageAccent);
     linearScale.setColour (juce::TextButton::buttonOnColourId, stageAccent);
     linearScale.setToggleState (levelEditor.isLinear(), juce::dontSendNotification);
@@ -305,10 +308,11 @@ void DynMapMainView::updateDetectorView()
     // Styles by default; every knob (what the styles set, plus limits and filters) under Advanced.
     const bool showAll = advanced.getToggleState();
     detectorStyles.setVisible (! showAll);
+    styleMenu.setVisible (showAll);
 
+    // The limits and the detector high-pass stay in both views (styles don't change them).
     for (auto* c : std::initializer_list<juce::Component*> { &attack, &hold, &release, &relShape, &rms, &link, &trTime,
-                                                             &smooth, &maxBoost, &maxCut, &scFilter, &lookahead, &relLaw,
-                                                             &attLaw, &release2 })
+                                                             &smooth, &lookahead, &relLaw, &attLaw, &release2 })
         c->setVisible (showAll);
 
     resized();
@@ -384,8 +388,7 @@ void DynMapMainView::paint (juce::Graphics& g)
         g.setColour (colours::sidechain);
         g.setFont (klaud::font (11.5f, true));
         g.drawFittedText ("No sidechain signal: send the trigger to inputs 3/4 (until then this stage follows its own signal)",
-                          detectorPanel.getX() + 14, detectorPanel.getBottom() - 96, detectorPanel.getWidth() - 28, 30,
-                          juce::Justification::centredLeft, 2);
+                          sidechainNote, juce::Justification::centredLeft, 2);
     }
     drawPanel (g, globalPanel, "Global");
     drawPanel (g, outputPanel, "Output");
@@ -474,18 +477,23 @@ void DynMapMainView::resized()
     // Detector.
     {
         auto area = detectorPanel.reduced (8, 6);
-        advanced.setBounds (area.getRight() - 78, area.getY() + 1, 78, 22);
+        advanced.setBounds (area.getRight() - 72, area.getY() + 1, 72, 22);
+        styleMenu.setBounds (area.getX() + 74, area.getY() + 1, advanced.getX() - 6 - (area.getX() + 74), 22);
         area.removeFromTop (34);
 
         if (! advanced.getToggleState())
         {
-            // Styles, then the two routing choices that matter without the details.
+            // Styles, the limits (which styles leave alone), the sidechain warning's place, routing.
             auto combos = area.removeFromBottom (42).reduced (6, 0);
             const int w = (combos.getWidth() - 6) / 2;
             stereo.setBounds (combos.removeFromLeft (w));
             combos.removeFromLeft (6);
             scSource.setBounds (combos);
-            detectorStyles.setBounds (area.reduced (6, 4));
+            area.removeFromBottom (2);
+            sidechainNote = area.removeFromBottom (30).reduced (6, 0);
+            row (area.removeFromBottom (knobH), { &maxBoost, &maxCut, &scFilter }, knobW + 6);
+            area.removeFromBottom (4);
+            detectorStyles.setBounds (area.reduced (6, 2));
         }
         else
         {
@@ -512,6 +520,8 @@ void DynMapMainView::resized()
             stereo.setBounds (routing.removeFromLeft (w2));
             routing.removeFromLeft (6);
             scSource.setBounds (routing);
+            area.removeFromTop (4);
+            sidechainNote = area.removeFromTop (30).reduced (6, 0);
         }
     }
 

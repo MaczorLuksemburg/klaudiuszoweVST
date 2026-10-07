@@ -65,7 +65,9 @@ private:
     dynmap::ui::Knob maxBoost { "MAX BOOST", true }, maxCut { "MAX CUT", true }, scFilter { "DET HP", true };
     dynmap::ui::Choice lookahead { "LOOKAHEAD" }, stereo { "STEREO" }, scSource { "DETECT FROM" }, relLaw { "REL MODE" };
     dynmap::ui::Choice attLaw { "ATT MODE" };
+    dynmap::ui::DetectorStyleBank styleBank;
     dynmap::ui::DetectorStylePicker detectorStyles;
+    dynmap::ui::DetectorStyleMenu styleMenu;
     juce::TextButton advanced { "Advanced" };
 
     // Global and output.
@@ -78,6 +80,7 @@ private:
     dynmap::ui::LoudnessReadout readout;
 
     juce::Rectangle<int> levelPanel, transientPanel, stagePanel, detectorPanel, globalPanel, outputPanel;
+    juce::Rectangle<int> sidechainNote;   // where the "no sidechain signal" warning goes (set in resized)
 
     juce::TooltipWindow tooltips { this, 700 };
 };

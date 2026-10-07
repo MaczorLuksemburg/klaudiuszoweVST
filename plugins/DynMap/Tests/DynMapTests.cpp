@@ -989,6 +989,31 @@ namespace
         auto owner = std::make_unique<DynMapProcessor>();
         auto& p = *owner;
 
+        // Custom detector styles: saved to a file and seen by another instance.
+        {
+            const auto file = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("DynMapStylesTest.xml");
+            file.deleteFile();
+            dynmap::ui::DetectorStyleBank::setFileForTesting (file);
+
+            setStage (p, bandStage (0), ids::attack, 7.0f);
+            setStage (p, bandStage (0), ids::release, 333.0f);
+            setStage (p, bandStage (0), ids::attLaw, 3.0f);
+            dynmap::ui::DetectorStyleBank bank (p);
+            const int slot0 = bank.indexOfSlot (0);
+            const bool emptyBefore = bank.isEmpty (slot0);
+            bank.save (0, bandStage (0), "Smash");
+
+            dynmap::ui::DetectorStyleBank other (p);   // another DynMap instance
+            other.apply (masterStage, slot0);
+            const bool applied = std::abs (p.apvts.getRawParameterValue (stageParamId (masterStage, ids::release))->load() - 333.0f) < 0.5f;
+            expect (emptyBefore && other.nameOf (slot0) == "Smash" && other.matching (bandStage (0)) == slot0 && applied,
+                    "custom detector style saves to a file, another instance reads and applies it");
+
+            file.deleteFile();
+            dynmap::ui::DetectorStyleBank::setFileForTesting ({});
+            loadPresetNamed (p, "Init");
+        }
+
         // Curve undo/redo, and a preset load clearing the history.
         {
             auto& curves = p.engine.curves;
@@ -1159,7 +1184,7 @@ namespace
         editor.reset();
 
         // Linear (Maximus-style) level map on the master stage.
-        loadPresetNamed (p, "Maximus Default");
+        loadPresetNamed (p, "Lift & Limit Master");
         p.apvts.state.setProperty ("detectorAdvanced", false, nullptr);
         p.apvts.state.setProperty ("selectedStage", masterStage, nullptr);
         editor.reset (p.createEditor());

@@ -73,6 +73,13 @@ AI-made VST plugins for testing and fun.
   transient gain) through a lock-free FIFO (`History.h`); `HistoryView` drains it on a timer.
 - Curve undo/redo (`CurveUndo`, owned by the processor): a finished edit or drag is one step; cleared
   when a preset or project loads. Factory presets are grouped by category (`categoryOf` in Presets.cpp).
+- User-facing text never needs Maximus knowledge: only the "Maximus" detector style is named after it; tooltips,
+  descriptions and preset names (e.g. "Lift & Limit Master", "Linear ..." in the "Linear Curves" section) don't
+  mention it. Code comments and docs may.
+- Detector styles (`DetectorStyleBank` in Components): 12 built in + Custom 1-3, saved to
+  `<user app data>/Maki plugins/DynMap/DetectorStyles.xml` and re-read by every instance when the file changes.
+  Simple view: style grid + MAX BOOST/MAX CUT/DET HP (styles never set those); Advanced: every knob, with a style
+  menu (arrows, apply, "Save to ... (Custom n)" then a name prompt) in the panel header.
 - Curves are not parameters: `CurveBank` keeps them in the state tree child `CURVES` and hands baked tables
   to the audio thread through `CurveSlot` (spin lock, try-lock on the audio side).
 - Latency is reported exactly (lookahead, oversampling, linear phase, limiter) and changes only with those settings.

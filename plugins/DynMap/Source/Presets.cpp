@@ -86,7 +86,7 @@ namespace
 
     // Menu sections, in order; presets not listed here go under "Basics".
     const char* const categoryOrder[] { "Basics", "Mastering", "Mix & Bus", "Vocals", "Drums", "Sidechain",
-                                        "OTT & Upward", "Sound Design", "Maximus" };
+                                        "OTT & Upward", "Sound Design", "Linear Curves" };
 
     juce::String categoryOf (const juce::String& name)
     {
@@ -105,7 +105,7 @@ namespace
             { "Stair Steps", "Sound Design" }, { "Fold Waveshaper", "Sound Design" }, { "Soft Clip Waveshaper", "Sound Design" },
             { "Inverted Dynamics", "Sound Design" }, { "Multiband Mangle", "Sound Design" }, { "Gated Mid", "Sound Design" },
             { "Dirty Behind Clean", "Sound Design" }, { "Lo-Fi Crush", "Sound Design" },
-            { "Maximus Default", "Maximus" }, { "Maximus Punchy Drums", "Maximus" }, { "Maximus Max Loudness", "Maximus" } };
+            { "Lift & Limit Master", "Linear Curves" }, { "Linear Punchy Drums", "Linear Curves" }, { "Linear Max Loudness", "Linear Curves" } };
 
         const auto it = categories.find (name);
         return it != categories.end() ? it->second : juce::String ("Basics");
@@ -298,7 +298,7 @@ namespace
             // Maximus's default patch (master band, bend at 25 %), matched by measurement: linear curve
             // giving +10.6 dB to quiet signals and bending into 0 dBFS, 2 ms lookahead, REL 85.53 ms with
             // release curve 3 (Accel 3).
-            list.push_back ({ "Maximus Default",
+            list.push_back ({ "Lift & Limit Master",
                               { sp (masterStage, ids::lookahead, 3.0f), sp (masterStage, ids::attack, 0.2f),
                                 sp (masterStage, ids::release, 85.53f), sp (masterStage, ids::relLaw, (float) ids::accelRelease (3)) },
                               { { masterStage, level, 15 } } });
@@ -306,7 +306,7 @@ namespace
             // Maximus factory presets rebuilt from screenshots (curves on linear axes, bands at 187 Hz and
             // 2.79 kHz) and fitted to renders of the measurement kit: static curves within about 1 dB.
             // Release times are the presets' own REL values (read from the .fst files) with release curve 3.
-            auto maximusBands = [&] (Values& v)
+            auto linearBands = [&] (Values& v)
             {
                 addBand (v, 1, 187.0f);
                 addBand (v, 2, 2790.0f);
@@ -327,7 +327,7 @@ namespace
 
             {
                 Values v;
-                maximusBands (v);
+                linearBands (v);
                 bandGains (v, b0, 15.0f, -3.8f);
                 bandGains (v, b1, 16.0f, -8.3f);
                 bandGains (v, b2, 16.0f, -12.9f);
@@ -338,7 +338,7 @@ namespace
                 v.push_back (sp (b1, ids::attack, 30.0f));
                 v.push_back (sp (b1, ids::release, 154.0f));
                 v.push_back (sp (b2, ids::attack, 2.0f));
-                list.push_back ({ "Maximus Punchy Drums", v,
+                list.push_back ({ "Linear Punchy Drums", v,
                                   { { b0, level, 0, "lin;0,0,0,0;0.703,0.696,0,0.5;2,1" },
                                     { b1, level, 0, "lin;0,0,0,0.275;0.964,0.821,0,0;2,1.027" },
                                     { b2, level, 0, "lin;0,0,0,0;0.667,0.696,0,0.45;2,1.018" },
@@ -347,7 +347,7 @@ namespace
 
             {
                 Values v;
-                maximusBands (v);
+                linearBands (v);
                 bandGains (v, b0, 14.0f, 0.3f);
                 bandGains (v, b1, 8.0f, -3.1f);
                 bandGains (v, b2, 15.0f, -1.6f);
@@ -357,7 +357,7 @@ namespace
                     v.push_back (sp (s, ids::attack, 0.5f));
                     v.push_back (sp (s, ids::lookahead, 3.0f));
                 }
-                list.push_back ({ "Maximus Max Loudness", v,
+                list.push_back ({ "Linear Max Loudness", v,
                                   { { b0, level, 0, "lin;0,0,0,0;0.964,1.036,0,0;2,1.036" },
                                     { b1, level, 0, "lin;0,0,0,0;0.81,0.8125,0,0.36;2,1.232" },
                                     { b2, level, 0, "lin;0,0,0,0.07;0.991,1,0,0;2,1" },

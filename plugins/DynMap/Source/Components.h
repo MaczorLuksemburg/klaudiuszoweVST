@@ -2,6 +2,7 @@
 
 #include "PluginProcessor.h"
 #include <KlaudLookAndFeel.h>
+#include <optional>
 
 namespace dynmap::ui
 {
@@ -109,8 +110,8 @@ namespace dynmap::ui
     // highlighted style is whichever one the current settings match ("Custom" otherwise).
     struct DetectorStyle
     {
-        const char* name;
-        const char* description;
+        juce::String name;
+        juce::String description;
         float attack, hold, release, relShape, rms, link;
         int lookahead;
         float smooth, trTime;
@@ -119,12 +120,53 @@ namespace dynmap::ui
         float release2 = 0.0f;       // second release, 0 = off
     };
 
-    const std::vector<DetectorStyle>& detectorStyles();
+    const std::vector<DetectorStyle>& detectorStyles();   // the built-in ones
 
+    // The built-in styles plus three custom slots. The slots are saved in a file on this computer
+    // (next to the user presets) and shared by every DynMap instance: each one re-reads the file when
+    // it changes.
+    class DetectorStyleBank : private juce::Timer
+    {
+    public:
+        static constexpr int numCustom = 3;
+
+        explicit DetectorStyleBank (DynMapProcessor&);
+
+        int size() const { return (int) detectorStyles().size() + numCustom; }
+        bool isCustom (int index) const { return index >= (int) detectorStyles().size(); }
+        int slotOf (int index) const { return index - (int) detectorStyles().size(); }
+        int indexOfSlot (int slot) const { return (int) detectorStyles().size() + slot; }
+        bool isEmpty (int index) const;
+        juce::String nameOf (int index) const;
+        juce::String descriptionOf (int index) const;
+
+        int matching (int stage) const;   // -1 when no style matches
+        void apply (int stage, int index);
+        void save (int slot, int stage, const juce::String& name);
+
+        int getVersion() const { return version; }   // changes whenever the custom slots do
+
+        static juce::File getFile();
+        static void setFileForTesting (const juce::File& file) { fileOverride() = file; }
+
+    private:
+        void timerCallback() override;
+        void load();
+        const DetectorStyle* get (int index) const;
+        static juce::File& fileOverride() { static juce::File f; return f; }
+        DetectorStyle read (int stage) const;
+
+        DynMapProcessor& processor;
+        std::array<std::optional<DetectorStyle>, numCustom> custom;
+        juce::Time loadedTime;
+        int version = 0;
+    };
+
+    // The style grid (simple view).
     class DetectorStylePicker : public juce::Component, private juce::Timer
     {
     public:
-        explicit DetectorStylePicker (DynMapProcessor&);
+        DetectorStylePicker (DynMapProcessor&, DetectorStyleBank&);
 
         void setStage (int stage, juce::Colour accent);
         void paint (juce::Graphics&) override;
@@ -132,15 +174,41 @@ namespace dynmap::ui
 
     private:
         void timerCallback() override;
-        int matchingStyle() const;
-        void apply (int style);
+        void refreshButtons();
 
         DynMapProcessor& processor;
-        static constexpr int buttonHeight = 38, columns = 3;
+        DetectorStyleBank& bank;
+        static constexpr int buttonHeight = 30, rowGap = 8, columns = 3;
 
         int stage = inputStage;
-        int shown = -2;
+        int shown = -2, bankVersion = -1, emptyHint = -1;
+        juce::Colour accent;
         juce::OwnedArray<juce::TextButton> buttons;
+    };
+
+    // Style menu with arrows (Advanced view): shows which style the knobs match, applies one, or saves the
+    // current settings into a custom slot (then asks for a name).
+    class DetectorStyleMenu : public juce::Component, private juce::Timer
+    {
+    public:
+        DetectorStyleMenu (DetectorStyleBank&, std::function<int()> getStage);
+        void resized() override;
+        void refresh();   // after the stage changed
+
+    private:
+        void timerCallback() override;
+        void rebuild();
+        void step (int delta);
+        void askName (int slot);
+
+        static constexpr int saveIdBase = 1000;
+
+        DetectorStyleBank& bank;
+        std::function<int()> getStage;
+        juce::TextButton previous { "<" }, next { ">" };
+        juce::ComboBox list;
+        int bankVersion = -1, shown = -2;
+        std::unique_ptr<juce::AlertWindow> nameDialog;
     };
 
     // Input/output peak meters.

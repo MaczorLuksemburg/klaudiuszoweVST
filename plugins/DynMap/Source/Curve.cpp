@@ -346,7 +346,7 @@ juce::StringArray Curve::presetNames (CurveKind kind)
 {
     if (kind == CurveKind::level)
         return { "Neutral", "Compress 2:1", "Compress 4:1", "Limit", "Upward 2:1", "OTT", "Smash",
-                 "Expand 1:2", "Gate", "Invert", "Stairs", "Soft Clip (waveshaper)", "Fold (waveshaper)", "Extreme OTT", "Duck (sidechain)", "Maximus default (linear)" };
+                 "Expand 1:2", "Gate", "Invert", "Stairs", "Soft Clip (waveshaper)", "Fold (waveshaper)", "Extreme OTT", "Duck (sidechain)", "Lift & limit (linear)" };
 
     return { "Neutral", "Punch", "Snap", "Soften", "Tighten", "Bloom", "Flip", "Punch Hard" };
 }

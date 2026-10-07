@@ -336,98 +336,269 @@ const std::vector<DetectorStyle>& detectorStyles()
           0.05f, 5.0f, 80.0f, 0.0f, 0.0f, 100.0f, 3, 0.2f, 30.0f, ids::relLawClassic, 0, 250.0f },
         { "Pump",      "Breathing release for sidechain ducking and EDM pumping; 1 ms lookahead so the duck lands with the kick.",
           2.0f, 0.0f, 220.0f, 70.0f, 0.0f, 100.0f, 2, 0.5f, 40.0f },
-        { "Waveform",  "Follows the waveform itself, so the curve becomes distortion (the Maximus trick).",
+        { "Waveform",  "Follows the waveform itself, so the curve becomes distortion.",
           0.01f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0.0f, 5.0f },
         // Maximus's default master band, measured on the VST: ATT 2 ms is a 2 ms lookahead, REL 85.53 ms with
         // release curve 3 is our Accel 3 at the same time, and its 10 ms sustain is our built-in peak window.
-        { "Maximus",   "Maximus's default timing: 2 ms lookahead, peak detection, REL 85.53 ms with its slow-start release curve.",
+        { "Maximus",   "Loudness-maximizer timing: 2 ms lookahead, peak detection, an 86 ms release that starts slowly.",
           0.2f, 0.0f, 85.53f, 0.0f, 0.0f, 100.0f, 3, 0.5f, 40.0f, ids::accelRelease (3) },
         { "Auto",      "Program-dependent: short peaks recover fast, long loud passages slowly, so it rarely pumps. A safe all-rounder.",
           3.0f, 0.0f, 100.0f, 0.0f, 0.0f, 100.0f, 2, 0.5f, 40.0f, ids::relLawAuto },
         { "Vocal",     "Vocal levelling: soft eased attack, short RMS, quick release that settles slowly, so words stay even.",
           15.0f, 0.0f, 150.0f, 40.0f, 10.0f, 100.0f, 0, 1.0f, 50.0f, ids::relLawClassic, 2, 700.0f },
-        { "Master",    "Loud, calm masters: eased attack behind 2 ms lookahead, Maximus-style release with a slow second release.",
+        { "Master",    "Loud, calm masters: eased attack behind 2 ms lookahead, slow-start release with a slow second release.",
           1.0f, 0.0f, 120.0f, 0.0f, 0.0f, 100.0f, 3, 0.5f, 40.0f, ids::accelRelease (3), 2, 400.0f },
     };
 
     return styles;
 }
 
-DetectorStylePicker::DetectorStylePicker (DynMapProcessor& p) : processor (p)
+//==============================================================================
+DetectorStyleBank::DetectorStyleBank (DynMapProcessor& p) : processor (p)
 {
-    const auto& styles = detectorStyles();
+    load();
+    startTimer (1000);
+}
 
-    for (int i = 0; i < (int) styles.size(); ++i)
+juce::File DetectorStyleBank::getFile()
+{
+    if (fileOverride() != juce::File())
+        return fileOverride();
+    return PresetManager::getUserPresetFolder().getParentDirectory().getChildFile ("DetectorStyles.xml");
+}
+
+void DetectorStyleBank::load()
+{
+    const auto file = getFile();
+    loadedTime = file.getLastModificationTime();
+    custom = {};
+
+    if (auto xml = juce::XmlDocument::parse (file))
+        for (auto* e : xml->getChildWithTagNameIterator ("STYLE"))
+        {
+            const int slot = e->getIntAttribute ("slot", -1);
+            if (! juce::isPositiveAndBelow (slot, numCustom))
+                continue;
+
+            DetectorStyle s;
+            s.name = e->getStringAttribute ("name", "Custom " + juce::String (slot + 1));
+            s.description = {};
+            s.attack = (float) e->getDoubleAttribute ("attack", 5.0);
+            s.hold = (float) e->getDoubleAttribute ("hold");
+            s.release = (float) e->getDoubleAttribute ("release", 120.0);
+            s.relShape = (float) e->getDoubleAttribute ("relShape");
+            s.rms = (float) e->getDoubleAttribute ("rms");
+            s.link = (float) e->getDoubleAttribute ("link", 100.0);
+            s.lookahead = e->getIntAttribute ("lookahead");
+            s.smooth = (float) e->getDoubleAttribute ("smooth", 0.5);
+            s.trTime = (float) e->getDoubleAttribute ("trTime", 40.0);
+            s.relLaw = e->getIntAttribute ("relLaw");
+            s.attLaw = e->getIntAttribute ("attLaw");
+            s.release2 = (float) e->getDoubleAttribute ("release2");
+            custom[(size_t) slot] = s;
+        }
+
+    ++version;
+}
+
+void DetectorStyleBank::timerCallback()
+{
+    // Another instance (or this one) saved a slot: pick it up.
+    if (getFile().getLastModificationTime() != loadedTime)
+        load();
+}
+
+const DetectorStyle* DetectorStyleBank::get (int index) const
+{
+    const auto& builtIn = detectorStyles();
+    if (juce::isPositiveAndBelow (index, (int) builtIn.size()))
+        return &builtIn[(size_t) index];
+
+    const int slot = slotOf (index);
+    return juce::isPositiveAndBelow (slot, numCustom) && custom[(size_t) slot].has_value() ? &*custom[(size_t) slot] : nullptr;
+}
+
+bool DetectorStyleBank::isEmpty (int index) const { return get (index) == nullptr; }
+
+juce::String DetectorStyleBank::nameOf (int index) const
+{
+    if (const auto* s = get (index))
+        return s->name;
+    return "Custom " + juce::String (slotOf (index) + 1);
+}
+
+juce::String DetectorStyleBank::descriptionOf (int index) const
+{
+    if (! isCustom (index))
+        return get (index)->description;
+
+    const juce::String slotName = "Custom " + juce::String (slotOf (index) + 1);
+    return isEmpty (index) ? "Empty slot. Open Advanced and choose \"Save to " + slotName + "\" in the menu next to the title."
+                           : "Your own style (" + slotName + "), saved on this computer and shared by every DynMap.";
+}
+
+DetectorStyle DetectorStyleBank::read (int stage) const
+{
+    auto value = [this, stage] (const char* name) { return processor.apvts.getRawParameterValue (stageParamId (stage, name))->load(); };
+    DetectorStyle s;
+    s.attack = value (ids::attack);
+    s.hold = value (ids::hold);
+    s.release = value (ids::release);
+    s.relShape = value (ids::relShape);
+    s.rms = value (ids::rms);
+    s.link = value (ids::link);
+    s.lookahead = juce::roundToInt (value (ids::lookahead));
+    s.smooth = value (ids::smooth);
+    s.trTime = value (ids::trTime);
+    s.relLaw = juce::roundToInt (value (ids::relLaw));
+    s.attLaw = juce::roundToInt (value (ids::attLaw));
+    s.release2 = value (ids::release2);
+    return s;
+}
+
+int DetectorStyleBank::matching (int stage) const
+{
+    const auto now = read (stage);
+    auto near = [] (float a, float b) { return std::abs (a - b) <= 0.02f * juce::jmax (std::abs (a), std::abs (b)) + 1.0e-3f; };
+
+    for (int i = 0; i < size(); ++i)
+        if (const auto* s = get (i))
+            if (near (now.attack, s->attack) && near (now.hold, s->hold) && near (now.release, s->release)
+                && near (now.relShape, s->relShape) && near (now.rms, s->rms) && near (now.link, s->link)
+                && now.lookahead == s->lookahead && near (now.smooth, s->smooth) && near (now.trTime, s->trTime)
+                && now.relLaw == s->relLaw && now.attLaw == s->attLaw && near (now.release2, s->release2))
+                return i;
+
+    return -1;
+}
+
+void DetectorStyleBank::apply (int stage, int index)
+{
+    const auto* s = get (index);
+    if (s == nullptr)
+        return;
+
+    auto set = [this, stage] (const char* name, float v) { setParameter (processor.apvts, stageParamId (stage, name), v); };
+    set (ids::attack, s->attack);
+    set (ids::hold, s->hold);
+    set (ids::release, s->release);
+    set (ids::relShape, s->relShape);
+    set (ids::rms, s->rms);
+    set (ids::link, s->link);
+    set (ids::lookahead, (float) s->lookahead);
+    set (ids::smooth, s->smooth);
+    set (ids::trTime, s->trTime);
+    set (ids::relLaw, (float) s->relLaw);
+    set (ids::attLaw, (float) s->attLaw);
+    set (ids::release2, s->release2);
+}
+
+void DetectorStyleBank::save (int slot, int stage, const juce::String& name)
+{
+    if (! juce::isPositiveAndBelow (slot, numCustom))
+        return;
+
+    load();   // keep what other instances saved in the meantime
+    auto s = read (stage);
+    s.name = name.trim().isNotEmpty() ? name.trim().substring (0, 24) : "Custom " + juce::String (slot + 1);
+    custom[(size_t) slot] = s;
+
+    juce::XmlElement xml ("DETECTORSTYLES");
+    for (int i = 0; i < numCustom; ++i)
+        if (const auto& c = custom[(size_t) i])
+        {
+            auto* e = xml.createNewChildElement ("STYLE");
+            e->setAttribute ("slot", i);
+            e->setAttribute ("name", c->name);
+            e->setAttribute ("attack", c->attack);
+            e->setAttribute ("hold", c->hold);
+            e->setAttribute ("release", c->release);
+            e->setAttribute ("relShape", c->relShape);
+            e->setAttribute ("rms", c->rms);
+            e->setAttribute ("link", c->link);
+            e->setAttribute ("lookahead", c->lookahead);
+            e->setAttribute ("smooth", c->smooth);
+            e->setAttribute ("trTime", c->trTime);
+            e->setAttribute ("relLaw", c->relLaw);
+            e->setAttribute ("attLaw", c->attLaw);
+            e->setAttribute ("release2", c->release2);
+        }
+
+    const auto file = getFile();
+    file.getParentDirectory().createDirectory();
+    xml.writeTo (file);
+    load();
+}
+
+//==============================================================================
+DetectorStylePicker::DetectorStylePicker (DynMapProcessor& p, DetectorStyleBank& b) : processor (p), bank (b)
+{
+    for (int i = 0; i < bank.size(); ++i)
     {
-        auto* button = buttons.add (new juce::TextButton (styles[(size_t) i].name));
-        button->setTooltip (styles[(size_t) i].description);
-        button->onClick = [this, i] { apply (i); };
+        auto* button = buttons.add (new juce::TextButton());
+        button->onClick = [this, i]
+        {
+            if (bank.isEmpty (i))
+            {
+                emptyHint = i;   // explain how to fill it
+                repaint();
+                return;
+            }
+
+            emptyHint = -1;
+            bank.apply (stage, i);
+            timerCallback();
+        };
         addAndMakeVisible (button);
     }
 
+    refreshButtons();
     startTimerHz (8);
 }
 
-void DetectorStylePicker::setStage (int newStage, juce::Colour accent)
+void DetectorStylePicker::refreshButtons()
+{
+    bankVersion = bank.getVersion();
+
+    for (int i = 0; i < buttons.size(); ++i)
+    {
+        auto* b = buttons[i];
+        b->setButtonText (bank.nameOf (i));
+        b->setTooltip (bank.descriptionOf (i));
+        b->setAlpha (bank.isEmpty (i) ? 0.45f : 1.0f);
+    }
+}
+
+void DetectorStylePicker::setStage (int newStage, juce::Colour newAccent)
 {
     stage = newStage;
+    accent = newAccent;
 
     for (auto* b : buttons)
         b->setColour (juce::TextButton::buttonOnColourId, accent);
 
     shown = -2;
-    timerCallback();
-}
-
-int DetectorStylePicker::matchingStyle() const
-{
-    auto value = [this] (const char* name) { return processor.apvts.getRawParameterValue (stageParamId (stage, name))->load(); };
-    auto near = [] (float a, float b) { return std::abs (a - b) <= 0.02f * juce::jmax (std::abs (a), std::abs (b)) + 1.0e-3f; };
-    const auto& styles = detectorStyles();
-
-    for (int i = 0; i < (int) styles.size(); ++i)
-    {
-        const auto& s = styles[(size_t) i];
-        if (near (value (ids::attack), s.attack) && near (value (ids::hold), s.hold) && near (value (ids::release), s.release)
-            && near (value (ids::relShape), s.relShape) && near (value (ids::rms), s.rms) && near (value (ids::link), s.link)
-            && juce::roundToInt (value (ids::lookahead)) == s.lookahead && near (value (ids::smooth), s.smooth)
-            && near (value (ids::trTime), s.trTime) && juce::roundToInt (value (ids::relLaw)) == s.relLaw
-            && juce::roundToInt (value (ids::attLaw)) == s.attLaw && near (value (ids::release2), s.release2))
-            return i;
-    }
-
-    return -1;
-}
-
-void DetectorStylePicker::apply (int index)
-{
-    const auto& s = detectorStyles()[(size_t) index];
-    auto set = [this] (const char* name, float v) { setParameter (processor.apvts, stageParamId (stage, name), v); };
-
-    set (ids::attack, s.attack);
-    set (ids::hold, s.hold);
-    set (ids::release, s.release);
-    set (ids::relShape, s.relShape);
-    set (ids::rms, s.rms);
-    set (ids::link, s.link);
-    set (ids::lookahead, (float) s.lookahead);
-    set (ids::smooth, s.smooth);
-    set (ids::trTime, s.trTime);
-    set (ids::relLaw, (float) s.relLaw);
-    set (ids::attLaw, (float) s.attLaw);
-    set (ids::release2, s.release2);
+    emptyHint = -1;
     timerCallback();
 }
 
 void DetectorStylePicker::timerCallback()
 {
-    const int match = matchingStyle();
+    if (bank.getVersion() != bankVersion)
+    {
+        refreshButtons();
+        shown = -2;
+    }
+
+    const int match = bank.matching (stage);
     repaint();   // the summary line follows the knobs
 
     if (match == shown)
         return;
 
     shown = match;
+    if (match >= 0)
+        emptyHint = -1;
     for (int i = 0; i < buttons.size(); ++i)
         buttons[i]->setToggleState (i == match, juce::dontSendNotification);
     repaint();
@@ -439,20 +610,22 @@ void DetectorStylePicker::resized()
     const int columnWidth = (area.getWidth() - 2 * 8) / columns;
 
     for (int i = 0; i < buttons.size(); ++i)
-        buttons[i]->setBounds (area.getX() + (i % columns) * (columnWidth + 8), area.getY() + (i / columns) * (buttonHeight + 10), columnWidth, buttonHeight);
+        buttons[i]->setBounds (area.getX() + (i % columns) * (columnWidth + 8), area.getY() + (i / columns) * (buttonHeight + rowGap),
+                               columnWidth, buttonHeight);
 }
 
 void DetectorStylePicker::paint (juce::Graphics& g)
 {
     const auto& pal = palette();
     const int rows = (buttons.size() + columns - 1) / columns;
-    auto area = getLocalBounds().withTrimmedTop (rows * buttonHeight + (rows - 1) * 10 + 16).reduced (4, 0);
+    auto area = getLocalBounds().withTrimmedTop (rows * buttonHeight + (rows - 1) * rowGap + 10).reduced (4, 0);
 
-    g.setFont (klaud::font (12.5f));
-    g.setColour (shown >= 0 ? pal.text : pal.textDim);
-    g.drawFittedText (shown >= 0 ? juce::String (detectorStyles()[(size_t) shown].description)
-                                 : juce::String ("Custom settings. Open Advanced to see or change them."),
-                      area.removeFromTop (36), juce::Justification::topLeft, 2);
+    const int described = emptyHint >= 0 ? emptyHint : shown;
+    g.setFont (klaud::font (12.0f));
+    g.setColour (described >= 0 ? pal.text : pal.textDim);
+    g.drawFittedText (described >= 0 ? bank.descriptionOf (described)
+                                     : juce::String ("Custom settings. Open Advanced to see or change them."),
+                      area.removeFromTop (32), juce::Justification::topLeft, 2);
 
     // What the detector is actually set to.
     auto value = [this] (const char* name) { return processor.apvts.getRawParameterValue (stageParamId (stage, name))->load(); };
@@ -474,7 +647,142 @@ void DetectorStylePicker::paint (juce::Graphics& g)
 
     g.setFont (klaud::font (11.0f));
     g.setColour (pal.textDim);
-    g.drawFittedText (summary, area.removeFromTop (30), juce::Justification::topLeft, 2);
+    g.drawFittedText (summary, area.removeFromTop (28), juce::Justification::topLeft, 2);
+}
+
+//==============================================================================
+DetectorStyleMenu::DetectorStyleMenu (DetectorStyleBank& b, std::function<int()> stageGetter)
+    : bank (b), getStage (std::move (stageGetter))
+{
+    previous.setTooltip ("Previous style");
+    next.setTooltip ("Next style");
+    list.setTooltip ("Which style the detector knobs match. Pick one to apply it, or save the current settings "
+                     "into a custom slot (shared by every DynMap on this computer).");
+    previous.onClick = [this] { step (-1); };
+    next.onClick = [this] { step (1); };
+    list.onChange = [this]
+    {
+        const int id = list.getSelectedId();
+        if (id > saveIdBase)
+        {
+            askName (id - saveIdBase - 1);
+            shown = -2;   // show the match again until a name is chosen
+        }
+        else if (id > 0 && id - 1 != bank.matching (getStage()))
+        {
+            bank.apply (getStage(), id - 1);
+        }
+    };
+
+    for (auto* c : std::initializer_list<juce::Component*> { &previous, &list, &next })
+        addAndMakeVisible (c);
+
+    refresh();
+    startTimerHz (8);
+}
+
+void DetectorStyleMenu::refresh()
+{
+    rebuild();
+    timerCallback();
+}
+
+void DetectorStyleMenu::resized()
+{
+    auto area = getLocalBounds();
+    previous.setBounds (area.removeFromLeft (24));
+    next.setBounds (area.removeFromRight (24));
+    area.reduce (3, 0);
+    list.setBounds (area);
+}
+
+void DetectorStyleMenu::rebuild()
+{
+    bankVersion = bank.getVersion();
+    list.clear (juce::dontSendNotification);
+
+    const int numBuiltIn = (int) detectorStyles().size();
+    for (int i = 0; i < numBuiltIn; ++i)
+        list.addItem (bank.nameOf (i), i + 1);
+
+    list.addSeparator();
+    for (int slot = 0; slot < DetectorStyleBank::numCustom; ++slot)
+    {
+        const int index = bank.indexOfSlot (slot);
+        list.addItem (bank.isEmpty (index) ? "Custom " + juce::String (slot + 1) + " (empty)" : bank.nameOf (index), index + 1);
+        list.setItemEnabled (index + 1, ! bank.isEmpty (index));
+    }
+
+    list.addSeparator();
+    list.addSectionHeading ("Save current settings");
+    for (int slot = 0; slot < DetectorStyleBank::numCustom; ++slot)
+    {
+        const int index = bank.indexOfSlot (slot);
+        const juce::String slotName = "Custom " + juce::String (slot + 1);
+        list.addItem (bank.isEmpty (index) ? "Save to " + slotName
+                                           : "Save to \"" + bank.nameOf (index) + "\" (" + slotName + ")",
+                      saveIdBase + slot + 1);
+    }
+
+    shown = -2;
+}
+
+void DetectorStyleMenu::timerCallback()
+{
+    if (bank.getVersion() != bankVersion)
+        rebuild();
+
+    const int match = bank.matching (getStage());
+    if (match == shown && list.getSelectedId() < saveIdBase)
+        return;
+
+    shown = match;
+    if (match >= 0)
+        list.setSelectedId (match + 1, juce::dontSendNotification);
+    else
+        list.setText ("Custom", juce::dontSendNotification);
+}
+
+void DetectorStyleMenu::step (int delta)
+{
+    const int count = bank.size();
+    int index = bank.matching (getStage());
+
+    for (int tries = 0; tries < count; ++tries)
+    {
+        index = ((index < 0 ? (delta > 0 ? -1 : 0) : index) + delta + count) % count;
+        if (! bank.isEmpty (index))
+        {
+            bank.apply (getStage(), index);
+            return;
+        }
+    }
+}
+
+void DetectorStyleMenu::askName (int slot)
+{
+    const int index = bank.indexOfSlot (slot);
+    const auto current = bank.isEmpty (index) ? "Custom " + juce::String (slot + 1) : bank.nameOf (index);
+
+    nameDialog = std::make_unique<juce::AlertWindow> ("Save detector style", "Name for Custom " + juce::String (slot + 1) + ":",
+                                                      juce::MessageBoxIconType::NoIcon, this);
+    nameDialog->setLookAndFeel (&getLookAndFeel());
+    nameDialog->addTextEditor ("name", current);
+    nameDialog->addButton ("Save", 1, juce::KeyPress (juce::KeyPress::returnKey));
+    nameDialog->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+
+    juce::Component::SafePointer<DetectorStyleMenu> safeThis (this);
+    nameDialog->enterModalState (true, juce::ModalCallbackFunction::create ([safeThis, slot] (int result)
+    {
+        if (safeThis == nullptr)
+            return;
+
+        if (result == 1)
+            safeThis->bank.save (slot, safeThis->getStage(), safeThis->nameDialog->getTextEditorContents ("name"));
+
+        safeThis->shown = -2;
+        safeThis->timerCallback();
+    }), false);
 }
 
 //==============================================================================

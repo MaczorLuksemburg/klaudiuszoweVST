@@ -614,7 +614,7 @@ void CurveEditor::showCurveMenu()
     menu.addSubMenu ("Set every segment to", shapes);
     menu.addItem (300, "Invert gains");
     if (kind == CurveKind::level)
-        menu.addItem (303, "Linear scale (like Maximus)", true, curve.isLinear());
+        menu.addItem (303, "Linear scale", true, curve.isLinear());
     menu.addItem (301, "Copy curve");
     menu.addItem (302, "Paste curve", clipboardFull[k]);
 
