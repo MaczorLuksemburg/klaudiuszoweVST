@@ -42,7 +42,8 @@ jobs:
         run: cmake -S . -B build ${{ matrix.configure }}
 
       - name: Build
-        run: cmake --build build --config Release --parallel
+        # A fixed job count: unlimited make jobs ran a Linux runner out of memory once DynMap was added.
+        run: cmake --build build --config Release --parallel 4
 
       - name: Run tests
         shell: bash
