@@ -35,6 +35,12 @@ target_compile_definitions(DynMap PUBLIC
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_DISPLAY_SPLASH_SCREEN=0)
 
+# Clang fuses a * b + c into one FMA on arm64 (Apple Silicon) by default, which rounds differently from
+# x86 and breaks the bit-exact neutral path (Init must pass audio through untouched). Same maths everywhere.
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(DynMap PUBLIC -ffp-contract=off)
+endif()
+
 target_link_libraries(DynMap
     PRIVATE
         klaud_shared
