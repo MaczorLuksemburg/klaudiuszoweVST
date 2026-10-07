@@ -57,8 +57,12 @@ AI-made VST plugins for testing and fun.
 - Level curves can use linear amplitude axes (0..2, i.e. up to +6 dBFS) like Maximus, whose graph is not in dB:
   measured, its default curve gives +10.6 dB to quiet signals. `Curve::gainAt` converts, so the engine only
   ever sees dB tables. Past a linear curve's right edge the output holds its end value (Maximus limits there),
-  and level tables reach +36 dB so pre gain can push past the edge. The "Maximus ..." presets were rebuilt
-  from screenshots and fitted to renders of the kit (static curves within ~1 dB); its graph is linear 0..2.
+  and level tables reach +36 dB so pre gain can push past the edge. The "Linear ..." presets are Maximus factory
+  presets read from their .fst files (knobs + curves; curve slots low 0, mid 2, high 4, master 6; bend on a
+  segment's end point, ~1.65x ours) and corrected against FL Studio renders of six mastered songs (per-band
+  loudness within ~0.7-1.3 dB) plus the sine kit for transients. Maximus PRE: amplitude = (e^(3.9 n) - 1) /
+  (e^1.95 - 1), n = stored / 2000; POST: amplitude = stored / 1000. Bands in its RMS sustain mode let
+  transients through like a classic attack at ~0.7-0.8x ATT, not like Ease.
 - Detector timing modes, measured on the Maximus VST (all within ~0.2 dB of it):
   - Release mode (`rellaw`): Classic (one-pole, shaped by `relshape`), Auto (a dB follower charging over 3x
     and releasing over 6x the release time holds the release up on sustained level only), or Accel 1-8 =

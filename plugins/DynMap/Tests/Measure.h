@@ -237,7 +237,8 @@ namespace measure
         juce::WavAudioFormat wav;
         auto writer = wav.createWriterFor (stream, juce::AudioFormatWriterOptions{}.withSampleRate (sr)
                                                                                     .withNumChannels (audio.getNumChannels())
-                                                                                    .withBitsPerSample (24));
+                                                                                    .withBitsPerSample (32)
+                                                                                    .withSampleFormat (juce::AudioFormatWriterOptions::SampleFormat::floatingPoint));
         return writer != nullptr && writer->writeFromAudioSampleBuffer (audio, 0, audio.getNumSamples());
     }
 

@@ -105,7 +105,8 @@ namespace
             { "Stair Steps", "Sound Design" }, { "Fold Waveshaper", "Sound Design" }, { "Soft Clip Waveshaper", "Sound Design" },
             { "Inverted Dynamics", "Sound Design" }, { "Multiband Mangle", "Sound Design" }, { "Gated Mid", "Sound Design" },
             { "Dirty Behind Clean", "Sound Design" }, { "Lo-Fi Crush", "Sound Design" },
-            { "Lift & Limit Master", "Linear Curves" }, { "Linear Punchy Drums", "Linear Curves" }, { "Linear Max Loudness", "Linear Curves" } };
+            { "Lift & Limit Master", "Linear Curves" }, { "Linear Band Limiter", "Linear Curves" }, { "Linear Punchy Drums", "Linear Curves" },
+            { "Linear Punchy Drums 2", "Linear Curves" }, { "Linear Max Loudness", "Linear Curves" } };
 
         const auto it = categories.find (name);
         return it != categories.end() ? it->second : juce::String ("Basics");
@@ -303,65 +304,159 @@ namespace
                                 sp (masterStage, ids::release, 85.53f), sp (masterStage, ids::relLaw, (float) ids::accelRelease (3)) },
                               { { masterStage, level, 15 } } });
 
-            // Maximus factory presets rebuilt from screenshots (curves on linear axes, bands at 187 Hz and
-            // 2.79 kHz) and fitted to renders of the measurement kit: static curves within about 1 dB.
-            // Release times are the presets' own REL values (read from the .fst files) with release curve 3.
+            // Image-Line Maximus factory presets, read from their .fst files (knobs and curves; the knob laws
+            // were measured on the Maximus VST) and corrected against FL Studio renders of six mastered songs.
+            // Bands at 187 Hz and 2.79 kHz like Maximus; curves on linear axes.
             auto linearBands = [&] (Values& v)
             {
                 addBand (v, 1, 187.0f);
                 addBand (v, 2, 2790.0f);
+            };
+
+            // Maximus's Default: every band and the master limit at 0 dBFS (a clean multiband ceiling).
+            // Settings from its preset file, corrections fitted to the renders (per-band loudness within ~0.7 dB).
+            {
+                Values v;
+                linearBands (v);
+                v.push_back (sp (b0, ids::pre, -0.75f));
+                v.push_back (sp (b0, ids::lookahead, 3.0f));
+                v.push_back (sp (b0, ids::attack, 2.0f));
+                v.push_back (sp (b0, ids::attLaw, 2.0f));
+                v.push_back (sp (b0, ids::release, 85.53f));
+                v.push_back (sp (b0, ids::relLaw, (float) ids::accelRelease (3)));
+                v.push_back (sp (b1, ids::pre, -0.75f));
+                v.push_back (sp (b1, ids::lookahead, 3.0f));
+                v.push_back (sp (b1, ids::attack, 2.0f));
+                v.push_back (sp (b1, ids::attLaw, 2.0f));
+                v.push_back (sp (b1, ids::release, 85.53f));
+                v.push_back (sp (b1, ids::relLaw, (float) ids::accelRelease (3)));
+                v.push_back (sp (b2, ids::pre, -0.75f));
+                v.push_back (sp (b2, ids::lookahead, 3.0f));
+                v.push_back (sp (b2, ids::attack, 2.0f));
+                v.push_back (sp (b2, ids::attLaw, 2.0f));
+                v.push_back (sp (b2, ids::release, 85.53f));
+                v.push_back (sp (b2, ids::relLaw, (float) ids::accelRelease (3)));
                 v.push_back (sp (masterStage, ids::lookahead, 3.0f));
                 v.push_back (sp (masterStage, ids::attack, 0.2f));
-                for (int s : { b0, b1, b2, masterStage })
-                {
-                    v.push_back (sp (s, ids::release, 85.53f));
-                    v.push_back (sp (s, ids::relLaw, (float) ids::accelRelease (3)));
-                }
-            };
-
-            auto bandGains = [&] (Values& v, int stage, float pre, float post)
-            {
-                v.push_back (sp (stage, ids::pre, pre));
-                v.push_back (sp (stage, ids::post, post));
-            };
-
-            {
-                Values v;
-                linearBands (v);
-                bandGains (v, b0, 15.0f, -3.8f);
-                bandGains (v, b1, 16.0f, -8.3f);
-                bandGains (v, b2, 16.0f, -12.9f);
-                // Maximus: ATT 68 / 44 / 2 ms, REL 174 / 154 / 85.53 ms. Its attack eases in, so the mid band's
-                // 44 ms matches our 30 ms (fitted to the render); the low band is scaled the same way.
-                v.push_back (sp (b0, ids::attack, 46.0f));
-                v.push_back (sp (b0, ids::release, 174.0f));
-                v.push_back (sp (b1, ids::attack, 30.0f));
-                v.push_back (sp (b1, ids::release, 154.0f));
-                v.push_back (sp (b2, ids::attack, 2.0f));
-                list.push_back ({ "Linear Punchy Drums", v,
-                                  { { b0, level, 0, "lin;0,0,0,0;0.703,0.696,0,0.5;2,1" },
-                                    { b1, level, 0, "lin;0,0,0,0.275;0.964,0.821,0,0;2,1.027" },
-                                    { b2, level, 0, "lin;0,0,0,0;0.667,0.696,0,0.45;2,1.018" },
-                                    { masterStage, level, 0, "lin;0,0,0,0;0.964,1.018,0,0;2,1.018" } } });
+                v.push_back (sp (masterStage, ids::release, 85.53f));
+                v.push_back (sp (masterStage, ids::relLaw, (float) ids::accelRelease (3)));
+                list.push_back ({ "Linear Band Limiter", v,
+                                  { { b0, level, 0, "lin;0,0,0,0;1,1,0,0;2,1,0,0" },
+                                    { b1, level, 0, "lin;0,0,0,0;1,1,0,0;2,1,0,0" },
+                                    { b2, level, 0, "lin;0,0,0,0;1,1,0,0;2,1,0,0" },
+                                    { masterStage, level, 0, "lin;0,0,0,0;1,1,0,0;2,1,0,0" } } });
             }
 
+            // Maximus's "Punchy drums".
+            // Settings from its preset file, corrections fitted to the renders (per-band loudness within ~1.3 dB).
             {
                 Values v;
                 linearBands (v);
-                bandGains (v, b0, 14.0f, 0.3f);
-                bandGains (v, b1, 8.0f, -3.1f);
-                bandGains (v, b2, 15.0f, -1.6f);
-                v.push_back (sp (b0, ids::release, 137.5f));
-                for (int s : { b0, b1, b2 })
-                {
-                    v.push_back (sp (s, ids::attack, 0.5f));
-                    v.push_back (sp (s, ids::lookahead, 3.0f));
-                }
+                v.push_back (sp (b0, ids::pre, 14.52f));
+                v.push_back (sp (b0, ids::post, -2.03f));
+                v.push_back (sp (b0, ids::width, 63.2f));
+                v.push_back (sp (b0, ids::attack, 57.26f));
+                v.push_back (sp (b0, ids::release, 173.84f));
+                v.push_back (sp (b0, ids::relLaw, (float) ids::accelRelease (3)));
+                v.push_back (sp (b0, ids::satType, (float) satTape));
+                v.push_back (sp (b0, ids::drive, 1.0f));
+                v.push_back (sp (b1, ids::pre, 16.84f));
+                v.push_back (sp (b1, ids::post, -6.75f));
+                v.push_back (sp (b1, ids::width, 116.8f));
+                v.push_back (sp (b1, ids::attack, 37.13f));
+                v.push_back (sp (b1, ids::release, 153.84f));
+                v.push_back (sp (b1, ids::relLaw, (float) ids::accelRelease (3)));
+                v.push_back (sp (b2, ids::pre, 14.59f));
+                v.push_back (sp (b2, ids::post, -9.7f));
+                v.push_back (sp (b2, ids::attack, 1.68f));
+                v.push_back (sp (b2, ids::release, 85.53f));
+                v.push_back (sp (b2, ids::relLaw, (float) ids::accelRelease (3)));
+                v.push_back (sp (masterStage, ids::post, -1.0f));
+                v.push_back (sp (masterStage, ids::lookahead, 3.0f));
+                v.push_back (sp (masterStage, ids::attack, 0.2f));
+                v.push_back (sp (masterStage, ids::release, 85.53f));
+                v.push_back (sp (masterStage, ids::relLaw, (float) ids::accelRelease (3)));
+                list.push_back ({ "Linear Punchy Drums", v,
+                                  { { b0, level, 0, "lin;0,0,0,0;0.7,0.7,0,0.4702;2,1,0,0" },
+                                    { b1, level, 0, "lin;0,0,0,0.2557;1,0.8,0,0;2,1,0,0" },
+                                    { b2, level, 0, "lin;0,0,0,0;0.7,0.7,0,0.4702;2,1,0,0" },
+                                    { masterStage, level, 0, "lin;0,0,0,0;1,1,0,0;2,1,0,0" } } });
+            }
+
+            // Maximus's "Punchy drums 2": slower attacks, more body.
+            // Settings from its preset file, corrections fitted to the renders (per-band loudness within ~1.2 dB).
+            {
+                Values v;
+                linearBands (v);
+                v.push_back (sp (b0, ids::pre, 14.77f));
+                v.push_back (sp (b0, ids::post, -3.03f));
+                v.push_back (sp (b0, ids::width, 63.2f));
+                v.push_back (sp (b0, ids::attack, 37.71f));
+                v.push_back (sp (b0, ids::release, 173.84f));
+                v.push_back (sp (b0, ids::relLaw, (float) ids::accelRelease (3)));
+                v.push_back (sp (b1, ids::pre, 18.09f));
+                v.push_back (sp (b1, ids::post, -6.0f));
+                v.push_back (sp (b1, ids::width, 116.8f));
+                v.push_back (sp (b1, ids::attack, 96.38f));
+                v.push_back (sp (b1, ids::release, 291.36f));
+                v.push_back (sp (b1, ids::relLaw, (float) ids::accelRelease (3)));
+                v.push_back (sp (b1, ids::release2, 19.73f));
+                v.push_back (sp (b2, ids::pre, 12.09f));
+                v.push_back (sp (b2, ids::post, -7.7f));
+                v.push_back (sp (b2, ids::attack, 28.93f));
+                v.push_back (sp (b2, ids::release, 85.53f));
+                v.push_back (sp (b2, ids::relLaw, (float) ids::accelRelease (3)));
+                v.push_back (sp (b2, ids::release2, 14.69f));
+                v.push_back (sp (masterStage, ids::post, -1.0f));
+                v.push_back (sp (masterStage, ids::lookahead, 3.0f));
+                v.push_back (sp (masterStage, ids::attack, 0.2f));
+                v.push_back (sp (masterStage, ids::release, 85.53f));
+                v.push_back (sp (masterStage, ids::relLaw, (float) ids::accelRelease (3)));
+                list.push_back ({ "Linear Punchy Drums 2", v,
+                                  { { b0, level, 0, "lin;0,0,0,0;0.7,0.7,0,0.2707;2,1,0,0" },
+                                    { b1, level, 0, "lin;0,0,0,0.1472;1,0.8,0,0;2,1,0,0" },
+                                    { b2, level, 0, "lin;0,0,0,0;0.7,0.7,0,0.2707;2,1,0,0" },
+                                    { masterStage, level, 0, "lin;0,0,0,0;1,1,0,0.1662;2,1.2,0,0" } } });
+            }
+
+            // Maximus's "Max loudness 2" (mono lows, wider mids).
+            // Settings from its preset file, corrections fitted to the renders (per-band loudness within ~1.0 dB).
+            {
+                Values v;
+                linearBands (v);
+                v.push_back (sp (b0, ids::pre, 6.53f));
+                v.push_back (sp (b0, ids::post, 4.5f));
+                v.push_back (sp (b0, ids::width, 0.0f));
+                v.push_back (sp (b0, ids::lookahead, 2.0f));
+                v.push_back (sp (b0, ids::attack, 2.0f));
+                v.push_back (sp (b0, ids::attLaw, 2.0f));
+                v.push_back (sp (b0, ids::release, 137.48f));
+                v.push_back (sp (b0, ids::relLaw, (float) ids::accelRelease (3)));
+                v.push_back (sp (b1, ids::pre, 5.68f));
+                v.push_back (sp (b1, ids::width, 138.4f));
+                v.push_back (sp (b1, ids::lookahead, 2.0f));
+                v.push_back (sp (b1, ids::attack, 2.0f));
+                v.push_back (sp (b1, ids::attLaw, 2.0f));
+                v.push_back (sp (b1, ids::release, 85.53f));
+                v.push_back (sp (b1, ids::relLaw, (float) ids::accelRelease (3)));
+                v.push_back (sp (b2, ids::pre, 6.87f));
+                v.push_back (sp (b2, ids::post, 1.23f));
+                v.push_back (sp (b2, ids::lookahead, 2.0f));
+                v.push_back (sp (b2, ids::attack, 2.0f));
+                v.push_back (sp (b2, ids::attLaw, 2.0f));
+                v.push_back (sp (b2, ids::release, 85.53f));
+                v.push_back (sp (b2, ids::relLaw, (float) ids::accelRelease (3)));
+                v.push_back (sp (masterStage, ids::post, -0.25f));
+                v.push_back (sp (masterStage, ids::lookahead, 3.0f));
+                v.push_back (sp (masterStage, ids::attack, 0.2f));
+                v.push_back (sp (masterStage, ids::release, 85.53f));
+                v.push_back (sp (masterStage, ids::relLaw, (float) ids::accelRelease (3)));
+                v.push_back (sp (masterStage, ids::release2, 60.16f));
                 list.push_back ({ "Linear Max Loudness", v,
-                                  { { b0, level, 0, "lin;0,0,0,0;0.964,1.036,0,0;2,1.036" },
-                                    { b1, level, 0, "lin;0,0,0,0;0.81,0.8125,0,0.36;2,1.232" },
-                                    { b2, level, 0, "lin;0,0,0,0.07;0.991,1,0,0;2,1" },
-                                    { masterStage, level, 0, "lin;0,0,0,0;0.964,1.027,0,0.22;2,1.241" } } });
+                                  { { b0, level, 0, "lin;0,0,0,0.1505;1,1,0,0;2,1,0,0" },
+                                    { b1, level, 0, "lin;0,0,0,0;0.8,0.8,0,0.4085;2,1.2,0,0" },
+                                    { b2, level, 0, "lin;0,0,0,0.301;1,1,0,0;2,1,0,0" },
+                                    { masterStage, level, 0, "lin;0,0,0,0;1,1,0,0.1828;2,1.2,0,0" } } });
             }
 
             // Any hit on the sidechain ducks lows deeply, mids a little and the top barely.
