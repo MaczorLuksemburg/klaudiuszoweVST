@@ -1,4 +1,4 @@
-## Maki plugins: free VST3 / AU plugins
+## Maki Plugins: free VST3 / AU plugins
 
 Download the zip for your system below, then follow the steps for it.
 

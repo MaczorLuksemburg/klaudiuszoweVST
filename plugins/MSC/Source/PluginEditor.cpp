@@ -53,7 +53,7 @@ void MscMainView::paint (juce::Graphics& g)
 
     g.setColour (pal.textDim);
     g.setFont (klaud::font (11.0f));
-    g.drawText ("Maki plugins", getWidth() - 140, 22, 118, 18, juce::Justification::centredRight, false);
+    g.drawText ("Maki Plugins", getWidth() - 140, 22, 118, 18, juce::Justification::centredRight, false);
 
     g.setColour (juce::Colours::white.withAlpha (0.05f));
     g.fillRect (0, headerHeight - 1, getWidth(), 1);

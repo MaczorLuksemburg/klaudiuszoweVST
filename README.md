@@ -1,6 +1,6 @@
 # klaudiuszoweVST
 
-AI-made audio plugins by **Maki plugins**, for testing and fun. Free, open source, VST3 on Windows, macOS
+AI-made audio plugins by **Maki Plugins**, for testing and fun. Free, open source, VST3 on Windows, macOS
 and Linux, plus AU on macOS for Logic Pro.
 
 | Plugin | What it does |
