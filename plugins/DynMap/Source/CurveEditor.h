@@ -6,6 +6,7 @@ namespace dynmap::ui
 {
     // Draws and edits one stage's level or transient curve.
     //  - drag points; double-click empty space to add one, double-click a point to delete it
+    //    (an end point, which can't go, moves back to where the neutral curve has it)
     //  - drag the small handle in the middle of a segment to bend it (or set steps/waves)
     //  - right-click a segment for its shape, right-click empty space for curve presets
     //  - a live dot shows where the signal sits on the curve

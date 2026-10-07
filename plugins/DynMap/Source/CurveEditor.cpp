@@ -55,11 +55,11 @@ CurveEditor::CurveEditor (DynMapProcessor& p, CurveKind k)
 {
     setTooltip (kind == CurveKind::level
                     ? "Level map: detected input level (across) to output level (up). Drag points (hold Shift or switch on the grid button to snap to 3 dB), "
-                      "double-click to add or delete, drag the small handles to bend a segment, right-click for shapes and presets. "
+                      "double-click to add or delete (an end point resets), drag the small handles to bend a segment, right-click for shapes and presets. "
                       "Points on the bottom edge mean silence; the dotted lines mark 0 dBFS (the graph goes on to +12 dB)."
                     : "Transient map: how far the signal jumps above its recent level (right, attacks) or falls below it (left, tails) "
                       "to a gain (up = boost). Drag points (hold Shift or switch on the grid button to snap to 3 dB), double-click "
-                      "to add or delete, right-click for shapes and presets.");
+                      "to add or delete (an end point resets), right-click for shapes and presets.");
     setRepaintsOnMouseActivity (false);
     setWantsKeyboardFocus (true);   // so Ctrl+Z reaches the editor after a click here
     startTimerHz (30);
@@ -608,7 +608,13 @@ void CurveEditor::mouseDoubleClick (const juce::MouseEvent& e)
 {
     const auto h = hitTest (e.position);
 
-    if (h.type == Hit::point)
+    if (h.type == Hit::point && (h.index == 0 || h.index == curve.getNumPoints() - 1))
+    {
+        // End points can't be removed: put them back where the neutral curve has them instead.
+        const float x = curve.getPoints()[(size_t) h.index].x;
+        curve.movePoint (h.index, x, Curve (kind, curve.isLinear()).evaluate (x));
+    }
+    else if (h.type == Hit::point)
         curve.removePoint (h.index);
     else if (h.type == Hit::handle && ! isNearlyFlat (h.index))
         curve.setTension (h.index, 0.0f);

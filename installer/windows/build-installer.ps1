@@ -1,9 +1,9 @@
 # Builds the Windows installer (installer\windows\output\MakiPlugins-Setup-<version>.exe) from built plugins.
-#   .\build-installer.ps1 [-PluginDir "C:\gen plugins"] [-Version 1.0.0]
+#   .\build-installer.ps1 [-PluginDir "C:\gen plugins"] [-Version 1.0.2]
 # Needs Inno Setup 6 (https://jrsoftware.org/isinfo.php, or: winget install JRSoftware.InnoSetup).
 param (
     [string] $PluginDir = "C:\gen plugins",
-    [string] $Version = "1.0.0"
+    [string] $Version = "1.0.2"
 )
 
 $candidates = @(@(
