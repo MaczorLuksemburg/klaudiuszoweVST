@@ -502,7 +502,20 @@ void DetectorStyleBank::save (int slot, int stage, const juce::String& name)
     auto s = read (stage);
     s.name = name.trim().isNotEmpty() ? name.trim().substring (0, 24) : "Custom " + juce::String (slot + 1);
     custom[(size_t) slot] = s;
+    write();
+}
 
+void DetectorStyleBank::clear (const juce::Array<int>& slots)
+{
+    load();   // keep what other instances saved in the meantime
+    for (int slot : slots)
+        if (juce::isPositiveAndBelow (slot, numCustom))
+            custom[(size_t) slot].reset();
+    write();
+}
+
+void DetectorStyleBank::write()
+{
     juce::XmlElement xml ("DETECTORSTYLES");
     for (int i = 0; i < numCustom; ++i)
         if (const auto& c = custom[(size_t) i])
@@ -663,7 +676,12 @@ DetectorStyleMenu::DetectorStyleMenu (DetectorStyleBank& b, std::function<int()>
     list.onChange = [this]
     {
         const int id = list.getSelectedId();
-        if (id > saveIdBase)
+        if (id == resetId)
+        {
+            askReset();
+            shown = -2;
+        }
+        else if (id > saveIdBase)
         {
             askName (id - saveIdBase - 1);
             shown = -2;   // show the match again until a name is chosen
@@ -724,6 +742,14 @@ void DetectorStyleMenu::rebuild()
                       saveIdBase + slot + 1);
     }
 
+    bool anySaved = false;
+    for (int slot = 0; slot < DetectorStyleBank::numCustom; ++slot)
+        anySaved = anySaved || ! bank.isEmpty (bank.indexOfSlot (slot));
+
+    list.addSeparator();
+    list.addItem ("Reset custom detection styles...", resetId);
+    list.setItemEnabled (resetId, anySaved);
+
     shown = -2;
 }
 
@@ -783,6 +809,68 @@ void DetectorStyleMenu::askName (int slot)
 
         if (result == 1)
             safeThis->bank.save (slot, safeThis->getStage(), name);
+
+        safeThis->shown = -2;
+        safeThis->timerCallback();
+    }), false);
+}
+
+// Asks which custom slots to empty: nothing is ticked at first, and Delete only works once something is.
+void DetectorStyleMenu::askReset()
+{
+    resetDialog = std::make_unique<juce::AlertWindow> ("Reset custom detection styles",
+                                                       "Tick the styles to delete. Their slots go back to empty, in every DynMap "
+                                                       "on this computer. This can't be undone.",
+                                                       juce::MessageBoxIconType::NoIcon, this);
+    resetDialog->setLookAndFeel (&getLookAndFeel());
+    resetDialog->addButton ("Delete", 1);
+    resetDialog->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+
+    auto* deleteButton = resetDialog->getButton ("Delete");
+    deleteButton->setEnabled (false);
+
+    const auto& pal = palette();
+    resetChoices.clear();
+
+    for (int slot = 0; slot < DetectorStyleBank::numCustom; ++slot)
+    {
+        const int index = bank.indexOfSlot (slot);
+        const juce::String slotName = "Custom " + juce::String (slot + 1);
+        const bool empty = bank.isEmpty (index);
+
+        // Unnamed: the alert window would print a component's name above it as a label.
+        auto* choice = resetChoices.add (new juce::ToggleButton());
+        choice->setButtonText (empty ? slotName + " (empty)" : "\"" + bank.nameOf (index) + "\" (" + slotName + ")");
+        choice->setSize (300, 26);
+        choice->setEnabled (! empty);
+        choice->setColour (juce::ToggleButton::textColourId, pal.text);
+        choice->setColour (juce::ToggleButton::tickColourId, pal.accent);
+        choice->setColour (juce::ToggleButton::tickDisabledColourId, pal.textDim);
+        choice->onClick = [this, deleteButton]
+        {
+            bool any = false;
+            for (auto* c : resetChoices)
+                any = any || c->getToggleState();
+            deleteButton->setEnabled (any);
+        };
+        resetDialog->addCustomComponent (choice);
+    }
+
+    juce::Component::SafePointer<DetectorStyleMenu> safeThis (this);
+    resetDialog->enterModalState (true, juce::ModalCallbackFunction::create ([safeThis] (int result)
+    {
+        if (safeThis == nullptr || safeThis->resetDialog == nullptr)
+            return;
+
+        juce::Array<int> slots;
+        for (int slot = 0; slot < safeThis->resetChoices.size(); ++slot)
+            if (safeThis->resetChoices[slot]->getToggleState())
+                slots.add (slot);
+
+        safeThis->resetDialog->setVisible (false);
+
+        if (result == 1 && ! slots.isEmpty())
+            safeThis->bank.clear (slots);
 
         safeThis->shown = -2;
         safeThis->timerCallback();

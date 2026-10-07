@@ -40,6 +40,8 @@ DynMapMainView::DynMapMainView (DynMapProcessor& p, klaud::LookAndFeel& lookAndF
       history (p, [this] { return selectedStage; }, [this] (int s) { selectStage (s); }),
       levelEditor (p, CurveKind::level),
       transientEditor (p, CurveKind::transient),
+      levelSnap (p),
+      transientSnap (p),
       styleBank (p),
       detectorStyles (p, styleBank),
       styleMenu (styleBank, [this] { return selectedStage; }),
@@ -114,6 +116,7 @@ DynMapMainView::DynMapMainView (DynMapProcessor& p, klaud::LookAndFeel& lookAndF
 
     for (auto* c : std::initializer_list<juce::Component*> {
              &presetBar, &quality, &phase, &inputTab, &masterTab, &sidechainTab, &bandDisplay, &levelEditor, &transientEditor,
+             &levelSnap, &transientSnap,
              &mode, &bypass, &solo, &mute, &pre, &post, &mix, &width, &satType, &satPos, &drive,
              &attack, &hold, &release, &relShape, &rms, &link, &trTime, &smooth, &maxBoost, &maxCut, &scFilter,
              &release2, &attLaw, &lowCut,
@@ -218,6 +221,8 @@ void DynMapMainView::updateStageControls()
     styleMenu.refresh();
     advanced.setColour (juce::TextButton::buttonOnColourId, stageAccent);
     linearScale.setColour (juce::TextButton::buttonOnColourId, stageAccent);
+    levelSnap.setColour (juce::TextButton::buttonOnColourId, stageAccent);
+    transientSnap.setColour (juce::TextButton::buttonOnColourId, stageAccent);
     linearScale.setToggleState (levelEditor.isLinear(), juce::dontSendNotification);
     transientEditor.setStage (stage, stageAccent);
 
@@ -443,6 +448,8 @@ void DynMapMainView::resized()
         mode.setBounds (header.removeFromRight (112).withTrimmedTop (1));
         header.removeFromRight (6);
         linearScale.setBounds (header.removeFromRight (58).reduced (0, 2));
+        header.removeFromRight (6);
+        levelSnap.setBounds (header.removeFromRight (26).reduced (0, 2));
         area.removeFromTop (6);
         levelEditor.setBounds (area.withSizeKeepingCentre (area.getWidth(), juce::jmin (area.getHeight(), area.getWidth())));
     }
@@ -450,7 +457,8 @@ void DynMapMainView::resized()
     // Transient map.
     {
         auto area = transientPanel.reduced (10, 6);
-        area.removeFromTop (30);
+        auto header = area.removeFromTop (30);
+        transientSnap.setBounds (header.removeFromTop (26).removeFromRight (26).reduced (0, 2));
         transientEditor.setBounds (area);
     }
 

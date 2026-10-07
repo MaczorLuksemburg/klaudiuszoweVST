@@ -9,7 +9,9 @@ namespace
 {
     constexpr float pointRadius = 4.5f, handleRadius = 3.0f;
     constexpr float gridStep = 6.0f;                 // grid lines every 6 dB (labels every 12)
-    constexpr float snapStep = gridStep * 0.5f;      // Shift snaps points to half the grid
+    constexpr float snapStep = gridStep * 0.5f;      // snapping uses half the grid
+    const juce::Identifier snapId { "snapToGrid" };  // UI property in the plugin state
+    constexpr int snapItemId = 400;                  // in both right-click menus
 
     // Mirrors the curve's gain: compression becomes expansion, a boost becomes a cut.
     Curve invertedGains (const Curve& curve)
@@ -52,12 +54,12 @@ CurveEditor::CurveEditor (DynMapProcessor& p, CurveKind k)
     : processor (p), kind (k), range (curveRange (k)), accent (palette().accent), curve (k)
 {
     setTooltip (kind == CurveKind::level
-                    ? "Level map: detected input level (across) to output level (up). Drag points (hold Shift to snap to 3 dB), "
+                    ? "Level map: detected input level (across) to output level (up). Drag points (hold Shift or switch on the grid button to snap to 3 dB), "
                       "double-click to add or delete, drag the small handles to bend a segment, right-click for shapes and presets. "
                       "Points on the bottom edge mean silence; the dotted lines mark 0 dBFS (the graph goes on to +12 dB)."
                     : "Transient map: how far the signal jumps above its recent level (right, attacks) or falls below it (left, tails) "
-                      "to a gain (up = boost). Drag points (hold Shift to snap to 3 dB), double-click to add or delete, "
-                      "right-click for shapes and presets.");
+                      "to a gain (up = boost). Drag points (hold Shift or switch on the grid button to snap to 3 dB), double-click "
+                      "to add or delete, right-click for shapes and presets.");
     setRepaintsOnMouseActivity (false);
     setWantsKeyboardFocus (true);   // so Ctrl+Z reaches the editor after a click here
     startTimerHz (30);
@@ -176,6 +178,33 @@ float CurveEditor::snap (float v) const
     return std::pow (10.0f, std::round (20.0f * std::log10 (v) / snapStep) * snapStep / 20.0f);
 }
 
+bool CurveEditor::isSnapOn (DynMapProcessor& p)
+{
+    return (bool) p.apvts.state.getProperty (snapId, false);
+}
+
+void CurveEditor::setSnapOn (DynMapProcessor& p, bool on)
+{
+    p.apvts.state.setProperty (snapId, on, nullptr);
+}
+
+bool CurveEditor::snapping (const juce::ModifierKeys& mods) const
+{
+    return mods.isShiftDown() || isSnapOn (processor);
+}
+
+// The snap steps are drawn while snapping is on, or while Shift is held over this map.
+bool CurveEditor::showsSnapGrid() const
+{
+    return isSnapOn (processor) || (isMouseOverOrDragging() && juce::ModifierKeys::getCurrentModifiersRealtime().isShiftDown());
+}
+
+void CurveEditor::addSnapItem (juce::PopupMenu& menu) const
+{
+    menu.addSeparator();
+    menu.addItem (snapItemId, "Snap to grid (Shift snaps too)", true, isSnapOn (processor));
+}
+
 juce::String CurveEditor::levelText (float v) const
 {
     if (! curve.isLinear())
@@ -217,7 +246,9 @@ void CurveEditor::timerCallback()
         trailHead = (trailHead + 1) % trailLength;
     }
 
-    if (live || wasLive)
+    const bool snapNow = showsSnapGrid();
+
+    if (live || wasLive || snapNow != snapShown)
         repaint();
 }
 
@@ -229,9 +260,35 @@ void CurveEditor::paint (juce::Graphics& g)
     g.setColour (pal.background.withAlpha (0.6f));
     g.fillRoundedRectangle (a.expanded (2.0f), 4.0f);
 
-    // Grid: every 6 dB on dB axes; dB marks at their amplitude on linear axes.
+    // Grid: every 6 dB on dB axes; dB marks at their amplitude on linear axes. While snapping, the grid
+    // is brighter and shows the 3 dB snap steps too.
     const float step = gridStep;
+    snapShown = showsSnapGrid();
+    const float gridBoost = snapShown ? 1.8f : 1.0f;
     g.setFont (klaud::font (9.5f));
+
+    if (snapShown)
+    {
+        g.setColour (juce::Colours::white.withAlpha (0.035f));
+
+        if (curve.isLinear())
+        {
+            for (float db = -30.0f; db <= 6.01f; db += snapStep)
+            {
+                const float v = std::pow (10.0f, db / 20.0f);
+                const auto pos = toScreen (v, v);
+                g.drawVerticalLine ((int) pos.x, a.getY(), a.getBottom());
+                g.drawHorizontalLine ((int) pos.y, a.getX(), a.getRight());
+            }
+        }
+        else
+        {
+            for (float v = range.xMin + snapStep; v < range.xMax; v += step)
+                g.drawVerticalLine ((int) toScreen (v, range.yMin).x, a.getY(), a.getBottom());
+            for (float v = range.yMin + snapStep; v < range.yMax; v += step)
+                g.drawHorizontalLine ((int) toScreen (range.xMin, v).y, a.getX(), a.getRight());
+        }
+    }
 
     if (curve.isLinear())
     {
@@ -240,7 +297,7 @@ void CurveEditor::paint (juce::Graphics& g)
             const float v = std::pow (10.0f, db / 20.0f);
             const auto pos = toScreen (v, v);
             const bool labelled = isLabelledMark (db);
-            g.setColour (juce::Colours::white.withAlpha (labelled ? 0.07f : 0.035f));
+            g.setColour (juce::Colours::white.withAlpha ((labelled ? 0.07f : 0.035f) * gridBoost));
             g.drawVerticalLine ((int) pos.x, a.getY(), a.getBottom());
             g.drawHorizontalLine ((int) pos.y, a.getX(), a.getRight());
 
@@ -261,7 +318,7 @@ void CurveEditor::paint (juce::Graphics& g)
     {
         const bool major = std::fmod (std::abs (v), 12.0f) < 0.01f;
         const float x = toScreen (v, range.yMin).x;
-        g.setColour (juce::Colours::white.withAlpha (major ? 0.07f : 0.03f));
+        g.setColour (juce::Colours::white.withAlpha ((major ? 0.07f : 0.03f) * gridBoost));
         g.drawVerticalLine ((int) x, a.getY(), a.getBottom());
 
         if (major)
@@ -275,7 +332,7 @@ void CurveEditor::paint (juce::Graphics& g)
     {
         const bool major = std::fmod (std::abs (v), 12.0f) < 0.01f;
         const float y = toScreen (range.xMin, v).y;
-        g.setColour (juce::Colours::white.withAlpha (major ? 0.07f : 0.03f));
+        g.setColour (juce::Colours::white.withAlpha ((major ? 0.07f : 0.03f) * gridBoost));
         g.drawHorizontalLine ((int) y, a.getX(), a.getRight());
 
         if (major)
@@ -519,7 +576,7 @@ void CurveEditor::mouseDrag (const juce::MouseEvent& e)
     {
         auto p = fromScreen (e.position);
 
-        if (e.mods.isShiftDown())
+        if (snapping (e.mods))
             p = { snap (p.x), snap (p.y) };
 
         curve.movePoint (drag.index, p.x, p.y);
@@ -557,7 +614,9 @@ void CurveEditor::mouseDoubleClick (const juce::MouseEvent& e)
         curve.setTension (h.index, 0.0f);
     else    // empty space, or the handle of a (nearly) flat segment: add a point there
     {
-        const auto p = fromScreen (e.position);
+        auto p = fromScreen (e.position);
+        if (snapping (e.mods))
+            p = { snap (p.x), snap (p.y) };
         curve.addPoint (p.x, p.y);
     }
 
@@ -579,6 +638,7 @@ void CurveEditor::showSegmentMenu (int segment)
     menu.addSeparator();
     menu.addItem (100, "Reset bend");
     menu.addItem (101, "Delete point", segment + 1 < curve.getNumPoints() - 1);
+    addSnapItem (menu);
 
     juce::Component::SafePointer<CurveEditor> safeThis (this);
     menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition(), [safeThis, segment] (int result)
@@ -587,6 +647,13 @@ void CurveEditor::showSegmentMenu (int segment)
             return;
 
         auto& self = *safeThis;
+        if (result == snapItemId)
+        {
+            setSnapOn (self.processor, ! isSnapOn (self.processor));
+            self.repaint();
+            return;
+        }
+
         if (result <= numSegmentTypes)
             self.curve.setSegment (segment, (Segment) (result - 1));
         else if (result == 100)
@@ -617,6 +684,7 @@ void CurveEditor::showCurveMenu()
         menu.addItem (303, "Linear scale", true, curve.isLinear());
     menu.addItem (301, "Copy curve");
     menu.addItem (302, "Paste curve", clipboardFull[k]);
+    addSnapItem (menu);
 
     juce::Component::SafePointer<CurveEditor> safeThis (this);
     menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition(), [safeThis, k] (int result)
@@ -625,6 +693,13 @@ void CurveEditor::showCurveMenu()
             return;
 
         auto& self = *safeThis;
+
+        if (result == snapItemId)
+        {
+            setSnapOn (self.processor, ! isSnapOn (self.processor));
+            self.repaint();
+            return;
+        }
 
         if (result >= 1 && result < 200)
             self.load (Curve::preset (self.kind, result - 1));
@@ -649,5 +724,49 @@ void CurveEditor::showCurveMenu()
 
         self.commit();
     });
+}
+
+//==============================================================================
+GridSnapButton::GridSnapButton (DynMapProcessor& p) : juce::Button ("Snap to grid"), processor (p)
+{
+    setTooltip ("Snap to grid: dragged and added points land on 3 dB steps in both maps. "
+                "Holding Shift always snaps, whether this is on or off.");
+    setToggleState (CurveEditor::isSnapOn (processor), juce::dontSendNotification);
+    startTimerHz (8);
+}
+
+void GridSnapButton::clicked()
+{
+    CurveEditor::setSnapOn (processor, ! CurveEditor::isSnapOn (processor));
+    timerCallback();
+}
+
+void GridSnapButton::timerCallback()
+{
+    // Follows the state (the other map's button, the right-click menus, a project load).
+    const bool on = CurveEditor::isSnapOn (processor);
+    if (on != getToggleState())
+        setToggleState (on, juce::dontSendNotification);
+}
+
+void GridSnapButton::paintButton (juce::Graphics& g, bool highlighted, bool down)
+{
+    getLookAndFeel().drawButtonBackground (g, *this, {}, highlighted, down);
+
+    // A small 3 x 3 grid with a dot on one crossing: a point sitting on the grid.
+    const auto& pal = palette();
+    const auto icon = getLocalBounds().toFloat().withSizeKeepingCentre (12.0f, 12.0f);
+    g.setColour (getToggleState() ? pal.text : pal.textDim.withAlpha (highlighted ? 1.0f : 0.8f));
+    g.drawRect (icon, 1.0f);
+
+    for (int i = 1; i < 3; ++i)
+    {
+        const float t = (float) i / 3.0f;
+        g.fillRect (icon.getX() + t * icon.getWidth() - 0.5f, icon.getY(), 1.0f, icon.getHeight());
+        g.fillRect (icon.getX(), icon.getY() + t * icon.getHeight() - 0.5f, icon.getWidth(), 1.0f);
+    }
+
+    g.fillEllipse (juce::Rectangle<float> (5.0f, 5.0f).withCentre ({ icon.getX() + icon.getWidth() * 2.0f / 3.0f,
+                                                                     icon.getY() + icon.getHeight() / 3.0f }));
 }
 }

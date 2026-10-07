@@ -9,6 +9,7 @@ namespace dynmap::ui
     //  - drag the small handle in the middle of a segment to bend it (or set steps/waves)
     //  - right-click a segment for its shape, right-click empty space for curve presets
     //  - a live dot shows where the signal sits on the curve
+    //  - points snap to 3 dB steps while Shift is held or grid snapping is on (shared by both maps)
     class CurveEditor : public juce::Component, public juce::SettableTooltipClient, private juce::Timer
     {
     public:
@@ -30,6 +31,10 @@ namespace dynmap::ui
 
         static juce::String segmentName (Segment);
 
+        // Grid snapping (a UI setting saved with the project, shared by the level and transient maps).
+        static bool isSnapOn (DynMapProcessor&);
+        static void setSnapOn (DynMapProcessor&, bool);
+
     private:
         struct Hit { enum Type { none, point, handle } type = none; int index = -1; };
 
@@ -44,6 +49,9 @@ namespace dynmap::ui
         void load (const Curve&);
         float curveXForDb (float db) const;
         float snap (float v) const;
+        bool snapping (const juce::ModifierKeys&) const;   // Shift always snaps; otherwise the grid button decides
+        bool showsSnapGrid() const;
+        void addSnapItem (juce::PopupMenu&) const;
         juce::String levelText (float v) const;
         void showSegmentMenu (int segment);
         void showCurveMenu();
@@ -68,8 +76,22 @@ namespace dynmap::ui
         int trailHead = 0;
         bool live = false;
         float liveX = 0.0f, gainDb = 0.0f;
+        bool snapShown = false;
 
         static Curve clipboard[2];
         static bool clipboardFull[2];
+    };
+
+    // The grid snapping switch in a map's header: a small grid icon, lit while snapping is on.
+    class GridSnapButton : public juce::Button, private juce::Timer
+    {
+    public:
+        explicit GridSnapButton (DynMapProcessor&);
+        void paintButton (juce::Graphics&, bool highlighted, bool down) override;
+        void clicked() override;
+
+    private:
+        void timerCallback() override;
+        DynMapProcessor& processor;
     };
 }

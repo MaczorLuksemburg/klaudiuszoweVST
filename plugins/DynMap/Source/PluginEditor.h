@@ -53,6 +53,7 @@ private:
 
     // Selected stage.
     dynmap::ui::CurveEditor levelEditor, transientEditor;
+    dynmap::ui::GridSnapButton levelSnap, transientSnap;   // both switch the same grid snapping
     dynmap::ui::Choice mode { "" };
     dynmap::ui::Toggle bypass { "Bypass" }, solo { "S" }, mute { "M" };
     juce::TextButton linearScale { "Linear" };

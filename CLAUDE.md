@@ -83,7 +83,11 @@ AI-made VST plugins for testing and fun.
 - Detector styles (`DetectorStyleBank` in Components): 12 built in + Custom 1-3, saved to
   `<user app data>/Maki plugins/DynMap/DetectorStyles.xml` and re-read by every instance when the file changes.
   Simple view: style grid + MAX BOOST/MAX CUT/DET HP (styles never set those); Advanced: every knob, with a style
-  menu (arrows, apply, "Save to ... (Custom n)" then a name prompt) in the panel header.
+  menu (arrows, apply, "Save to ... (Custom n)" then a name prompt, "Reset custom detection styles..." with a
+  tick-list confirm dialog) in the panel header.
+- Grid snapping (3 dB steps): Shift always snaps; the grid icon in each map's header (and the last item of the
+  curve right-click menus) switches snapping on for mouse-only use. One UI state property `snapToGrid`, kept
+  across preset loads like the other `uiProperties`.
 - Curves are not parameters: `CurveBank` keeps them in the state tree child `CURVES` and hands baked tables
   to the audio thread through `CurveSlot` (spin lock, try-lock on the audio side).
 - Latency is reported exactly (lookahead, oversampling, linear phase, limiter) and changes only with those settings.

@@ -143,6 +143,7 @@ namespace dynmap::ui
         int matching (int stage) const;   // -1 when no style matches
         void apply (int stage, int index);
         void save (int slot, int stage, const juce::String& name);
+        void clear (const juce::Array<int>& slots);   // back to empty slots
 
         int getVersion() const { return version; }   // changes whenever the custom slots do
 
@@ -152,6 +153,7 @@ namespace dynmap::ui
     private:
         void timerCallback() override;
         void load();
+        void write();
         const DetectorStyle* get (int index) const;
         static juce::File& fileOverride() { static juce::File f; return f; }
         DetectorStyle read (int stage) const;
@@ -194,6 +196,7 @@ namespace dynmap::ui
         DetectorStyleMenu (DetectorStyleBank&, std::function<int()> getStage);
         void resized() override;
         void refresh();   // after the stage changed
+        void askReset();  // the "Reset custom detection styles" dialog (public for the tests)
 
     private:
         void timerCallback() override;
@@ -201,14 +204,15 @@ namespace dynmap::ui
         void step (int delta);
         void askName (int slot);
 
-        static constexpr int saveIdBase = 1000;
+        static constexpr int saveIdBase = 1000, resetId = 2000;
 
         DetectorStyleBank& bank;
         std::function<int()> getStage;
         juce::TextButton previous { "<" }, next { ">" };
         juce::ComboBox list;
         int bankVersion = -1, shown = -2;
-        std::unique_ptr<juce::AlertWindow> nameDialog;
+        std::unique_ptr<juce::AlertWindow> nameDialog, resetDialog;
+        juce::OwnedArray<juce::ToggleButton> resetChoices;
     };
 
     // Input/output peak meters.

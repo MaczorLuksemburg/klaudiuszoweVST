@@ -1009,6 +1009,14 @@ namespace
             expect (emptyBefore && other.nameOf (slot0) == "Smash" && other.matching (bandStage (0)) == slot0 && applied,
                     "custom detector style saves to a file, another instance reads and applies it");
 
+            bank.save (1, bandStage (0), "Keep");
+            bank.save (2, bandStage (0), "Gone too");
+            bank.clear ({ 0, 2 });
+            dynmap::ui::DetectorStyleBank third (p);
+            expect (third.isEmpty (slot0) && ! third.isEmpty (bank.indexOfSlot (1)) && third.nameOf (bank.indexOfSlot (1)) == "Keep"
+                        && third.isEmpty (bank.indexOfSlot (2)) && third.nameOf (bank.indexOfSlot (2)) == "Custom 3",
+                    "resetting custom detector styles empties only the chosen slots, for every instance");
+
             file.deleteFile();
             dynmap::ui::DetectorStyleBank::setFileForTesting ({});
             loadPresetNamed (p, "Init");
@@ -1182,6 +1190,70 @@ namespace
         editor.reset (p.createEditor());
         saveSnapshot (*editor, folder.getChildFile ("dynmap-advanced.png"));
         editor.reset();
+
+        // The reset dialog for custom detector styles: one entry per slot, Delete off until one is ticked.
+        {
+            const auto file = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("DynMapStylesTest.xml");
+            file.deleteFile();
+            dynmap::ui::DetectorStyleBank::setFileForTesting (file);
+            dynmap::ui::DetectorStyleBank bank (p);
+            bank.save (0, bandStage (0), "Smash");
+            bank.save (2, bandStage (0), "Glue mine");
+
+            editor.reset (p.createEditor());
+            dynmap::ui::DetectorStyleMenu* menu = nullptr;
+            std::function<void (juce::Component&)> find = [&] (juce::Component& c)
+            {
+                if (auto* m = dynamic_cast<dynmap::ui::DetectorStyleMenu*> (&c)) menu = m;
+                for (auto* child : c.getChildren()) find (*child);
+            };
+            find (*editor);
+
+            juce::AlertWindow* dialog = nullptr;
+            if (menu != nullptr)
+            {
+                menu->askReset();
+                for (int i = 0; i < juce::Desktop::getInstance().getNumComponents(); ++i)
+                    if (auto* w = dynamic_cast<juce::AlertWindow*> (juce::Desktop::getInstance().getComponent (i)))
+                        dialog = w;
+            }
+
+            int choices = 0, enabledChoices = 0;
+            if (dialog != nullptr)
+                for (auto* child : dialog->getChildren())
+                    if (auto* t = dynamic_cast<juce::ToggleButton*> (child))
+                    {
+                        ++choices;
+                        enabledChoices += t->isEnabled() ? 1 : 0;
+                    }
+
+            expect (dialog != nullptr && choices == 3 && enabledChoices == 2 && ! dialog->getButton ("Delete")->isEnabled(),
+                    "reset dialog lists the three custom slots (empty ones greyed out), Delete waits for a tick");
+
+            if (dialog != nullptr)
+            {
+                const auto image = dialog->createComponentSnapshot (dialog->getLocalBounds(), true, 2.0f);
+                juce::PNGImageFormat png;
+                const auto out = folder.getChildFile ("dynmap-reset-styles.png");
+                out.deleteFile();
+                if (auto stream = out.createOutputStream())
+                    png.writeImageToStream (image, *stream);
+                dialog->exitModalState (0);
+            }
+
+            editor.reset();
+            file.deleteFile();
+            dynmap::ui::DetectorStyleBank::setFileForTesting ({});
+        }
+
+        // Grid snapping on: both grid buttons lit, snap steps drawn; it survives a preset load.
+        dynmap::ui::CurveEditor::setSnapOn (p, true);
+        loadPresetNamed (p, "Linear Max Loudness");
+        expect (dynmap::ui::CurveEditor::isSnapOn (p), "grid snapping stays on when a preset loads");
+        editor.reset (p.createEditor());
+        saveSnapshot (*editor, folder.getChildFile ("dynmap-snap.png"));
+        editor.reset();
+        dynmap::ui::CurveEditor::setSnapOn (p, false);
 
         // Linear (Maximus-style) level map on the master stage.
         loadPresetNamed (p, "Lift & Limit Master");

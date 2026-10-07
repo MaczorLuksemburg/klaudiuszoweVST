@@ -6,7 +6,7 @@ namespace dynmap
 namespace
 {
     const juce::Identifier presetNameId { "presetName" };
-    const juce::StringArray uiProperties { "uiWidth", "selectedStage", "detectorAdvanced", "historyView" };   // kept when presets load
+    const juce::StringArray uiProperties { "uiWidth", "selectedStage", "detectorAdvanced", "historyView", "snapToGrid" };   // kept when presets load
     constexpr const char* fileExtension = ".dynmappreset";
 
     struct CurveDef
