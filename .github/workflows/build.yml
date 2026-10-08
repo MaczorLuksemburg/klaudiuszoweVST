@@ -42,7 +42,8 @@ jobs:
         run: cmake -S . -B build ${{ matrix.configure }}
 
       - name: Build
-        run: cmake --build build --config Release --parallel
+        # A fixed job count: unlimited make jobs ran a Linux runner out of memory once DynMap was added.
+        run: cmake --build build --config Release --parallel 4
 
       - name: Run tests
         shell: bash
@@ -59,7 +60,7 @@ jobs:
         run: |
           killall -9 AudioComponentRegistrar 2>/dev/null || true
           units=$(auval -a | awk '$3 == "Klau" { print $1, $2, $3 }')
-          if [ -z "$units" ]; then echo "No Maki plugins AUs registered"; auval -a; exit 1; fi
+          if [ -z "$units" ]; then echo "No Maki Plugins AUs registered"; auval -a; exit 1; fi
           failed=0
           while read -r type subtype manufacturer; do
             auval -v "$type" "$subtype" "$manufacturer" || failed=1
@@ -133,13 +134,13 @@ jobs:
             gh release upload "$tag" release/*.zip --clobber
 
             gh release view "$tag" --json body -q .body > notes.md
-            if ! grep -q "Maki plugins: free VST3" notes.md; then
+            if ! grep -q "Maki Plugins: free VST3" notes.md; then
               printf '\n\n' >> notes.md
               cat docs/INSTALL.md >> notes.md
               gh release edit "$tag" --notes-file notes.md
             fi
           else
             gh release create "$tag" release/*.zip \
-              --title "Maki plugins $tag" \
+              --title "Maki Plugins $tag" \
               --notes-file docs/INSTALL.md
           fi

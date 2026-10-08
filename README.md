@@ -1,10 +1,11 @@
 # klaudiuszoweVST
 
-AI-made audio plugins by **Maki plugins**, for testing and fun. Free, open source, VST3 on Windows, macOS
+AI-made audio plugins by **Maki Plugins**, for testing and fun. Free, open source, VST3 on Windows, macOS
 and Linux, plus AU on macOS for Logic Pro.
 
 | Plugin | What it does |
 |---|---|
+| **DynMap** | Multiband dynamics you draw: input/output level curves (Maximus style) and transient curves on up to 12 bands, saturation, clipper and true-peak limiter |
 | **MSC** | Multistage stereo control: band split, dynamic pan, Haas, Juno-style chorus, mid/side image |
 | **StereoScale** | Left / right / mid / side gain, 0–200 % |
 

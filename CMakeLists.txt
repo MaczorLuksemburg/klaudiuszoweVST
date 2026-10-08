@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Vendor name shown in DAWs and in each plugin header.
-set(KLAUD_COMPANY_NAME "Maki plugins")
+set(KLAUD_COMPANY_NAME "Maki Plugins")
 
 # Formats every plugin is built in. JUCE skips the ones the current OS can't build
 # (AU is macOS only), so Windows and Linux get VST3, macOS gets VST3 + AU for Logic.
@@ -41,3 +41,4 @@ endif()
 
 add_subdirectory(plugins/StereoScale)
 add_subdirectory(plugins/MSC)
+add_subdirectory(plugins/DynMap)
