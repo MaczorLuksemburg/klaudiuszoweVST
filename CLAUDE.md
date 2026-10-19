@@ -105,6 +105,46 @@ AI-made VST plugins for testing and fun.
   OTT presets are fitted on a music-like kit (drums, bass, pads, quiet passages, noise steps, vocal) as well as
   the sine kit, with 4-point monotone curves: tones alone overfit OTT's quirks.
 
+## WaveRef (plugins/WaveRef)
+- Reference A/B on the master bus: "Mix" = the DAW's signal, "Ref" = a loaded file (8 slots, WAV/AIFF/FLAC/OGG/MP3
+  through JUCE, decoded once and resampled to the host rate with a windowed sinc, kept in RAM as float: about 90 MB
+  per 4 minutes). Both are always analysed; A/B only chooses what is heard. Zero latency, bit-exact when A is selected
+  and monitoring is off (`WaveRef_Tests` checks it).
+- Switching is a 5 ms crossfade (short so a kick keeps its attack). `RefPlayer` plays the loop with voices: every jump
+  (loop wrap, restart, slot change) starts a new voice and fades the old one, so nothing clicks. B with an empty slot is silent.
+- Loudness: BS.1770 K-weighting + gating (`Loudness.h`). The ref loop's loudness comes from precomputed 100 ms energies
+  (`TrackData::subEnergies`), the mix's from `LiveMeter` (3 s ungated or 30 s gated, chosen by `lm_mode`). Match gain =
+  mix - ref loop, clamped to +-40 dB and applied through a 250 ms ramp, on top of the manual trim. Both analysers see the
+  matched level.
+- Spectrum (`Spectrum.h`): mid = (L+R)/2 and side = (L-R)/2 of mix and ref (4 curves). The audio thread only fills FIFOs
+  (and only while an editor is open); the editor's timer runs the FFTs. Levels are noise-normalised, so white noise of RMS 1
+  reads 0 dB at any FFT size. Curves are averaged in the power domain (speed = time constant), smoothed over 1/N octave
+  (mean power) or, with smoothing off, the loudest bin between neighbouring points, so a sine never falls between points.
+- Tracks reach the audio thread through `Slot::pending` -> `Slot::active` (raw pointers; the message thread keeps the owners
+  and frees old ones in `collectGarbage()` only 2 s after retiring them and once the audio thread has moved on).
+  Loop positions are kept in seconds in the state tree (`SLOTS`), the audio thread reads sample atomics.
+- Editor settings (colours, FFT size, speed, smoothing, tilt, range...) live in the state tree child `UI` and in
+  `<user app data>/Maki plugins/WaveRef/Settings.xml`, which new instances start from. Tests have no message loop: they
+  use `loadFileBlocking`, `hasLoadsInFlight()` + `drainFinishedLoads()` and `WaveRefEditor::refresh()` (what the timers do).
+- Parameter IDs in `Parameters.h` are saved in projects: never rename or remove them.
+- Reference transport (`ref_play`, `ref_mode`): Free = own transport (play/stop holds the position, 4 cue points per slot,
+  double-click on the waveform plays from there, space bar, Q W E R). A seek goes through `seekRequest`; `RefPlayer` keeps the
+  loop rules (before the loop it plays on into it, after it it runs to the file end and comes back; `inLoop` per voice).
+  Host time = reference time = host time + `sync_offset` (no looping, voices re-aimed when more than 64 samples off).
+  Beats = the reference's beat grid (`SlotInfo::bpm`/`downbeat`, seconds) follows the host's PPQ: ref time =
+  downbeat + (ppq + `beat_offset`) x 60 / refBpm + `nudge_ms`. At equal tempo it uses the plain player (exact), otherwise
+  `StretchPlayer` (Rubber Band R3, real-time, vendored through FetchContent as a single-file build; GPL v2+ so it is
+  AGPL-compatible): it is primed with the start pad / start delay at the expected position, bends its time ratio by up to
+  3 % to hold the position, and re-primes (cross-faded, 3 voices) when more than 40 ms off. Key lock off = varispeed. Measured: clicks
+  land within ~7 ms of the host's beats at +-25 % tempo; about 8-12 % of one core while stretching.
+- `BeatAnalysis.h`: tempo + bar start for a loaded file (onset curve, autocorrelation with a 125 BPM prior, fine tempo/phase
+  search on the whole file, grid nudged onto the real attacks). Fast tempos can come out at half speed: the UI has /2, x2, tap.
+- Monitoring order after the A/B crossfade: delta (mix - ref, matched) -> side or mono -> listening band. `side` wins over `mono`.
+  The listening band can be dragged out on the spectrum (create, resize the edges, move, double-click clears).
+- `Stereo.h`: smoothed correlation and width (side share) of mix and ref, plus decimated points for the goniometer.
+- Parameter and state keys added after v1 (`ref_play`, `ref_mode`, `sync_offset`, `beat_offset`, `nudge_ms`, `key_lock`,
+  `side`, `delta`; slot attributes `cue0-3`, `bpm`, `downbeat`) are saved: never rename or remove them.
+
 ## Targets
 - Systems: Windows, macOS, Linux. DAWs: Logic Pro, Cubase, FL Studio, Ableton Live, Reaper.
 - Formats: VST3 everywhere + AU on macOS (Logic). Pass `${KLAUD_PLUGIN_FORMATS}` and `${KLAUD_PLUGIN_COPY_ARGS}`

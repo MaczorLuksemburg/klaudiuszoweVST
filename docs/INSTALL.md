@@ -6,6 +6,7 @@ Download the zip for your system below, then follow the steps for it.
 |---|---|
 | **DynMap** | Multiband dynamics you draw: input/output level curves (Maximus style) and transient curves on up to 12 bands, saturation, clipper and true-peak limiter |
 | **MSC** | Multistage stereo control: band split, dynamic pan, Haas, Juno-style chorus, mid/side image |
+| **WaveRef** | Reference A/B switcher: 8 loaded tracks, loop, cues, loudness match, mid/side spectrum and stereo view of mix and reference, tempo and host sync with time-stretch, delta/side/mono listening, blind test |
 | **StereoScale** | Left / right / mid / side gain, 0–200 % |
 
 ### Windows (`MakiPlugins-Windows.zip`)
@@ -33,4 +34,4 @@ The first time, Windows may warn that the files are from the internet; that's ex
 2. Rescan plugins in your DAW (for example Reaper or Bitwig).
 
 ---
-Free and open source under the GNU AGPLv3. Source code: https://github.com/MaczorLuksemburg/klaudiuszoweVST
+Free and open source under the GNU AGPLv3. WaveRef includes the Rubber Band library (GPL v2 or later). Source code: https://github.com/MaczorLuksemburg/klaudiuszoweVST

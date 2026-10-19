@@ -7,6 +7,7 @@ and Linux, plus AU on macOS for Logic Pro.
 |---|---|
 | **DynMap** | Multiband dynamics you draw: input/output level curves (Maximus style) and transient curves on up to 12 bands, saturation, clipper and true-peak limiter |
 | **MSC** | Multistage stereo control: band split, dynamic pan, Haas, Juno-style chorus, mid/side image |
+| **WaveRef** | Reference A/B switcher: 8 loaded tracks, loop, cues, loudness match, mid/side spectrum and stereo view of mix and reference, tempo and host sync with time-stretch, delta/side/mono listening, blind test |
 | **StereoScale** | Left / right / mid / side gain, 0–200 % |
 
 ## Download
@@ -24,4 +25,4 @@ cmake --build build --config Release
 Pushing a tag like `v1.0.0` builds all three systems on GitHub and publishes a release with the zips.
 
 ## Licence
-[GNU AGPLv3](LICENSE). Built with [JUCE](https://juce.com), used under its AGPLv3 licence.
+[GNU AGPLv3](LICENSE). Built with [JUCE](https://juce.com), used under its AGPLv3 licence. WaveRef also contains the [Rubber Band](https://breakfastquay.com/rubberband/) time-stretching library (GPL v2 or later).
