@@ -1,9 +1,12 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(klaudiuszoweVST VERSION 0.1.0)
+project(klaudiuszoweVST VERSION 1.0.3)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Version of the whole pack: every plugin, the release tag (v1.0.3) and the installers use it.
+set(KLAUD_VERSION ${PROJECT_VERSION})
 
 # Vendor name shown in DAWs and in each plugin header.
 set(KLAUD_COMPANY_NAME "Maki Plugins")

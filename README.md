@@ -12,8 +12,12 @@ and Linux, plus AU on macOS for Logic Pro.
 | **StereoScale** | Left / right / mid / side gain, 0–200 % |
 
 ## Download
-Get the latest version from the [Releases page](https://github.com/MaczorLuksemburg/klaudiuszoweVST/releases).
-Installation steps for each system are in [docs/INSTALL.md](docs/INSTALL.md) and on every release page.
+- **Mac** (Logic, Ableton, Cubase, FL Studio, Reaper): [MakiPlugins-macOS-Installer.pkg](https://github.com/MaczorLuksemburg/klaudiuszoweVST/releases/latest/download/MakiPlugins-macOS-Installer.pkg)
+- **Windows**: [MakiPlugins-Windows-Setup.exe](https://github.com/MaczorLuksemburg/klaudiuszoweVST/releases/latest/download/MakiPlugins-Windows-Setup.exe)
+- **Linux** and plain zips: the [Releases page](https://github.com/MaczorLuksemburg/klaudiuszoweVST/releases/latest)
+
+The plugins are free but not paid-signed, so macOS and Windows ask once before the installer runs: the
+step-by-step guide is in [docs/INSTALL.md](docs/INSTALL.md) and on every release page.
 
 ## Building
 Needs CMake 3.22+ and a C++20 compiler (Visual Studio 2022 on Windows). JUCE is downloaded automatically.
@@ -23,7 +27,8 @@ cmake -S . -B build
 cmake --build build --config Release
 ```
 
-Pushing a tag like `v1.0.0` builds all three systems on GitHub and publishes a release with the zips.
+The pack version is set once in the root `CMakeLists.txt`. Pushing a matching tag like `v1.0.3` builds all
+three systems on GitHub and publishes a release with the zips and the Mac and Windows installers.
 
 ## Licence
 [GNU AGPLv3](LICENSE). Built with [JUCE](https://juce.com), used under its AGPLv3 licence. WaveRef also contains the [Rubber Band](https://breakfastquay.com/rubberband/) time-stretching library (GPL v2 or later).

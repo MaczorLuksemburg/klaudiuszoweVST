@@ -4,6 +4,7 @@ juce_add_plugin(StereoScale
     PLUGIN_CODE              KsSc
     FORMATS                  ${KLAUD_PLUGIN_FORMATS}
     PRODUCT_NAME             "StereoScale"
+    VERSION                  ${KLAUD_VERSION}
     IS_SYNTH                 FALSE
     NEEDS_MIDI_INPUT         FALSE
     NEEDS_MIDI_OUTPUT        FALSE

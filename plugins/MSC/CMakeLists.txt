@@ -5,7 +5,7 @@ juce_add_plugin(MSC
     FORMATS                  ${KLAUD_PLUGIN_FORMATS}
     PRODUCT_NAME             "MSC"
     DESCRIPTION              "Multistage stereo control"
-    VERSION                  1.0.0
+    VERSION                  ${KLAUD_VERSION}
     BUNDLE_ID                com.makiplugins.msc
     IS_SYNTH                 FALSE
     NEEDS_MIDI_INPUT         FALSE

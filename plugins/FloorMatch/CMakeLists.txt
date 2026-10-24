@@ -5,7 +5,7 @@ juce_add_plugin(FloorMatch
     FORMATS                  ${KLAUD_PLUGIN_FORMATS}
     PRODUCT_NAME             "FloorMatch"
     DESCRIPTION              "Dialogue noise floor matcher"
-    VERSION                  1.0.0
+    VERSION                  ${KLAUD_VERSION}
     BUNDLE_ID                com.makiplugins.floormatch
     IS_SYNTH                 FALSE
     NEEDS_MIDI_INPUT         FALSE

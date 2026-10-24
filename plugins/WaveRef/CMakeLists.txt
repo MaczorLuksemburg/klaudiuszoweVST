@@ -25,7 +25,7 @@ juce_add_plugin(WaveRef
     FORMATS                  ${KLAUD_PLUGIN_FORMATS}
     PRODUCT_NAME             "WaveRef"
     DESCRIPTION              "Reference A/B switcher with a mid/side spectrum comparison"
-    VERSION                  1.0.0
+    VERSION                  ${KLAUD_VERSION}
     BUNDLE_ID                com.makiplugins.waveref
     IS_SYNTH                 FALSE
     NEEDS_MIDI_INPUT         FALSE

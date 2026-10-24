@@ -3,14 +3,14 @@
 ; and an uninstaller in Windows' "Apps" list.
 ;
 ; Build with build-installer.ps1, or directly:
-;   ISCC.exe /DPluginDir="C:\gen plugins" /DAppVersion=1.0.0 MakiPlugins.iss
+;   ISCC.exe /DPluginDir="C:\gen plugins" /DAppVersion=1.0.3 MakiPlugins.iss
 ; Only the plugins found in PluginDir are offered.
 
 #ifndef PluginDir
   #define PluginDir "C:\gen plugins"
 #endif
 #ifndef AppVersion
-  #define AppVersion "1.0.0"
+  #define AppVersion "1.0.3"
 #endif
 
 #define Has(Name) FileExists(PluginDir + "\" + Name + ".vst3\Contents\x86_64-win\" + Name + ".vst3")
@@ -56,6 +56,9 @@ Name: "stereoscale"; Description: "StereoScale - stereo width"; Types: full cust
 #if Has("FloorMatch")
 Name: "floormatch"; Description: "FloorMatch - dialogue noise floor matcher"; Types: full custom
 #endif
+#if Has("WaveRef")
+Name: "waveref"; Description: "WaveRef - reference A/B with loudness match and spectrum"; Types: full custom
+#endif
 
 [Files]
 #if Has("DynMap")
@@ -69,6 +72,9 @@ Source: "{#PluginDir}\StereoScale.vst3\*"; DestDir: "{app}\StereoScale.vst3"; Co
 #endif
 #if Has("FloorMatch")
 Source: "{#PluginDir}\FloorMatch.vst3\*"; DestDir: "{app}\FloorMatch.vst3"; Components: floormatch; Flags: recursesubdirs createallsubdirs ignoreversion
+#endif
+#if Has("WaveRef")
+Source: "{#PluginDir}\WaveRef.vst3\*"; DestDir: "{app}\WaveRef.vst3"; Components: waveref; Flags: recursesubdirs createallsubdirs ignoreversion
 #endif
 
 [Code]

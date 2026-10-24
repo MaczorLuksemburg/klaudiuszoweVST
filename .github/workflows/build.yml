@@ -28,6 +28,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The pack version lives in the root CMakeLists.txt (project VERSION); a release tag must match it.
+      - name: Read version
+        shell: bash
+        run: |
+          version=$(sed -nE 's/^project\(klaudiuszoweVST VERSION ([0-9.]+)\)/\1/p' CMakeLists.txt)
+          echo "Maki Plugins $version"
+          if [[ "$GITHUB_REF" == refs/tags/v* && "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "Tag $GITHUB_REF_NAME doesn't match the version in CMakeLists.txt ($version)"; exit 1
+          fi
+          echo "KLAUD_VERSION=$version" >> "$GITHUB_ENV"
+
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
@@ -54,19 +65,6 @@ jobs:
             ctest --test-dir build -C Release --output-on-failure
           fi
 
-      # Logic Pro only loads AUs that pass Apple's validator, so run it on every build.
-      - name: Validate Audio Units (auval)
-        if: runner.os == 'macOS'
-        run: |
-          killall -9 AudioComponentRegistrar 2>/dev/null || true
-          units=$(auval -a | awk '$3 == "Klau" { print $1, $2, $3 }')
-          if [ -z "$units" ]; then echo "No Maki Plugins AUs registered"; auval -a; exit 1; fi
-          failed=0
-          while read -r type subtype manufacturer; do
-            auval -v "$type" "$subtype" "$manufacturer" || failed=1
-          done <<< "$units"
-          exit $failed
-
       - name: Collect plugins
         shell: bash
         run: |
@@ -76,6 +74,46 @@ jobs:
           cp docs/INSTALL.md MakiPlugins/INSTALL.md
           cp LICENSE MakiPlugins/LICENSE.txt
           ls -la MakiPlugins
+
+      - name: Build macOS installer
+        if: runner.os == 'macOS'
+        run: installer/macos/build-pkg.sh MakiPlugins "$KLAUD_VERSION" MakiPlugins-macOS-Installer.pkg
+
+      # Installs the .pkg on the runner the way a user would, then checks what landed in /Library.
+      # Logic Pro only loads AUs that pass Apple's validator, so auval runs on the installed copies
+      # (the build's own copies in ~/Library are removed first so they can't stand in for them).
+      - name: Test macOS installer and validate Audio Units (auval)
+        if: runner.os == 'macOS'
+        run: |
+          rm -rf ~/Library/Audio/Plug-Ins/Components/*.component ~/Library/Audio/Plug-Ins/VST3/*.vst3
+          sudo installer -pkg MakiPlugins-macOS-Installer.pkg -target /
+          failed=0
+          for vst3 in MakiPlugins/*.vst3; do
+            name=$(basename "$vst3" .vst3)
+            for f in "/Library/Audio/Plug-Ins/VST3/$name.vst3" "/Library/Audio/Plug-Ins/Components/$name.component"; do
+              if [ -d "$f" ]; then echo "installed: $f"; else echo "MISSING: $f"; failed=1; fi
+            done
+          done
+          pkgutil --pkgs | grep makiplugins
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          units=$(auval -a | awk '$3 == "Klau" { print $1, $2, $3 }')
+          if [ -z "$units" ]; then echo "No Maki Plugins AUs registered"; auval -a; exit 1; fi
+          while read -r type subtype manufacturer; do
+            auval -v "$type" "$subtype" "$manufacturer" || failed=1
+          done <<< "$units"
+          exit $failed
+
+      # Windows installer (Inno Setup; installed from Chocolatey if the runner image doesn't have it).
+      - name: Build Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $iscc = @((Get-Command ISCC.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source),
+                    "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe") | Where-Object { $_ -and (Test-Path $_) }
+          if (-not $iscc) { choco install innosetup -y --no-progress }
+          ./installer/windows/build-installer.ps1 -PluginDir "$PWD\MakiPlugins" -Version $env:KLAUD_VERSION
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Copy-Item "installer/windows/output/MakiPlugins-Setup-$env:KLAUD_VERSION.exe" MakiPlugins-Windows-Setup.exe
 
       # One zip per system with a MakiPlugins/ folder inside. On macOS, ditto keeps the bundles'
       # permissions and code signatures intact (a plain artifact upload can drop them).
@@ -100,10 +138,14 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.name }}
-          path: MakiPlugins-${{ matrix.name }}.zip
+          # Each system has its zip; macOS and Windows also have an installer (missing paths are skipped).
+          path: |
+            MakiPlugins-${{ matrix.name }}.zip
+            MakiPlugins-macOS-Installer.pkg
+            MakiPlugins-Windows-Setup.exe
           retention-days: 14
 
-  # Runs only for version tags (e.g. v1.0.0): publishes the three zips on a public release page,
+  # Runs only for version tags (e.g. v1.0.3): publishes the three zips and the two installers on a public release page,
   # downloadable without a GitHub account. Works both for a pushed tag (creates the release with
   # docs/INSTALL.md as notes) and for a release published on GitHub's page (attaches the zips and
   # adds the install guide under the notes written there).
@@ -131,7 +173,7 @@ jobs:
           tag="$GITHUB_REF_NAME"
 
           if gh release view "$tag" > /dev/null 2>&1; then
-            gh release upload "$tag" release/*.zip --clobber
+            gh release upload "$tag" release/* --clobber
 
             gh release view "$tag" --json body -q .body > notes.md
             if ! grep -q "Maki Plugins: free VST3" notes.md; then
@@ -140,7 +182,7 @@ jobs:
               gh release edit "$tag" --notes-file notes.md
             fi
           else
-            gh release create "$tag" release/*.zip \
+            gh release create "$tag" release/* \
               --title "Maki Plugins $tag" \
               --notes-file docs/INSTALL.md
           fi

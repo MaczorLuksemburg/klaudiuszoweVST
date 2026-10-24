@@ -144,6 +144,7 @@ AI-made VST plugins for testing and fun.
 - `Stereo.h`: smoothed correlation and width (side share) of mix and ref, plus decimated points for the goniometer.
 - Parameter and state keys added after v1 (`ref_play`, `ref_mode`, `sync_offset`, `beat_offset`, `nudge_ms`, `key_lock`,
   `side`, `delta`; slot attributes `cue0-3`, `bpm`, `downbeat`) are saved: never rename or remove them.
+
 ## FloorMatch (plugins/FloorMatch)
 - Made for friends doing film dialogue: all boom takes on one track, background noise brought to one target
   level (A-weighted, dB where a full-scale sine is 0) and optionally one colour; dialogue must stay untouched.
@@ -175,14 +176,24 @@ AI-made VST plugins for testing and fun.
   Keep code portable (no Windows-only APIs).
 
 ## Releases
-- Pushing a `v*` tag (e.g. `v1.0.0`) on `main` builds all three systems and publishes a GitHub Release with
-  `MakiPlugins-<OS>.zip` files (plugins + INSTALL.md + LICENSE.txt); `docs/INSTALL.md` is the release notes.
+- One version for the whole pack: `project(klaudiuszoweVST VERSION x.y.z)` in the root `CMakeLists.txt`
+  (`KLAUD_VERSION`, passed to every `juce_add_plugin`). To release: bump it and the version line at the top of
+  `docs/INSTALL.md`, merge to `main`, push the tag `v<same version>` (CI fails if the tag doesn't match).
+- Pushing a `v*` tag on `main` builds all three systems and publishes a GitHub Release with
+  `MakiPlugins-<OS>.zip` files (plugins + INSTALL.md + LICENSE.txt), `MakiPlugins-macOS-Installer.pkg` and
+  `MakiPlugins-Windows-Setup.exe`; `docs/INSTALL.md` is the release notes. Asset names carry no version so
+  `releases/latest/download/<name>` links always point at the newest one (README and INSTALL.md use them).
   Publishing a release from GitHub's Releases page (which creates the tag) also works: the job then attaches
   the zips to that release and appends the install guide under the notes written there.
-  Keep it up to date when plugins are added. Bump each plugin's `VERSION` in its CMakeLists before tagging.
+  Keep it up to date when plugins are added (also the plugin lists in both installers).
 - Windows installer: `installer/windows/build-installer.ps1 [-PluginDir] [-Version]` (Inno Setup 6, installed with
   winget) packs the .vst3 bundles found in `C:\gen plugins` into `installer/windows/output/MakiPlugins-Setup-<v>.exe`
-  (installs to Common Files\VST3, per-plugin choice, uninstaller). Not built by CI yet.
+  (installs to Common Files\VST3, per-plugin choice, uninstaller). CI builds it from its own build.
+- macOS installer: `installer/macos/build-pkg.sh <plugin dir> <version> <out.pkg>` (pkgbuild + productbuild, CI only)
+  installs every plugin's VST3 + AU into `/Library/Audio/Plug-Ins` for all users (shared studio Macs), one choice
+  per plugin. Unsigned: only the .pkg needs "Open Anyway" once; Installer-written files carry no quarantine flag.
+  Bundles are marked non-relocatable (otherwise Installer updates a hand-copied ~/Library copy instead). CI
+  installs the .pkg on the runner and runs auval on the installed AUs.
 - Licence: AGPLv3 (`LICENSE`), required because JUCE is used under its open-source licence.
 
 ## GitHub
