@@ -144,6 +144,28 @@ AI-made VST plugins for testing and fun.
 - `Stereo.h`: smoothed correlation and width (side share) of mix and ref, plus decimated points for the goniometer.
 - Parameter and state keys added after v1 (`ref_play`, `ref_mode`, `sync_offset`, `beat_offset`, `nudge_ms`, `key_lock`,
   `side`, `delta`; slot attributes `cue0-3`, `bpm`, `downbeat`) are saved: never rename or remove them.
+## FloorMatch (plugins/FloorMatch)
+- Made for friends doing film dialogue: all boom takes on one track, background noise brought to one target
+  level (A-weighted, dB where a full-scale sine is 0) and optionally one colour; dialogue must stay untouched.
+  Noise is only matched, never removed completely; "Room tone fill" adds shaped noise to takes below the target.
+  Its only job is balancing backgrounds between takes (the friends follow it with a peak compressor, no makeup).
+  Noise events inside a take (close cloth rustle, a passing car) are left alone by design: only sharp steps
+  (< 150 ms) seen by at least a quarter of the bands count as cuts; everything else holds the background.
+- DSP is in `Source/Engine.*` (STFT ~21 ms, 75 % overlap). Noise floor per bin = robust truncated mean over a
+  window before and after each frame (lookahead, reported as latency); per-band cut detection picks the side
+  that belongs to the current take, frames > 6 dB over the estimate are labelled speech and skipped, long
+  phrases hold the last estimate, rises without a cut are rate-limited. Gain = sqrt(beta) + (1 - sqrt(beta)) *
+  speech gain (MMSE-LSA + presence, lookahead attack, 50 ms release).
+- Learned profile (61 bands of 1/6 octave, dB per Hz) is saved in the state tree property `profile`, not a parameter.
+- Display: 1/12-octave curves (+ live input spectrum, toggled by the state property `showInputSpectrum`) and a
+  ~15 s timeline from `Engine::TimelineColumn`s (~50 ms each): background in/out, target, input level, cut
+  markers (where the estimate steps across most bands; set up to `timelineSettle` columns late, so the
+  processor only copies settled columns), event-held shading and max-reduction-reached flags.
+- `FloorMatch_Tests` measures everything on synthetic takes (formant "speech" over different noises joined with
+  cuts); `--quality` isolates speech and noise via shadow channels, `--bench` measures CPU,
+  `--render in.wav out.wav [--target dB] [--quietest] ...` processes real recordings for listening tests,
+  `--trace in.wav <from s> <to s> [lookahead] [--bin k]` prints the estimator's per-band decisions over time.
+  Keep these numbers passing when tuning: the thresholds encode the quality bar.
 
 ## Targets
 - Systems: Windows, macOS, Linux. DAWs: Logic Pro, Cubase, FL Studio, Ableton Live, Reaper.
