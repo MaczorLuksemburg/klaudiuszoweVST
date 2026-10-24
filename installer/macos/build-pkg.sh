@@ -62,7 +62,7 @@ for vst3 in "$plugin_dir"/*.vst3; do
     pkgbuild --analyze --root "$root" "$plist" > /dev/null
     i=0
     while /usr/libexec/PlistBuddy -c "Print :$i" "$plist" > /dev/null 2>&1; do
-        /usr/libexec/PlistBuddy -c "Set :$i:BundleIsRelocatable false" "$plist"
+        plutil -replace "$i.BundleIsRelocatable" -bool NO "$plist"   # adds the key when pkgbuild left it out
         i=$((i + 1))
     done
 
