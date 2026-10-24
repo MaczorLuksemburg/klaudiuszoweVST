@@ -717,6 +717,11 @@ HaasModule::HaasModule (APVTS& state)
     addAndMakeVisible (left);
     addAndMakeVisible (right);
 
+    const juce::String delayTip ("Below 0.1 ms: phasing / comb filtering. 0.1-30 ms: stereo width. "
+                                 "30 ms and up: audible echo. Keep the other side at 0 ms.");
+    left.slider.setTooltip (delayTip);
+    right.slider.setTooltip (delayTip);
+
     const auto phi = juce::String (juce::CharPointer_UTF8 ("\xc3\x98"));
 
     for (auto* button : { &invertLeft, &invertRight })
@@ -755,7 +760,7 @@ void HaasModule::paintContent (juce::Graphics& g)
 
     g.setColour (palette().textDim.withAlpha (0.75f));
     g.setFont (klaud::font (10.5f));
-    g.drawFittedText ("1-30 ms: width\n30 ms and up: echo\nkeep one side at 0 ms", hintArea, juce::Justification::centred, 3);
+    g.drawFittedText ("0.1-30 ms: width\n30 ms and up: echo\nkeep one side at 0 ms", hintArea, juce::Justification::centred, 3);
 }
 
 //==============================================================================
