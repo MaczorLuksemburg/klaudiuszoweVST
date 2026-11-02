@@ -6,8 +6,8 @@ namespace
     constexpr int margin = 12;
     constexpr int gap = 10;
 
-    // Module widths in chain order: input, dynamic pan, Haas, chorus, image.
-    constexpr int moduleWidths[] { 300, 350, 180, 206, 140 };
+    // Module widths in chain order: input, dynamic pan, Haas, chorus, dimension, image.
+    constexpr int moduleWidths[] { 300, 350, 180, 206, 160, 140 };
 
     const juce::Identifier uiWidthId { "uiWidth" };
 }
@@ -20,10 +20,11 @@ MscMainView::MscMainView (MscProcessor& p, klaud::LookAndFeel& lookAndFeel)
       dynPanModule (p.apvts, p.dynPanAnalyzer, p.modScope),
       haasModule (p.apvts),
       chorusModule (p.apvts),
+      dimensionModule (p.apvts, p.dimensionPhase),
       imageModule (p.apvts)
 {
     for (auto* c : std::initializer_list<juce::Component*> { &presetBar, &inputModule, &dynPanModule,
-                                                             &haasModule, &chorusModule, &imageModule })
+                                                             &haasModule, &chorusModule, &dimensionModule, &imageModule })
         addAndMakeVisible (c);
 
     setSize (baseWidth, baseHeight);
@@ -62,7 +63,8 @@ void MscMainView::paint (juce::Graphics& g)
     const float cy = (float) inputModule.getBounds().getCentreY();
     g.setColour (pal.textDim.withAlpha (0.45f));
 
-    for (auto* module : std::initializer_list<juce::Component*> { &inputModule, &dynPanModule, &haasModule, &chorusModule })
+    for (auto* module : std::initializer_list<juce::Component*> { &inputModule, &dynPanModule, &haasModule, &chorusModule,
+                                                                  &dimensionModule })
     {
         const float cx = (float) module->getRight() + gap * 0.5f;
         juce::Path chevron;
@@ -75,10 +77,10 @@ void MscMainView::paint (juce::Graphics& g)
 
 void MscMainView::resized()
 {
-    presetBar.setBounds (600, 17, 460, 28);
+    presetBar.setBounds (getWidth() - 640, 17, 460, 28);
 
     auto area = getLocalBounds().withTrimmedTop (headerHeight + margin).reduced (margin, 0).withTrimmedBottom (margin);
-    juce::Component* modules[] { &inputModule, &dynPanModule, &haasModule, &chorusModule, &imageModule };
+    juce::Component* modules[] { &inputModule, &dynPanModule, &haasModule, &chorusModule, &dimensionModule, &imageModule };
 
     for (size_t i = 0; i < std::size (modules); ++i)
     {

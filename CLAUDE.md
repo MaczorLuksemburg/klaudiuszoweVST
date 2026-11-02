@@ -27,13 +27,22 @@ AI-made VST plugins for testing and fun.
 
 ## MSC (plugins/MSC)
 - Chain: input band split (processed = filter(x), unprocessed = x - filter(x), so it always sums back to x)
-  -> dynamic pan -> Haas -> Juno-style chorus -> image, then the unprocessed band is added back.
+  -> dynamic pan -> Haas -> Juno-style chorus -> dimension -> image, then the unprocessed band is added back.
 - Modules default off; touching any control in a module switches it on. Off modules are skipped (15 ms fades).
 - Dynamic pan: modulator = filter(mod source, read from the plugin input, not the input module's band)
   -> optional comp (makeup 0-100 %) -> x amount -> mod clip = p, then side += mid * p (mono: L = x(1-p),
   R = x(1+p)). Mid is untouched, so the effect cancels exactly in mono: this is the module's core promise,
   keep it. Never clip or otherwise process L/R separately there; the clipper shapes p only. Stereo peaks can
   rise up to +6 dB at |p| = 1.
+- Dimension = Xfer's DimensionExpander (the Dimension half of Serum's Hyper/Dimension), measured by deconvolving
+  Reaper renders of noise (`dsp::dimension` in `DSP.h`): mid -> 4 whole-sample delays (15 ms + 99.5 ms x size,
+  then x1.18 each) -> gains 0.500 sin, -0.445 cos, -0.484 sin, +0.470 cos of one 0.4547 Hz LFO -> x mix -> added
+  to the side only (mono sum untouched, dry never attenuated). Taps stay on whole samples (interpolating dulls the
+  highs: -4.7 instead of the measured -3.47 dB side on noise); a Size change glides between them. `MSC_Tests`
+  checks the taps, the -3.47 dB level and the mono sum. The `dm_*` group was added after 1.0, so it is appended
+  last in the layout (new parameters and factory presets always go at the end).
+- `PluginMeasure` can't reproduce DimensionExpander (its side comes out ~40 dB low, delays 4.5x short, even with
+  host time info), so the measurement used renders from Reaper instead.
 - Parameter IDs in `Parameters.h` are saved in projects and presets: never rename or remove them.
 
 ## DynMap (plugins/DynMap)

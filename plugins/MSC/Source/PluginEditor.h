@@ -6,7 +6,7 @@
 class MscMainView : public juce::Component
 {
 public:
-    static constexpr int baseWidth = 1240;
+    static constexpr int baseWidth = 1410;
     static constexpr int baseHeight = 540;
 
     MscMainView (MscProcessor&, klaud::LookAndFeel&);
@@ -28,6 +28,7 @@ private:
     msc::ui::DynamicPanModule dynPanModule;
     msc::ui::HaasModule haasModule;
     msc::ui::ChorusModule chorusModule;
+    msc::ui::DimensionModule dimensionModule;
     msc::ui::ImageModule imageModule;
 
     juce::TooltipWindow tooltips { this, 600 };

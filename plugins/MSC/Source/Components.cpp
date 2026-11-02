@@ -823,6 +823,85 @@ void ChorusModule::paintContent (juce::Graphics& g)
 }
 
 //==============================================================================
+DimensionTapView::DimensionTapView (APVTS& state, const std::atomic<float>& lfoPhase)
+    : phase (lfoPhase), size (state.getRawParameterValue (ids::dmSize)), mix (state.getRawParameterValue (ids::dmMix))
+{
+    setTooltip ("The four delayed copies added to the side: position = delay, bar = gain as the slow LFO turns.");
+    startTimerHz (30);
+}
+
+void DimensionTapView::paint (juce::Graphics& g)
+{
+    using namespace dsp::dimension;
+    const auto& pal = palette();
+    const auto area = getLocalBounds().toFloat();
+
+    g.setColour (pal.background.withAlpha (0.85f));
+    g.fillRoundedRectangle (area, 5.0f);
+
+    constexpr float rangeMs = 200.0f;
+    const float cy = area.getCentreY(), half = area.getHeight() * 0.5f - 12.0f;
+    auto xFor = [&] (float ms) { return area.getX() + 6.0f + (area.getWidth() - 12.0f) * ms / rangeMs; };
+
+    g.setColour (juce::Colours::white.withAlpha (0.06f));
+    g.drawHorizontalLine (juce::roundToInt (cy), area.getX(), area.getRight());
+    g.setFont (klaud::font (9.5f));
+    for (float ms : { 50.0f, 100.0f, 150.0f })
+    {
+        g.setColour (juce::Colours::white.withAlpha (0.04f));
+        g.drawVerticalLine (juce::roundToInt (xFor (ms)), area.getY(), area.getBottom());
+        g.setColour (pal.textDim.withAlpha (0.55f));
+        g.drawText (juce::String (juce::roundToInt (ms)), juce::Rectangle<float> (xFor (ms) + 2.0f, area.getBottom() - 12.0f, 26.0f, 11.0f),
+                    juce::Justification::centredLeft, false);
+    }
+
+    const float first = firstDelay (size->load() * 0.01f);
+    const float wet = mix->load() * 0.01f;
+    const auto gains = tapGains (phase.load (std::memory_order_relaxed));
+
+    for (size_t k = 0; k < 4; ++k)
+    {
+        const float x = xFor (first * delayRatio[k]);
+        const float h = gains[k] * wet / gain[0] * half;   // the largest tap fills the height at 100 %
+        g.setColour (colours::dimension.withAlpha (0.25f));
+        g.drawVerticalLine (juce::roundToInt (x), cy - half, cy + half);
+        g.setColour (colours::dimension);
+        g.fillRoundedRectangle (juce::Rectangle<float> (x - 2.5f, juce::jmin (cy, cy - h), 5.0f, std::abs (h) + 1.0f), 2.0f);
+    }
+}
+
+DimensionModule::DimensionModule (APVTS& state, const std::atomic<float>& lfoPhase)
+    : ModulePanel (state, ids::dmOn, "DIMENSION", "4 slow taps, mono-safe", colours::dimension),
+      size (state, ids::dmSize, "SIZE", colours::dimension, true),
+      mix (state, ids::dmMix, "MIX", colours::dimension, true),
+      taps (state, lfoPhase)
+{
+    size.slider.setTooltip ("Delay of the four taps: 15-25 ms at 0 %, 115-188 ms at 100 %. Bigger = roomier.");
+    mix.slider.setTooltip ("How much of the widening is added. Only the side changes: the mono sum stays untouched.");
+
+    for (auto* c : std::initializer_list<juce::Component*> { &size, &mix, &taps })
+        addAndMakeVisible (c);
+}
+
+void DimensionModule::layoutContent (juce::Rectangle<int> area)
+{
+    constexpr int spacing = 10;
+    const int knobHeight = (area.getHeight() - 110 - 2 * spacing) / 2;
+    size.setBounds (area.removeFromTop (knobHeight));
+    area.removeFromTop (spacing);
+    mix.setBounds (area.removeFromTop (knobHeight));
+    area.removeFromTop (spacing);
+    tapsCaption = area.removeFromTop (16);
+    area.removeFromTop (2);
+    taps.setBounds (area);
+}
+
+void DimensionModule::paintContent (juce::Graphics& g)
+{
+    drawCaption (g, "TAPS", tapsCaption, juce::Justification::centredLeft);
+}
+
+//==============================================================================
 ImageModule::ImageModule (APVTS& state)
     : ModulePanel (state, ids::imOn, "IMAGE", "balance & M/S", colours::image),
       balance (state, ids::imBalance, "BALANCE", colours::image),

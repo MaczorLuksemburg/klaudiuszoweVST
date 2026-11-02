@@ -166,6 +166,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
                       hzParam (ids::chTone, "Chorus Tone", 1000.0f, 20000.0f, 8000.0f),
                       percentParam (ids::chMix, "Chorus Mix", 0.0f, 100.0f, 50.0f));
 
+    auto dimension = std::make_unique<juce::AudioProcessorParameterGroup> ("dimension", "Dimension", " | ");
+    dimension->addChild (boolParam (ids::dmOn, "Dimension On"),
+                         percentParam (ids::dmSize, "Dimension Size", 0.0f, 100.0f, 50.0f),
+                         percentParam (ids::dmMix, "Dimension Mix", 0.0f, 100.0f, 50.0f));
+
     auto image = std::make_unique<juce::AudioProcessorParameterGroup> ("image", "Image", " | ");
     image->addChild (boolParam (ids::imOn, "Image On"),
                      floatParam (ids::imBalance, "Image Balance", Range (-100.0f, 100.0f, 0.1f), 0.0f, balanceText, balanceFromText),
@@ -173,7 +178,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
                      percentParam (ids::imSide, "Image Side", 0.0f, 200.0f, 100.0f));
 
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
-    layout.add (std::move (input), std::move (dynPan), std::move (haas), std::move (chorus), std::move (image));
+    // Dimension came after 1.0: appended last so existing parameters keep their positions.
+    layout.add (std::move (input), std::move (dynPan), std::move (haas), std::move (chorus), std::move (image),
+                std::move (dimension));
     return layout;
 }
 }

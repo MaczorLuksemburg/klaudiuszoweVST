@@ -57,6 +57,8 @@ MscProcessor::MscProcessor()
     params.chOn = get (ids::chOn);         params.chMode = get (ids::chMode);     params.chDepth = get (ids::chDepth);
     params.chWidth = get (ids::chWidth);   params.chTone = get (ids::chTone);     params.chMix = get (ids::chMix);
 
+    params.dmOn = get (ids::dmOn);         params.dmSize = get (ids::dmSize);     params.dmMix = get (ids::dmMix);
+
     params.imOn = get (ids::imOn);         params.imBalance = get (ids::imBalance);
     params.imMid = get (ids::imMid);       params.imSide = get (ids::imSide);
 }
@@ -72,7 +74,7 @@ void MscProcessor::prepareToPlay (double newSampleRate, int)
 {
     sampleRate = newSampleRate;
 
-    for (auto* module : { &input, &dynPan, &haas, &chorus, &image })
+    for (auto* module : { &input, &dynPan, &haas, &chorus, &dimension, &image })
     {
         module->fade.reset (sampleRate, 0.015);
         module->wasActive = false;
@@ -84,7 +86,7 @@ void MscProcessor::prepareToPlay (double newSampleRate, int)
     for (auto* s : { &hsPolarityL, &hsPolarityR })
         s->reset (sampleRate, 0.01);
 
-    for (auto* s : { &hsDelayL, &hsDelayR, &chCentre, &chSwing })
+    for (auto* s : { &hsDelayL, &hsDelayR, &chCentre, &chSwing, &dmGlide })
         s->reset (sampleRate, 0.05);
 
     for (auto* s : { &inCutoff, &dpCutoff, &chTone })
@@ -93,6 +95,8 @@ void MscProcessor::prepareToPlay (double newSampleRate, int)
     haasLeft.prepare ((int) std::ceil (0.5 * sampleRate) + 8);
     haasRight.prepare ((int) std::ceil (0.5 * sampleRate) + 8);
     chorusDelay.prepare ((int) std::ceil (0.02 * sampleRate));
+    dimensionDelay.prepare ((int) std::ceil (dsp::dimension::maxDelayMs * 0.001 * sampleRate) + 8);
+    dmMix.reset (sampleRate, 0.02);
 
     // Modulator compressor: moderate 10 ms attack, 150 ms release.
     compAttack  = std::exp (-1.0f / (0.010f * (float) sampleRate));
@@ -102,6 +106,7 @@ void MscProcessor::prepareToPlay (double newSampleRate, int)
     inputAnalyzer.setSampleRate (sampleRate);
     dynPanAnalyzer.setSampleRate (sampleRate);
     modScope.prepare (sampleRate);
+    dmPhase = 0.0f;   // deterministic LFO start (tests rely on it)
 
     updateTargets (true);
 }
@@ -119,6 +124,7 @@ void MscProcessor::updateTargets (bool snap)
     set (haas.fade,   isOn (params.hsOn) ? 1.0f : 0.0f);
     set (chorus.fade, isOn (params.chOn) ? 1.0f : 0.0f);
     set (image.fade,  isOn (params.imOn) ? 1.0f : 0.0f);
+    set (dimension.fade, isOn (params.dmOn) ? 1.0f : 0.0f);
 
     set (inCutoff, params.inCutoff->load());
     set (inShape,  params.inShape->load());
@@ -149,6 +155,29 @@ void MscProcessor::updateTargets (bool snap)
     set (chWidth,  params.chWidth->load() * 0.01f);
     set (chTone,   params.chTone->load());
     set (chMix,    params.chMix->load() * 0.01f);
+
+    {
+        std::array<float, 4> taps {};
+        const float first = dsp::dimension::firstDelay (params.dmSize->load() * 0.01f) * msToSamples;
+        for (size_t k = 0; k < 4; ++k)
+            taps[k] = (float) std::lround (first * dsp::dimension::delayRatio[k]);
+
+        if (snap)
+        {
+            dmFrom = dmTo = taps;
+            dmGlide.setCurrentAndTargetValue (1.0f);
+        }
+        else if (taps != dmTo)
+        {
+            const float a = dmGlide.getCurrentValue();
+            for (size_t k = 0; k < 4; ++k)
+                dmFrom[k] += (dmTo[k] - dmFrom[k]) * a;
+            dmTo = taps;
+            dmGlide.setCurrentAndTargetValue (0.0f);
+            dmGlide.setTargetValue (1.0f);
+        }
+    }
+    set (dmMix,   params.dmMix->load() * 0.01f);
 
     const float balance = params.imBalance->load() * 0.01f;
     set (imMid,   params.imMid->load() * 0.01f);
@@ -372,6 +401,46 @@ void MscProcessor::processChunk (float* left, float* right, int n)
             wetL[(size_t) i] = l + g * (cl - l);
             wetR[(size_t) i] = r + g * (cr - r);
         }
+    }
+
+    // ---- Dimension (between chorus and image) ----------------------------------------------
+    // Four delayed copies of the mid, gain-modulated by one slow LFO in quadrature (see
+    // dsp::dimension), are added to the side only: the mono sum stays exactly the input.
+    if (beginModule (dimension, justStarted))
+    {
+        using namespace dsp::dimension;
+
+        if (justStarted)
+        {
+            dimensionDelay.clear();
+            dmFrom = dmTo;
+            dmGlide.setCurrentAndTargetValue (1.0f);
+        }
+
+        const float phaseStep = lfoHz / (float) sampleRate;
+
+        for (int i = 0; i < n; ++i)
+        {
+            dmPhase += phaseStep;
+            if (dmPhase >= 1.0f)
+                dmPhase -= 1.0f;
+
+            const float l = wetL[(size_t) i], r = wetR[(size_t) i];
+            dimensionDelay.push (0.5f * (l + r));
+
+            const float glide = dmGlide.getNextValue();
+            const auto gains = tapGains (juce::MathConstants<float>::twoPi * dmPhase);
+            float wet = 0.0f;
+            for (size_t k = 0; k < 4; ++k)
+                wet += gains[k] * dimensionDelay.readHermite (juce::jmax (2.0f, dmFrom[k] + (dmTo[k] - dmFrom[k]) * glide));
+
+            const float sideAdd = dmMix.getNextValue() * wet;
+            const float g = dimension.fade.getNextValue();
+            wetL[(size_t) i] = l + g * sideAdd;
+            wetR[(size_t) i] = r - g * sideAdd;
+        }
+
+        dimensionPhase.store (juce::MathConstants<float>::twoPi * dmPhase, std::memory_order_relaxed);
     }
 
     // ---- 4: image (mid/side + balance) ----------------------------------------------------

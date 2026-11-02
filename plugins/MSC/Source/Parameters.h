@@ -44,6 +44,11 @@ namespace msc
         inline constexpr const char* chMix   = "ch_mix";
 
         // Module 4: balance and mid/side image.
+        // Module 5 (added in 1.1): Dimension, measured from Xfer's DimensionExpander.
+        inline constexpr const char* dmOn   = "dm_on";
+        inline constexpr const char* dmSize = "dm_size";
+        inline constexpr const char* dmMix  = "dm_mix";
+
         inline constexpr const char* imOn      = "im_on";
         inline constexpr const char* imBalance = "im_balance";
         inline constexpr const char* imMid     = "im_mid";

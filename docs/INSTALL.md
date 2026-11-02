@@ -6,7 +6,7 @@ Version 1.0.3. Pick your system below and follow its steps.
 |---|---|
 | **DynMap** | Multiband dynamics you draw: input/output level curves (Maximus style) and transient curves on up to 12 bands, saturation, clipper and true-peak limiter |
 | **FloorMatch** | Brings the background noise of dialogue takes (e.g. boom recordings) to one level and colour, leaving the dialogue untouched |
-| **MSC** | Multistage stereo control: band split, dynamic pan, Haas, Juno-style chorus, mid/side image |
+| **MSC** | Multistage stereo control: band split, dynamic pan, Haas, Juno-style chorus, dimension, mid/side image |
 | **WaveRef** | Reference A/B switcher: 8 loaded tracks, loop, cues, loudness match, mid/side spectrum and stereo view of mix and reference, tempo and host sync with time-stretch, delta/side/mono listening, blind test |
 | **StereoScale** | Left / right / mid / side gain, 0–200 % |
 

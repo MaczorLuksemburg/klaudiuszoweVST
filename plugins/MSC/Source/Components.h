@@ -14,6 +14,7 @@ namespace msc::ui
         const juce::Colour haas   { 0xff8c7bff };   // violet
         const juce::Colour chorus { 0xffe07be0 };   // orchid
         const juce::Colour image  { 0xffffb454 };   // amber
+        const juce::Colour dimension { 0xff7fd66b }; // green
     }
 
     const klaud::Palette& palette();
@@ -236,6 +237,37 @@ namespace msc::ui
         void layoutContent (juce::Rectangle<int>) override;
 
         Knob balance, mid, side;
+    };
+
+    //==============================================================================
+    // The four Dimension taps on a 0-200 ms line, drawn as bipolar bars that follow the LFO.
+    class DimensionTapView : public juce::Component, public juce::SettableTooltipClient, private juce::Timer
+    {
+    public:
+        DimensionTapView (APVTS&, const std::atomic<float>& lfoPhase);
+
+        void paint (juce::Graphics&) override;
+
+    private:
+        void timerCallback() override { repaint(); }
+
+        const std::atomic<float>& phase;
+        std::atomic<float>* size;
+        std::atomic<float>* mix;
+    };
+
+    class DimensionModule : public ModulePanel
+    {
+    public:
+        DimensionModule (APVTS&, const std::atomic<float>& lfoPhase);
+
+    private:
+        void layoutContent (juce::Rectangle<int>) override;
+        void paintContent (juce::Graphics&) override;
+
+        Knob size, mix;
+        DimensionTapView taps;
+        juce::Rectangle<int> tapsCaption;
     };
 
     //==============================================================================
