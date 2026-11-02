@@ -178,6 +178,28 @@ namespace
             expect (diff > 0.01f && allFinite (out), "chorus creates stereo from a mono source");
         }
 
+        // Chorus Rate: defaults to 1x (the Juno speed), so an untouched knob sounds exactly like before;
+        // moving it changes the sweep.
+        {
+            auto* rate = p.apvts.getParameter (msc::ids::chRate);
+            expect (rate != nullptr && std::abs (rate->convertFrom0to1 (rate->getDefaultValue()) - 1.0f) < 1.0e-6f,
+                    "chorus rate defaults to 1x (Juno speed)");
+
+            const auto mono = makeNoise (48000 * 4, 6, true);
+            auto render = [&] (float rateValue)
+            {
+                resetAll (p);
+                setParam (p, msc::ids::chOn, 1.0f);
+                if (rateValue > 0.0f)
+                    setParam (p, msc::ids::chRate, rateValue);
+                return run (p, mono);
+            };
+
+            const auto juno = render (0.0f);   // untouched
+            expect (maxDifference (render (1.0f), juno) == 0.0f, "chorus rate 1x is bit-identical to the untouched default");
+            expect (maxDifference (render (2.0f), juno) > 0.01f, "chorus rate 2x changes the sweep");
+        }
+
         // Dynamic pan is perfectly mono compatible: L + R equals the input's L + R for any
         // setting (every clip mode, 1000 %, 8:1 comp, with and without the input split).
         for (int clipMode : { msc::clipOff, msc::clipHard, msc::clipSoft, msc::clipExtreme })
@@ -295,6 +317,92 @@ namespace
             expect (increasing, "more makeup (0 -> 100 %) pans a quiet signal progressively harder");
         }
 
+        // Dimension: only the side changes, so the mono sum is the input for any size and mix.
+        for (float size : { 0.0f, 50.0f, 100.0f })
+        {
+            resetAll (p);
+            setParam (p, msc::ids::dmOn, 1.0f);
+            setParam (p, msc::ids::dmSize, size);
+            setParam (p, msc::ids::dmMix, 100.0f);
+            const auto out = run (p, noise);
+
+            float monoDiff = 0.0f, sideChange = 0.0f;
+            for (int i = 0; i < out.getNumSamples(); ++i)
+            {
+                monoDiff = std::max (monoDiff, std::abs ((out.getSample (0, i) + out.getSample (1, i))
+                                                         - (noise.getSample (0, i) + noise.getSample (1, i))));
+                sideChange = std::max (sideChange, std::abs ((out.getSample (0, i) - out.getSample (1, i))
+                                                             - (noise.getSample (0, i) - noise.getSample (1, i))));
+            }
+            expect (monoDiff < 1.0e-5f && sideChange > 0.05f, "dimension (size " + juce::String (size)
+                        + " %) widens but leaves the mono sum identical (max diff " + juce::String (monoDiff) + ")");
+        }
+
+        // Dimension taps: an impulse comes back in the side at the four measured delays, each with the
+        // gain the LFO gives it at that moment (the phase starts at 0 on prepare).
+        {
+            resetAll (p);
+            setParam (p, msc::ids::dmOn, 1.0f);
+            setParam (p, msc::ids::dmSize, 50.0f);
+            setParam (p, msc::ids::dmMix, 100.0f);
+
+            constexpr int at = 24000;
+            juce::AudioBuffer<float> impulse (2, 48000);
+            impulse.clear();
+            impulse.setSample (0, at, 1.0f);
+            impulse.setSample (1, at, 1.0f);
+            const auto out = run (p, impulse);
+
+            namespace dm = msc::dsp::dimension;
+            const double firstTap = dm::firstDelay (0.5f) * 0.001 * testSampleRate;
+            bool tapsOk = true;
+            juce::String detail;
+            double tapEnergy = 0.0, totalEnergy = 0.0;
+            for (int i = at + 1; i < out.getNumSamples(); ++i)
+                totalEnergy += std::pow (0.5 * (out.getSample (0, i) - out.getSample (1, i)), 2.0);
+
+            for (size_t k = 0; k < 4; ++k)
+            {
+                const double delay = firstTap * dm::delayRatio[k];
+                const int centre = at + (int) std::lround (delay);
+                const double cycles = (double) (centre + 1) * dm::lfoHz / testSampleRate;
+                const float expected = dm::tapGains ((float) (juce::MathConstants<double>::twoPi * (cycles - std::floor (cycles))))[k];
+                double sum = 0.0;
+                for (int i = centre - 4; i <= centre + 4; ++i)
+                {
+                    const double side = 0.5 * (out.getSample (0, i) - out.getSample (1, i));
+                    sum += side;
+                    tapEnergy += side * side;
+                }
+                tapsOk = tapsOk && std::abs (sum - expected) < 0.01;
+                detail << juce::String (delay / testSampleRate * 1000.0, 2) << " ms: " << juce::String (sum, 3)
+                       << " (" << juce::String (expected, 3) << ")  ";
+            }
+            expect (tapsOk && tapEnergy > 0.999 * totalEnergy, "dimension taps at the measured delays and gains: " + detail);
+        }
+
+        // Dimension level: on noise the added side matches DimensionExpander's render (Size 50 %, 100 % wet:
+        // side -3.47 dB re the input, measured in Reaper).
+        {
+            resetAll (p);
+            setParam (p, msc::ids::dmOn, 1.0f);
+            setParam (p, msc::ids::dmSize, 50.0f);
+            setParam (p, msc::ids::dmMix, 100.0f);
+            const auto mono = makeNoise (48000 * 22, 5, true);
+            const auto out = run (p, mono);
+            double side = 0.0, in = 0.0;
+            for (int i = 48000; i < out.getNumSamples(); ++i)
+            {
+                side += std::pow (0.5 * (out.getSample (0, i) - out.getSample (1, i)), 2.0);
+                in += std::pow ((double) mono.getSample (0, i), 2.0);
+            }
+            const double db = 10.0 * std::log10 (side / in);
+            expect (std::abs (db + 3.47) < 0.3, "dimension side level " + juce::String (db, 2) + " dB (DimensionExpander: -3.47 dB)");
+
+            setParam (p, msc::ids::dmMix, 0.0f);
+            expect (maxDifference (run (p, noise), noise) < 1.0e-6f, "dimension at 0 % mix is transparent");
+        }
+
         // Every factory preset, odd block sizes, mono-compatible input: finite output.
         for (int i = 0; i < p.presets.getNumFactoryPresets(); ++i)
         {
@@ -378,7 +486,7 @@ namespace
 
         // Everything on, with audio flowing so the spectrum displays have content.
         p.presets.loadPreset (1);
-        for (const char* id : { msc::ids::dpOn, msc::ids::hsOn, msc::ids::chOn })
+        for (const char* id : { msc::ids::dpOn, msc::ids::hsOn, msc::ids::chOn, msc::ids::dmOn })
             setParam (p, id, 1.0f);
         setParam (p, msc::ids::dpAmount, 0.6f);
         setParam (p, msc::ids::dpComp, 2.0f);

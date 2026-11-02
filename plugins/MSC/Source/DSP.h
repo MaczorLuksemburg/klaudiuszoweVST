@@ -179,4 +179,27 @@ namespace msc::dsp
             default: return x;
         }
     }
+
+    // Dimension: measured from Xfer's DimensionExpander (the "Dimension" half of Serum's Hyper/Dimension)
+    // by deconvolving Reaper renders of noise. The mid feeds 4 delays whose sum is added to the side only,
+    // so the mono sum never changes. Delays grow geometrically (x1.18) from 15 ms + 99.5 ms * size; one
+    // 0.4547 Hz sine LFO modulates the taps at 0, -90, 180 and +90 degrees, so the width stays even while
+    // its colour rotates. Gains are those measured at 100 % wet; the dry signal is never attenuated.
+    namespace dimension
+    {
+        inline constexpr float lfoHz = 0.4547f;
+        inline constexpr float firstDelayMs = 15.0f, sizeRangeMs = 99.5f, spread = 1.18f;
+        inline constexpr std::array<float, 4> delayRatio { 1.0f, spread, spread * spread, spread * spread * spread };
+        inline constexpr std::array<float, 4> gain { 0.500f, 0.445f, 0.484f, 0.470f };
+        inline constexpr float maxDelayMs = (firstDelayMs + sizeRangeMs) * spread * spread * spread;
+
+        inline float firstDelay (float size01) { return firstDelayMs + sizeRangeMs * size01; }
+
+        // Tap gains at LFO phase theta: sin, -cos, -sin, +cos (taps 1-4).
+        inline std::array<float, 4> tapGains (float theta)
+        {
+            const float s = std::sin (theta), c = std::cos (theta);
+            return { gain[0] * s, -gain[1] * c, -gain[2] * s, gain[3] * c };
+        }
+    }
 }

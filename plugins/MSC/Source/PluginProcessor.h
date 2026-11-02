@@ -6,7 +6,7 @@
 #include "Presets.h"
 
 // MSC - multistage stereo control.
-// Chain: input band split -> dynamic pan -> Haas -> chorus -> image, then the
+// Chain: input band split -> dynamic pan -> Haas -> chorus -> dimension -> image, then the
 // untouched band is added back. Modules that are off are skipped entirely.
 class MscProcessor : public juce::AudioProcessor
 {
@@ -42,6 +42,9 @@ public:
     msc::SpectrumAnalyzer inputAnalyzer, dynPanAnalyzer;
     msc::ModScope modScope;
 
+    // Dimension LFO phase (radians) for the editor's tap display.
+    std::atomic<float> dimensionPhase { 0.0f };
+
 private:
     static constexpr int maxChunk = 256;
 
@@ -63,13 +66,14 @@ private:
         std::atomic<float> *inOn, *inShape, *inCutoff, *inSlope, *inWetSrc, *inDrySrc;
         std::atomic<float> *dpOn, *dpAmount, *dpMax, *dpShape, *dpCutoff, *dpSlope, *dpClip, *dpSource, *dpComp, *dpThresh, *dpMakeup;
         std::atomic<float> *hsOn, *hsLeft, *hsRight, *hsInvL, *hsInvR;
-        std::atomic<float> *chOn, *chMode, *chDepth, *chWidth, *chTone, *chMix;
+        std::atomic<float> *chOn, *chMode, *chDepth, *chWidth, *chTone, *chMix, *chRate;
         std::atomic<float> *imOn, *imBalance, *imMid, *imSide;
+        std::atomic<float> *dmOn, *dmSize, *dmMix;
     } params {};
 
     double sampleRate = 44100.0;
 
-    Module input, dynPan, haas, chorus, image;
+    Module input, dynPan, haas, chorus, dimension, image;
 
     // Input
     msc::dsp::MorphFilter<2> inputFilter;
@@ -93,6 +97,14 @@ private:
     Linear chCentre, chSwing, chWidth, chMix;
     Multiplicative chTone;
     float chRate = 0.5f, chPhase = 0.0f, chToneA = 0.0f, chToneB = 0.0f;
+
+    // Dimension
+    msc::dsp::DelayLine dimensionDelay;
+    // Tap delays sit on whole samples (like the original: interpolating between samples would dull
+    // the highs); a Size change glides each tap from its old to its new whole-sample delay.
+    std::array<float, 4> dmFrom {}, dmTo {};
+    Linear dmGlide, dmMix;   // glide 0..1 between dmFrom and dmTo, wet amount 0..1
+    float dmPhase = 0.0f;    // LFO phase in cycles
 
     // Image
     Linear imMid, imSide, imGainL, imGainR;

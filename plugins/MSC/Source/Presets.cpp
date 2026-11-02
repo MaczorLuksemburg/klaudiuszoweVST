@@ -63,6 +63,15 @@ namespace
               { { ids::inOn, 1.0f }, { ids::inShape, 1.0f }, { ids::inCutoff, 120.0f }, { ids::inSlope, 2.0f },
                 { ids::inDrySrc, (float) sourceMono },
                 { ids::imOn, 1.0f }, { ids::imSide, 125.0f } } },
+
+            // Added with the Dimension module (keep new presets at the end: hosts number them).
+            { "Dimension Wide",
+              { { ids::dmOn, 1.0f }, { ids::dmSize, 50.0f }, { ids::dmMix, 100.0f } } },
+
+            { "Dimension, Mono Bass",
+              { { ids::inOn, 1.0f }, { ids::inShape, 1.0f }, { ids::inCutoff, 200.0f }, { ids::inSlope, 1.0f },
+                { ids::inDrySrc, (float) sourceMono },
+                { ids::dmOn, 1.0f }, { ids::dmSize, 30.0f }, { ids::dmMix, 80.0f } } },
         };
 
         return presets;

@@ -42,8 +42,14 @@ namespace msc
         inline constexpr const char* chWidth = "ch_width";
         inline constexpr const char* chTone  = "ch_tone";
         inline constexpr const char* chMix   = "ch_mix";
+        inline constexpr const char* chRate  = "ch_rate";   // added after 1.0: x Juno speed, 1 = Juno
 
         // Module 4: balance and mid/side image.
+        // Module 5 (added in 1.1): Dimension, measured from Xfer's DimensionExpander.
+        inline constexpr const char* dmOn   = "dm_on";
+        inline constexpr const char* dmSize = "dm_size";
+        inline constexpr const char* dmMix  = "dm_mix";
+
         inline constexpr const char* imOn      = "im_on";
         inline constexpr const char* imBalance = "im_balance";
         inline constexpr const char* imMid     = "im_mid";
@@ -58,6 +64,9 @@ namespace msc
     inline constexpr float modCompRatios[] { 1.0f, 2.0f, 4.0f, 8.0f };
 
     // Share of the full auto makeup (the gain that keeps 0 dBFS at 0 dBFS), matching the "Makeup" choices.
+    // Juno-60 chorus LFO rates for modes I, II, I+II (Hz); ch_rate multiplies them.
+    inline constexpr float chorusModeRates[] { 0.513f, 0.863f, 9.75f };
+
     inline constexpr float modMakeupAmounts[] { 0.0f, 0.25f, 0.5f, 0.75f, 1.0f };
 
     juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();

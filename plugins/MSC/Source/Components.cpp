@@ -25,6 +25,25 @@ namespace
     }
 
     constexpr float minFreq = 20.0f, maxFreq = 20000.0f;
+
+    // Shared row grid so knobs, titles and values line up across panels. Row 1 matches Dynamic Pan's
+    // top block (three 40 px control rows), so every row-1 knob shares the Amount knob's centre and
+    // value line; rows 2 and 3 split the rest evenly.
+    constexpr int firstRowHeight = 3 * 40 + 2 * 8;
+    constexpr int gridRowGap = 10;
+
+    struct Rows { juce::Rectangle<int> first, second, third; };
+
+    Rows splitRows (juce::Rectangle<int> area)
+    {
+        Rows rows;
+        rows.first = area.removeFromTop (firstRowHeight);
+        area.removeFromTop (gridRowGap);
+        rows.second = area.removeFromTop ((area.getHeight() - gridRowGap) / 2);
+        area.removeFromTop (gridRowGap);
+        rows.third = area;
+        return rows;
+    }
 }
 
 const klaud::Palette& palette()
@@ -660,7 +679,7 @@ void DynamicPanModule::layoutContent (juce::Rectangle<int> area)
     constexpr int row = 40, rowGap = 8, captionHeight = 16, columnGap = 8;
 
     // Two groups: the pan (next to the Amount knob) and the modulator compressor.
-    auto top = area.removeFromTop (3 * row + 2 * rowGap);
+    auto top = area.removeFromTop (firstRowHeight);
     amount.setBounds (top.removeFromLeft (top.getHeight()));
     top.removeFromLeft (12);
 
@@ -743,19 +762,17 @@ HaasModule::HaasModule (APVTS& state)
 
 void HaasModule::layoutContent (juce::Rectangle<int> area)
 {
-    auto knobs = area.removeFromTop (150);
-    left.setBounds (knobs.removeFromLeft (knobs.getWidth() / 2).withTrimmedRight (2));
-    right.setBounds (knobs.withTrimmedLeft (2));
+    auto rows = splitRows (area);
+    left.setBounds (rows.first.removeFromLeft (rows.first.getWidth() / 2).withTrimmedRight (2));
+    right.setBounds (rows.first.withTrimmedLeft (2));
 
-    area.removeFromTop (18);
-    polarityCaption = area.removeFromTop (16);
-
-    auto buttons = area.removeFromTop (26);
+    polarityCaption = rows.second.removeFromTop (16);
+    auto buttons = rows.second.removeFromTop (26);
     const int half = buttons.getWidth() / 2;
     invertLeft.setBounds (buttons.removeFromLeft (half).withSizeKeepingCentre (40, 26));
     invertRight.setBounds (buttons.withSizeKeepingCentre (40, 26));
 
-    hintArea = area.removeFromBottom (48);
+    hintArea = rows.third.removeFromBottom (48);
 }
 
 void HaasModule::paintContent (juce::Graphics& g)
@@ -770,37 +787,139 @@ void HaasModule::paintContent (juce::Graphics& g)
 //==============================================================================
 ChorusModule::ChorusModule (APVTS& state)
     : ModulePanel (state, ids::chOn, "CHORUS", "Juno-style stereo", colours::chorus),
+      mix (state, ids::chMix, "MIX", colours::chorus, true),
       depth (state, ids::chDepth, "DEPTH", colours::chorus, true),
       width (state, ids::chWidth, "WIDTH", colours::chorus, true),
       tone (state, ids::chTone, "TONE", colours::chorus, true),
-      mix (state, ids::chMix, "MIX", colours::chorus, true)
+      rate (state, ids::chRate, "RATE", colours::chorus)
 {
     mode.attach (getParam (state, ids::chMode));
+    mode.setVertical (true);
     mode.setColour (juce::TextButton::buttonOnColourId, colours::chorus);
     addAndMakeVisible (mode);
 
-    for (auto* knob : { &depth, &width, &tone, &mix })
+    // RATE multiplies the Juno speed of the selected mode (1x = Juno); it shows the resulting Hz.
+    rate.slider.textFromValueFunction = [this] (double v)
+    {
+        const double hz = v * modeRate();
+        return juce::String (hz, hz < 1.0 ? 2 : (hz < 10.0 ? 2 : 1)) + " Hz";
+    };
+    rate.slider.valueFromTextFunction = [this] (const juce::String& text)
+    {
+        return juce::jlimit (0.25, 4.0, text.retainCharacters ("0123456789.").getDoubleValue() / (double) modeRate());
+    };
+    rate.slider.setTooltip ("Chorus speed. Centre (double-click) = the Juno speed of the selected mode.");
+
+    modeWatcher = std::make_unique<juce::ParameterAttachment> (getParam (state, ids::chMode),
+                                                               [this] (float) { rate.slider.updateText(); });
+    modeWatcher->sendInitialUpdate();
+
+    for (auto* knob : { &mix, &depth, &width, &tone, &rate })
         addAndMakeVisible (knob);
+}
+
+float ChorusModule::modeRate() const
+{
+    const int selected = juce::jlimit (0, 2, (int) std::lround (apvts.getRawParameterValue (ids::chMode)->load()));
+    return chorusModeRates[selected];
 }
 
 void ChorusModule::layoutContent (juce::Rectangle<int> area)
 {
-    modeCaption = area.removeFromTop (16);
+    auto rows = splitRows (area);
 
-    mode.setBounds (area.removeFromTop (26));
+    // Row 1 like the other panels: the main knob (Mix) with the Mode segments stacked beside it,
+    // the top one on the selector line. Rows 2 and 3 line up with Image / Dimension.
+    mix.setBounds (rows.first.removeFromLeft (rows.first.getWidth() - 62));
+    rows.first.removeFromLeft (6);
+    modeCaption = rows.first.removeFromTop (16);
+    mode.setBounds (rows.first.removeFromTop (3 * 26 + 2 * 6));
 
-    area.removeFromTop (14);
-    auto top = area.removeFromTop ((area.getHeight() - 12) / 2);
-    area.removeFromTop (12);
-    depth.setBounds (top.removeFromLeft (top.getWidth() / 2));
-    width.setBounds (top);
-    tone.setBounds (area.removeFromLeft (area.getWidth() / 2));
-    mix.setBounds (area);
+    depth.setBounds (rows.second.removeFromLeft (rows.second.getWidth() / 2));
+    width.setBounds (rows.second);
+    tone.setBounds (rows.third.removeFromLeft (rows.third.getWidth() / 2));
+    rate.setBounds (rows.third);
 }
 
 void ChorusModule::paintContent (juce::Graphics& g)
 {
     drawCaption (g, "MODE", modeCaption, juce::Justification::centredLeft);
+}
+
+//==============================================================================
+DimensionTapView::DimensionTapView (APVTS& state, const std::atomic<float>& lfoPhase)
+    : phase (lfoPhase), size (state.getRawParameterValue (ids::dmSize)), mix (state.getRawParameterValue (ids::dmMix))
+{
+    setTooltip ("The four delayed copies added to the side: position = delay, bar = gain as the slow LFO turns.");
+    startTimerHz (30);
+}
+
+void DimensionTapView::paint (juce::Graphics& g)
+{
+    using namespace dsp::dimension;
+    const auto& pal = palette();
+    const auto area = getLocalBounds().toFloat();
+
+    g.setColour (pal.background.withAlpha (0.85f));
+    g.fillRoundedRectangle (area, 5.0f);
+
+    constexpr float rangeMs = 200.0f;
+    const float cy = area.getCentreY(), half = area.getHeight() * 0.5f - 12.0f;
+    auto xFor = [&] (float ms) { return area.getX() + 6.0f + (area.getWidth() - 12.0f) * ms / rangeMs; };
+
+    g.setColour (juce::Colours::white.withAlpha (0.06f));
+    g.drawHorizontalLine (juce::roundToInt (cy), area.getX(), area.getRight());
+    g.setFont (klaud::font (9.5f));
+    for (float ms : { 50.0f, 100.0f, 150.0f })
+    {
+        g.setColour (juce::Colours::white.withAlpha (0.04f));
+        g.drawVerticalLine (juce::roundToInt (xFor (ms)), area.getY(), area.getBottom());
+        g.setColour (pal.textDim.withAlpha (0.55f));
+        g.drawText (juce::String (juce::roundToInt (ms)), juce::Rectangle<float> (xFor (ms) + 2.0f, area.getBottom() - 12.0f, 26.0f, 11.0f),
+                    juce::Justification::centredLeft, false);
+    }
+
+    const float first = firstDelay (size->load() * 0.01f);
+    const float wet = mix->load() * 0.01f;
+    const auto gains = tapGains (phase.load (std::memory_order_relaxed));
+
+    for (size_t k = 0; k < 4; ++k)
+    {
+        const float x = xFor (first * delayRatio[k]);
+        const float h = gains[k] * wet / gain[0] * half;   // the largest tap fills the height at 100 %
+        g.setColour (colours::dimension.withAlpha (0.25f));
+        g.drawVerticalLine (juce::roundToInt (x), cy - half, cy + half);
+        g.setColour (colours::dimension);
+        g.fillRoundedRectangle (juce::Rectangle<float> (x - 2.5f, juce::jmin (cy, cy - h), 5.0f, std::abs (h) + 1.0f), 2.0f);
+    }
+}
+
+DimensionModule::DimensionModule (APVTS& state, const std::atomic<float>& lfoPhase)
+    : ModulePanel (state, ids::dmOn, "DIMENSION", "4 slow taps, mono-safe", colours::dimension),
+      size (state, ids::dmSize, "SIZE", colours::dimension, true),
+      mix (state, ids::dmMix, "MIX", colours::dimension, true),
+      taps (state, lfoPhase)
+{
+    size.slider.setTooltip ("Delay of the four taps: 15-25 ms at 0 %, 115-188 ms at 100 %. Bigger = roomier.");
+    mix.slider.setTooltip ("How much of the widening is added. Only the side changes: the mono sum stays untouched.");
+
+    for (auto* c : std::initializer_list<juce::Component*> { &size, &mix, &taps })
+        addAndMakeVisible (c);
+}
+
+void DimensionModule::layoutContent (juce::Rectangle<int> area)
+{
+    auto rows = splitRows (area);
+    size.setBounds (rows.first);
+    mix.setBounds (rows.second);
+    tapsCaption = rows.third.removeFromTop (16);
+    rows.third.removeFromTop (2);
+    taps.setBounds (rows.third);
+}
+
+void DimensionModule::paintContent (juce::Graphics& g)
+{
+    drawCaption (g, "TAPS", tapsCaption, juce::Justification::centredLeft);
 }
 
 //==============================================================================
@@ -816,13 +935,10 @@ ImageModule::ImageModule (APVTS& state)
 
 void ImageModule::layoutContent (juce::Rectangle<int> area)
 {
-    constexpr int spacing = 10;
-    const int h = (area.getHeight() - 2 * spacing) / 3;
-    balance.setBounds (area.removeFromTop (h));
-    area.removeFromTop (spacing);
-    mid.setBounds (area.removeFromTop (h));
-    area.removeFromTop (spacing);
-    side.setBounds (area);
+    auto rows = splitRows (area);
+    balance.setBounds (rows.first);
+    mid.setBounds (rows.second);
+    side.setBounds (rows.third);
 }
 
 //==============================================================================

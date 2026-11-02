@@ -6,7 +6,7 @@
 namespace klaud
 {
     // A short choice parameter (two or three options) as one row of segments: every option is visible and
-    // one click picks it, instead of a menu. The selected segment is filled with TextButton::buttonOnColourId
+    // one click picks it, instead of a menu. setVertical (true) stacks the segments as a column instead. The selected segment is filled with TextButton::buttonOnColourId
     // (set it on this component for a per-module accent), its text in TextButton::textColourOnId.
     class ChoiceButtons : public juce::Component, public juce::SettableTooltipClient
     {
@@ -34,6 +34,9 @@ namespace klaud
 
         int getSelected() const { return selected; }
 
+        // Stack the segments top to bottom, each the same height (e.g. next to a knob).
+        void setVertical (bool shouldBeVertical) { vertical = shouldBeVertical; repaint(); }
+
         void paint (juce::Graphics& g) override
         {
             const int n = labels.size();
@@ -43,7 +46,7 @@ namespace klaud
             const auto bounds = getLocalBounds().toFloat().reduced (0.5f);
             const auto outline = findColour (juce::ComboBox::outlineColourId);
             const auto accent = findColour (juce::TextButton::buttonOnColourId);
-            const int hovered = isMouseOver() && isEnabled() ? segmentAt (getMouseXYRelative().x) : -1;
+            const int hovered = isMouseOver() && isEnabled() ? segmentAt (getMouseXYRelative()) : -1;
 
             if (! isEnabled())
                 g.beginTransparencyLayer (0.5f);
@@ -72,7 +75,7 @@ namespace klaud
                     if (i > 0 && i != selected && i - 1 != selected)
                     {
                         g.setColour (outline);
-                        g.fillRect (r.withWidth (1.0f));
+                        g.fillRect (vertical ? r.withHeight (1.0f) : r.withWidth (1.0f));
                     }
                 }
             }
@@ -97,7 +100,7 @@ namespace klaud
 
         void mouseDown (const juce::MouseEvent& e) override
         {
-            const int index = segmentAt (e.x);
+            const int index = segmentAt (e.getPosition());
             if (attachment != nullptr && index >= 0 && index != selected)
                 attachment->setValueAsCompleteGesture ((float) index);
         }
@@ -116,6 +119,15 @@ namespace klaud
         // 12 px text, smaller (down to 9.5 px) when the labels wouldn't fit side by side.
         float textHeight() const
         {
+            if (vertical)
+            {
+                float widest = 0.0f;
+                for (auto& label : labels)
+                    widest = juce::jmax (widest, juce::GlyphArrangement::getStringWidth (font (12.0f, true), label));
+                const float room = (float) getWidth() - padding;
+                return widest <= room || widest <= 0.0f ? 12.0f : juce::jmax (9.5f, 12.0f * room / widest);
+            }
+
             const float room = (float) getWidth() - padding * (float) labels.size(), needed = labelsWidth (12.0f);
             return needed <= room || needed <= 0.0f ? 12.0f : juce::jmax (9.5f, 12.0f * room / needed);
         }
@@ -141,20 +153,28 @@ namespace klaud
 
         juce::Rectangle<float> segment (int i) const
         {
+            if (vertical)
+            {
+                const float h = (float) getHeight() / (float) juce::jmax (1, labels.size());
+                const float top = std::round (h * (float) i);
+                return { 0.0f, top, (float) getWidth(), std::round (h * (float) (i + 1)) - top };
+            }
+
             const float left = std::round (edge (i));
             return { left, 0.0f, std::round (edge (i + 1)) - left, (float) getHeight() };
         }
 
-        int segmentAt (int x) const
+        int segmentAt (juce::Point<int> position) const
         {
             for (int i = 0; i < labels.size(); ++i)
-                if ((float) x < segment (i).getRight())
+                if (vertical ? (float) position.y < segment (i).getBottom() : (float) position.x < segment (i).getRight())
                     return i;
             return labels.size() - 1;
         }
 
         juce::StringArray labels;
         int selected = 0;
+        bool vertical = false;
         std::unique_ptr<juce::ParameterAttachment> attachment;
     };
 }
