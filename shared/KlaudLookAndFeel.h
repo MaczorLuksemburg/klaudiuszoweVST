@@ -72,7 +72,9 @@ namespace klaud
             setColour (juce::ComboBox::textColourId,            palette.text);
             setColour (juce::ComboBox::arrowColourId,           palette.textDim);
 
-            setColour (juce::PopupMenu::backgroundColourId,            palette.panel);
+            // Not quite opaque on purpose: JUCE then gives menus a transparent window, so their corners can be
+            // rounded like the buttons that open them (drawPopupMenuBackgroundWithOptions paints the panel).
+            setColour (juce::PopupMenu::backgroundColourId,            palette.panel.withAlpha (0.99f));
             setColour (juce::PopupMenu::textColourId,                  palette.text);
             setColour (juce::PopupMenu::headerTextColourId,            palette.textDim);
             setColour (juce::PopupMenu::highlightedBackgroundColourId, palette.accent.withAlpha (0.25f));
@@ -265,18 +267,28 @@ namespace klaud
         // Menus: flat panel with a hairline, neutral hover, the ticked (current) item in the accent with a bar on its
         // left. The accent is the first TextButton::buttonOnColourId set on the menu's target or one of its parents
         // (so a plugin can colour menus per module or stage), otherwise the palette's.
-        juce::PopupMenu::Options getOptionsForComboBoxPopupMenu (juce::ComboBox& box, juce::Label& label) override
+        // The menu opens right under its button (above it only when there's no room below). JUCE's default also
+        // asks to keep the current item visible, which slides the whole menu up so that item covers the button.
+        juce::PopupMenu::Options getOptionsForComboBoxPopupMenu (juce::ComboBox& box, juce::Label&) override
         {
-            return juce::LookAndFeel_V4::getOptionsForComboBoxPopupMenu (box, label).withStandardItemHeight (24);
+            return juce::PopupMenu::Options().withTargetComponent (&box)
+                                             .withInitiallySelectedItem (box.getSelectedId())
+                                             .withMinimumWidth (box.getWidth())
+                                             .withMaximumNumColumns (1)
+                                             .withStandardItemHeight (24);
         }
 
         int getPopupMenuBorderSizeWithOptions (const juce::PopupMenu::Options&) override { return 4; }
 
+        static constexpr float cornerRadius = 4.0f;   // buttons, combo boxes and menus share it
+
         void drawPopupMenuBackgroundWithOptions (juce::Graphics& g, int width, int height, const juce::PopupMenu::Options&) override
         {
-            g.fillAll (palette.panel.brighter (0.05f));
+            const auto area = juce::Rectangle<int> (width, height).toFloat();
+            g.setColour (palette.panel.brighter (0.05f));
+            g.fillRoundedRectangle (area, cornerRadius);
             g.setColour (palette.panelOutline.brighter (0.3f));
-            g.drawRect (0, 0, width, height, 1);
+            g.drawRoundedRectangle (area.reduced (0.5f), cornerRadius, 1.0f);
         }
 
         void getIdealPopupMenuItemSizeWithOptions (const juce::String& text, bool isSeparator, int standardHeight,

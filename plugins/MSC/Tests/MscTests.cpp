@@ -484,6 +484,59 @@ namespace
             saveSnapshot (*editor, folder.getChildFile ("msc-init.png"));
         }
 
+        // Dropdown menus open right under their button (top-left corner on the button's bottom-left), at the
+        // base size and with the window scaled up.
+        for (const float scale : { 1.0f, 1.5f })
+        {
+            std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
+            editor->setSize (juce::roundToInt (MscMainView::baseWidth * scale), juce::roundToInt (MscMainView::baseHeight * scale));
+            editor->addToDesktop (0);
+            editor->setTopLeftPosition (60, 60);
+            editor->setVisible (true);
+
+            std::vector<juce::ComboBox*> boxes;
+            std::function<void (juce::Component&)> collect = [&] (juce::Component& c)
+            {
+                if (auto* box = dynamic_cast<juce::ComboBox*> (&c))
+                    boxes.push_back (box);
+                for (auto* child : c.getChildren())
+                    collect (*child);
+            };
+            collect (*editor);
+
+            int worst = 0;
+            juce::String worstName;
+            for (auto* box : boxes)
+            {
+                const int before = juce::Desktop::getInstance().getNumComponents();
+                box->showPopup();
+                auto& desktop = juce::Desktop::getInstance();
+                juce::Component* menu = desktop.getNumComponents() > before ? desktop.getComponent (desktop.getNumComponents() - 1) : nullptr;
+                if (menu == nullptr)
+                    continue;
+
+                const auto boxArea = box->getScreenBounds();
+                const auto menuArea = menu->getScreenBounds();
+                const int offset = std::max (std::abs (menuArea.getY() - boxArea.getBottom()), std::abs (menuArea.getX() - boxArea.getX()));
+                if (offset >= worst)
+                {
+                    worst = offset;
+                    worstName = box->getTooltip().isNotEmpty() ? box->getTooltip().substring (0, 30) : box->getText();
+                    worstName << " (button " << boxArea.toString() << ", menu " << menuArea.toString() << ")";
+                }
+
+                if (scale == 1.0f && box == boxes.front())
+                    saveSnapshot (*menu, folder.getChildFile ("msc-menu.png"));
+
+                juce::PopupMenu::dismissAllActiveMenus();
+                box->hidePopup();
+            }
+
+            expect (! boxes.empty() && worst <= 1, "dropdown menus open under their button at " + juce::String (scale, 1)
+                                                       + "x (largest offset " + juce::String (worst) + " px: " + worstName + ")");
+            editor->removeFromDesktop();
+        }
+
         // Everything on, with audio flowing so the spectrum displays have content.
         p.presets.loadPreset (1);
         for (const char* id : { msc::ids::dpOn, msc::ids::hsOn, msc::ids::chOn, msc::ids::dmOn })

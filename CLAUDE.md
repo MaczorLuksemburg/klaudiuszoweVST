@@ -18,9 +18,13 @@ AI-made VST plugins for testing and fun.
 - Shared UI look (FabFilter-inspired, keep it minimal) lives in `shared/KlaudLookAndFeel.h`; reuse it for new plugins.
   It also draws every popup menu: the ticked item takes the first `TextButton::buttonOnColourId` set on the menu's
   target or its parents (DynMap sets the stage colour on its main view, MSC the module colour on each module
-  panel), else the palette accent.
+  panel), else the palette accent. Menus have the same 4 px rounded corners as buttons (`cornerRadius`; this needs
+  `PopupMenu::backgroundColourId` slightly transparent so JUCE gives the menu a transparent window) and a combo
+  box's menu opens right under it: no `withItemThatMustBeVisible`, which slides the menu up over the button.
+  `MSC_Tests` (GUI part) checks every dropdown's menu position at 1x and 1.5x.
 - Choices with two or three short options use `klaud::ChoiceButtons` (`shared/KlaudChoiceButtons.h`, segments
-  attached to the parameter) instead of a combo box; longer lists stay menus.
+  attached to the parameter) instead of a combo box; longer lists stay menus. `setVertical (true)` stacks them
+  (MSC Chorus Mode, next to the Mix knob).
 - `cmake -S . -B build -G "Visual Studio 17 2022" -A x64`, then `cmake --build build --config Release`.
 - The shared look takes a `klaud::Palette` per plugin (StereoScale uses the default grey, MSC a navy palette
   with one accent colour per module).
