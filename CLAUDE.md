@@ -17,7 +17,8 @@ AI-made VST plugins for testing and fun.
 - JUCE is fetched by CMake (root `CMakeLists.txt`); each plugin is a subdirectory under `plugins/`, added from the root.
 - Shared UI look (FabFilter-inspired, keep it minimal) lives in `shared/KlaudLookAndFeel.h`; reuse it for new plugins.
   It also draws every popup menu: the ticked item takes the first `TextButton::buttonOnColourId` set on the menu's
-  target or its parents (DynMap sets the stage colour on its main view), else the palette accent.
+  target or its parents (DynMap sets the stage colour on its main view, MSC the module colour on each module
+  panel), else the palette accent.
 - Choices with two or three short options use `klaud::ChoiceButtons` (`shared/KlaudChoiceButtons.h`, segments
   attached to the parameter) instead of a combo box; longer lists stay menus.
 - `cmake -S . -B build -G "Visual Studio 17 2022" -A x64`, then `cmake --build build --config Release`.

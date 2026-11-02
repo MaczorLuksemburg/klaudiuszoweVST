@@ -2,6 +2,7 @@
 
 #include "PluginProcessor.h"
 #include <KlaudLookAndFeel.h>
+#include <KlaudChoiceButtons.h>
 
 namespace msc::ui
 {
@@ -186,7 +187,8 @@ namespace msc::ui
 
         Knob amount;
         juce::Slider maxBox, thresholdBox;
-        juce::ComboBox source, comp, clip, makeup;
+        klaud::ChoiceButtons source;
+        juce::ComboBox comp, clip, makeup;
         std::vector<std::unique_ptr<APVTS::SliderAttachment>> sliderAttachments;
         std::vector<std::unique_ptr<APVTS::ComboBoxAttachment>> comboAttachments;
         std::unique_ptr<juce::ParameterAttachment> maxWatcher;
@@ -221,8 +223,7 @@ namespace msc::ui
         void layoutContent (juce::Rectangle<int>) override;
         void paintContent (juce::Graphics&) override;
 
-        std::array<juce::TextButton, 3> modes;
-        std::unique_ptr<juce::ParameterAttachment> modeAttachment;
+        klaud::ChoiceButtons mode;
         Knob depth, width, tone, mix;
         juce::Rectangle<int> modeCaption;
     };

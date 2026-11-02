@@ -115,6 +115,7 @@ ModulePanel::ModulePanel (APVTS& state, const char* onParamId, const juce::Strin
     : apvts (state), accent (accentColour), title (titleText), subtitle (subtitleText), power (accentColour)
 {
     power.setTooltip ("Module on/off. Touching any control switches the module on.");
+    setColour (juce::TextButton::buttonOnColourId, accent);   // menus opened in here tick their item in the module colour
     addAndMakeVisible (power);
     powerAttachment = std::make_unique<APVTS::ButtonAttachment> (apvts, onParamId, power);
 
@@ -614,7 +615,10 @@ DynamicPanModule::DynamicPanModule (APVTS& state, SpectrumAnalyzer& analyzer, Mo
     setUpNumberBox (thresholdBox, "Compressor threshold. Everything below it is lifted by the ratio.");
     sliderAttachments.push_back (std::make_unique<APVTS::SliderAttachment> (state, ids::dpThresh, thresholdBox));
 
-    setUpCombo (source, ids::dpSource, "Which channel drives the panning: the sum of both, left or right");
+    source.attach (getParam (apvts, ids::dpSource), { "Sum", "L", "R" });
+    source.setColour (juce::TextButton::buttonOnColourId, accent);
+    source.setTooltip ("Which channel drives the panning: the sum of both, left or right");
+    addAndMakeVisible (source);
     setUpCombo (comp, ids::dpComp, "Compresses the modulator (10 ms attack, 150 ms release, auto makeup) so quiet parts pan as hard as loud ones");
     setUpCombo (clip, ids::dpClip, "Limits the pan movement to hard left/right. Shapes the modulation, not the audio.");
     setUpCombo (makeup, ids::dpMakeup, "How much of the compressor's auto makeup gain to apply. 100 % keeps full scale at full scale and lifts everything below it the most.");
@@ -771,25 +775,9 @@ ChorusModule::ChorusModule (APVTS& state)
       tone (state, ids::chTone, "TONE", colours::chorus, true),
       mix (state, ids::chMix, "MIX", colours::chorus, true)
 {
-    const juce::StringArray names { "I", "II", "I+II" };
-
-    for (int i = 0; i < 3; ++i)
-    {
-        auto& button = modes[(size_t) i];
-        button.setButtonText (names[i]);
-        button.setColour (juce::TextButton::buttonOnColourId, colours::chorus);
-        button.setConnectedEdges ((i > 0 ? juce::Button::ConnectedOnLeft : 0) | (i < 2 ? juce::Button::ConnectedOnRight : 0));
-        button.onClick = [this, i] { modeAttachment->setValueAsCompleteGesture ((float) i); };
-        addAndMakeVisible (button);
-    }
-
-    modeAttachment = std::make_unique<juce::ParameterAttachment> (getParam (state, ids::chMode), [this] (float value)
-    {
-        const int selected = (int) std::lround (value);
-        for (int i = 0; i < 3; ++i)
-            modes[(size_t) i].setToggleState (i == selected, juce::dontSendNotification);
-    });
-    modeAttachment->sendInitialUpdate();
+    mode.attach (getParam (state, ids::chMode));
+    mode.setColour (juce::TextButton::buttonOnColourId, colours::chorus);
+    addAndMakeVisible (mode);
 
     for (auto* knob : { &depth, &width, &tone, &mix })
         addAndMakeVisible (knob);
@@ -799,14 +787,7 @@ void ChorusModule::layoutContent (juce::Rectangle<int> area)
 {
     modeCaption = area.removeFromTop (16);
 
-    auto row = area.removeFromTop (26);
-    const int buttonWidth = (row.getWidth() - 8) / 3;
-
-    for (auto& button : modes)
-    {
-        button.setBounds (row.removeFromLeft (buttonWidth));
-        row.removeFromLeft (4);
-    }
+    mode.setBounds (area.removeFromTop (26));
 
     area.removeFromTop (14);
     auto top = area.removeFromTop ((area.getHeight() - 12) / 2);

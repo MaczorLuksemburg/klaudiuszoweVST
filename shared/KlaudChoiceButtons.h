@@ -80,10 +80,11 @@ namespace klaud
             g.setColour (outline.brighter (hovered >= 0 ? 0.3f : 0.0f));
             g.strokePath (shape, juce::PathStrokeType (1.0f));
 
+            const float height = textHeight();
             for (int i = 0; i < n; ++i)
             {
                 const bool on = i == selected;
-                g.setFont (font (12.0f, on));
+                g.setFont (font (height, on));
                 g.setColour (on ? findColour (juce::TextButton::textColourOnId)
                                 : hovered == i ? findColour (juce::ComboBox::textColourId)
                                                : findColour (juce::TextButton::textColourOffId).brighter (0.25f));
@@ -102,14 +103,32 @@ namespace klaud
         }
 
     private:
+        static constexpr float padding = 10.0f;
+
+        float labelsWidth (float height) const
+        {
+            float total = 0.0f;
+            for (auto& label : labels)
+                total += juce::GlyphArrangement::getStringWidth (font (height, true), label);
+            return total;
+        }
+
+        // 12 px text, smaller (down to 9.5 px) when the labels wouldn't fit side by side.
+        float textHeight() const
+        {
+            const float room = (float) getWidth() - padding * (float) labels.size(), needed = labelsWidth (12.0f);
+            return needed <= room || needed <= 0.0f ? 12.0f : juce::jmax (9.5f, 12.0f * room / needed);
+        }
+
         // Each segment is its label's width plus an equal share of the rest, so a long label isn't cut short.
         float edge (int i) const
         {
             const int n = labels.size();
+            const auto f = font (textHeight(), true);
             float total = 0.0f, before = 0.0f;
             for (int k = 0; k < n; ++k)
             {
-                const float w = juce::GlyphArrangement::getStringWidth (font (12.0f, true), labels[k]) + 10.0f;
+                const float w = juce::GlyphArrangement::getStringWidth (f, labels[k]) + padding;
                 total += w;
                 if (k < i)
                     before += w;
