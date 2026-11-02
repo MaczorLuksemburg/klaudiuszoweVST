@@ -25,6 +25,25 @@ namespace
     }
 
     constexpr float minFreq = 20.0f, maxFreq = 20000.0f;
+
+    // Shared row grid so knobs, titles and values line up across panels. Row 1 matches Dynamic Pan's
+    // top block (three 40 px control rows), so every row-1 knob shares the Amount knob's centre and
+    // value line; rows 2 and 3 split the rest evenly.
+    constexpr int firstRowHeight = 3 * 40 + 2 * 8;
+    constexpr int gridRowGap = 10;
+
+    struct Rows { juce::Rectangle<int> first, second, third; };
+
+    Rows splitRows (juce::Rectangle<int> area)
+    {
+        Rows rows;
+        rows.first = area.removeFromTop (firstRowHeight);
+        area.removeFromTop (gridRowGap);
+        rows.second = area.removeFromTop ((area.getHeight() - gridRowGap) / 2);
+        area.removeFromTop (gridRowGap);
+        rows.third = area;
+        return rows;
+    }
 }
 
 const klaud::Palette& palette()
@@ -656,7 +675,7 @@ void DynamicPanModule::layoutContent (juce::Rectangle<int> area)
     constexpr int row = 40, rowGap = 8, captionHeight = 16, columnGap = 8;
 
     // Two groups: the pan (next to the Amount knob) and the modulator compressor.
-    auto top = area.removeFromTop (3 * row + 2 * rowGap);
+    auto top = area.removeFromTop (firstRowHeight);
     amount.setBounds (top.removeFromLeft (top.getHeight()));
     top.removeFromLeft (12);
 
@@ -739,19 +758,17 @@ HaasModule::HaasModule (APVTS& state)
 
 void HaasModule::layoutContent (juce::Rectangle<int> area)
 {
-    auto knobs = area.removeFromTop (150);
-    left.setBounds (knobs.removeFromLeft (knobs.getWidth() / 2).withTrimmedRight (2));
-    right.setBounds (knobs.withTrimmedLeft (2));
+    auto rows = splitRows (area);
+    left.setBounds (rows.first.removeFromLeft (rows.first.getWidth() / 2).withTrimmedRight (2));
+    right.setBounds (rows.first.withTrimmedLeft (2));
 
-    area.removeFromTop (18);
-    polarityCaption = area.removeFromTop (16);
-
-    auto buttons = area.removeFromTop (26);
+    polarityCaption = rows.second.removeFromTop (16);
+    auto buttons = rows.second.removeFromTop (26);
     const int half = buttons.getWidth() / 2;
     invertLeft.setBounds (buttons.removeFromLeft (half).withSizeKeepingCentre (40, 26));
     invertRight.setBounds (buttons.withSizeKeepingCentre (40, 26));
 
-    hintArea = area.removeFromBottom (48);
+    hintArea = rows.third.removeFromBottom (48);
 }
 
 void HaasModule::paintContent (juce::Graphics& g)
@@ -797,9 +814,11 @@ ChorusModule::ChorusModule (APVTS& state)
 
 void ChorusModule::layoutContent (juce::Rectangle<int> area)
 {
-    modeCaption = area.removeFromTop (16);
+    auto rows = splitRows (area);
 
-    auto row = area.removeFromTop (26);
+    // Mode sits on the selector line of row 1; the knobs line up with rows 2 and 3 of Image / Dimension.
+    modeCaption = rows.first.removeFromTop (16);
+    auto row = rows.first.removeFromTop (26);
     const int buttonWidth = (row.getWidth() - 8) / 3;
 
     for (auto& button : modes)
@@ -808,13 +827,10 @@ void ChorusModule::layoutContent (juce::Rectangle<int> area)
         row.removeFromLeft (4);
     }
 
-    area.removeFromTop (14);
-    auto top = area.removeFromTop ((area.getHeight() - 12) / 2);
-    area.removeFromTop (12);
-    depth.setBounds (top.removeFromLeft (top.getWidth() / 2));
-    width.setBounds (top);
-    tone.setBounds (area.removeFromLeft (area.getWidth() / 2));
-    mix.setBounds (area);
+    depth.setBounds (rows.second.removeFromLeft (rows.second.getWidth() / 2));
+    width.setBounds (rows.second);
+    tone.setBounds (rows.third.removeFromLeft (rows.third.getWidth() / 2));
+    mix.setBounds (rows.third);
 }
 
 void ChorusModule::paintContent (juce::Graphics& g)
@@ -885,15 +901,12 @@ DimensionModule::DimensionModule (APVTS& state, const std::atomic<float>& lfoPha
 
 void DimensionModule::layoutContent (juce::Rectangle<int> area)
 {
-    constexpr int spacing = 10;
-    const int knobHeight = (area.getHeight() - 110 - 2 * spacing) / 2;
-    size.setBounds (area.removeFromTop (knobHeight));
-    area.removeFromTop (spacing);
-    mix.setBounds (area.removeFromTop (knobHeight));
-    area.removeFromTop (spacing);
-    tapsCaption = area.removeFromTop (16);
-    area.removeFromTop (2);
-    taps.setBounds (area);
+    auto rows = splitRows (area);
+    size.setBounds (rows.first);
+    mix.setBounds (rows.second);
+    tapsCaption = rows.third.removeFromTop (16);
+    rows.third.removeFromTop (2);
+    taps.setBounds (rows.third);
 }
 
 void DimensionModule::paintContent (juce::Graphics& g)
@@ -914,13 +927,10 @@ ImageModule::ImageModule (APVTS& state)
 
 void ImageModule::layoutContent (juce::Rectangle<int> area)
 {
-    constexpr int spacing = 10;
-    const int h = (area.getHeight() - 2 * spacing) / 3;
-    balance.setBounds (area.removeFromTop (h));
-    area.removeFromTop (spacing);
-    mid.setBounds (area.removeFromTop (h));
-    area.removeFromTop (spacing);
-    side.setBounds (area);
+    auto rows = splitRows (area);
+    balance.setBounds (rows.first);
+    mid.setBounds (rows.second);
+    side.setBounds (rows.third);
 }
 
 //==============================================================================
