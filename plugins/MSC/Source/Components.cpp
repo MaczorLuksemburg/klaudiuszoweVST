@@ -634,10 +634,7 @@ DynamicPanModule::DynamicPanModule (APVTS& state, SpectrumAnalyzer& analyzer, Mo
     setUpNumberBox (thresholdBox, "Compressor threshold. Everything below it is lifted by the ratio.");
     sliderAttachments.push_back (std::make_unique<APVTS::SliderAttachment> (state, ids::dpThresh, thresholdBox));
 
-    source.attach (getParam (apvts, ids::dpSource), { "Sum", "L", "R" });
-    source.setColour (juce::TextButton::buttonOnColourId, accent);
-    source.setTooltip ("Which channel drives the panning: the sum of both, left or right");
-    addAndMakeVisible (source);
+    setUpCombo (source, ids::dpSource, "Which channel drives the panning: the sum of both, left or right");
     setUpCombo (comp, ids::dpComp, "Compresses the modulator (10 ms attack, 150 ms release, auto makeup) so quiet parts pan as hard as loud ones");
     setUpCombo (clip, ids::dpClip, "Limits the pan movement to hard left/right. Shapes the modulation, not the audio.");
     setUpCombo (makeup, ids::dpMakeup, "How much of the compressor's auto makeup gain to apply. 100 % keeps full scale at full scale and lifts everything below it the most.");

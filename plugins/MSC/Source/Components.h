@@ -188,8 +188,7 @@ namespace msc::ui
 
         Knob amount;
         juce::Slider maxBox, thresholdBox;
-        klaud::ChoiceButtons source;
-        juce::ComboBox comp, clip, makeup;
+        juce::ComboBox source, comp, clip, makeup;
         std::vector<std::unique_ptr<APVTS::SliderAttachment>> sliderAttachments;
         std::vector<std::unique_ptr<APVTS::ComboBoxAttachment>> comboAttachments;
         std::unique_ptr<juce::ParameterAttachment> maxWatcher;

@@ -589,7 +589,7 @@ void BandDisplay::showBandMenu (int position)
     const float freq = hoverX >= 0.0f ? freqForX (hoverX) : 1000.0f;
     juce::Component::SafePointer<BandDisplay> safeThis (this);
 
-    menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition(), [safeThis, stage, slot, freq] (int result)
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMousePosition(), [safeThis, stage, slot, freq] (int result)
     {
         if (safeThis == nullptr || result == 0)
             return;
@@ -626,7 +626,7 @@ void BandDisplay::showSlopeMenu (int position)
     menu.addItem (10, "Remove crossover");
 
     juce::Component::SafePointer<BandDisplay> safeThis (this);
-    menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition(), [safeThis, stage] (int result)
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMousePosition(), [safeThis, stage] (int result)
     {
         if (safeThis == nullptr || result == 0)
             return;
@@ -786,7 +786,7 @@ void StageTab::mouseDown (const juce::MouseEvent& e)
         menu.addItem (2, "Reset");
 
         juce::Component::SafePointer<StageTab> safeThis (this);
-        menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition(), [safeThis, id, bypassed] (int result)
+        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMousePosition(), [safeThis, id, bypassed] (int result)
         {
             if (safeThis == nullptr) return;
             if (result == 1) setParameter (safeThis->processor.apvts, id, bypassed ? 0.0f : 1.0f);
