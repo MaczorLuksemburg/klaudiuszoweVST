@@ -4,6 +4,7 @@
 #include "Parameters.h"
 #include "RefPlayer.h"
 #include "Spectrum.h"
+#include "Storage.h"
 #include "StretchPlayer.h"
 #include "Stereo.h"
 #include "TrackData.h"
@@ -18,7 +19,9 @@
 // loudness-matched to the mix, and the monitored signal can be folded to mono or reduced to a band. Both signals
 // are always analysed, whichever one is audible, so the editor can draw their mid and side spectra on top of each other.
 class WaveRefProcessor : public juce::AudioProcessor,
-                         public juce::ChangeBroadcaster
+                         public juce::ChangeBroadcaster,
+                         private juce::AsyncUpdater,
+                         private juce::Timer
 {
 public:
     // Where a reference's loop sits, in seconds of the file (end 0 = to the end of the file).
@@ -99,6 +102,16 @@ public:
     // Free the tracks that the audio thread no longer uses. Called from the editor's timer.
     void collectGarbage();
 
+    // ---- remembered references ---------------------------------------------------------------------------
+    // Every file loaded into a slot (with its loop, cues and tempo) is kept in a small file in the user's application
+    // data folder, and a new instance starts with those slots filled. A project that was saved keeps its own slots.
+    bool isRememberingReferences() const;
+    void setRememberReferences (bool shouldRemember);   // turning it on keeps what is loaded now
+    void forgetRememberedReferences();
+
+    // Writes pending loop / cue / tempo edits to that file now (otherwise it happens a moment later).
+    void flushLibrary();
+
     // Loads finish on a background thread and are applied on the message thread. Tests (which run no message
     // loop) wait with hasLoadsInFlight() and apply the results themselves.
     bool hasLoadsInFlight() const { return loader.getNumJobs() > 0; }
@@ -168,6 +181,11 @@ private:
     };
 
     void applySlotState();
+    void restoreLibrary();
+    void updateLibrary (int slot, bool replaceEntry);
+    void markLibraryDirty (int slot);
+    void handleAsyncUpdate() override { startTimer (600); }
+    void timerCallback() override { stopTimer(); flushLibrary(); }
     void writeSlotState (int slot);
     void publishLoop (int slot);
     void startLoad (int slot, const juce::File& file, bool blocking, juce::String* error);
@@ -219,6 +237,7 @@ private:
     std::atomic<float> mixLufs { waveref::loudness::silenceLufs }, refLufs { waveref::loudness::silenceLufs }, matchDb { 0.0f };
     std::atomic<int> playheadSlot { -1 };
     std::atomic<int64_t> seekRequest { -1 };
+    std::atomic<uint32_t> libraryDirty { 0 };
     std::atomic<bool> hostTimeKnown { false }, hostIsPlaying { false };
     std::atomic<double> hostSeconds { 0.0 }, hostPpq { 0.0 }, hostBpmValue { 0.0 };
     std::atomic<bool> hostBeatKnown { false };

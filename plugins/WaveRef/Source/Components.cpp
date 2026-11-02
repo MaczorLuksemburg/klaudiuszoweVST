@@ -40,8 +40,6 @@ namespace
         return apvts.getRawParameterValue (id)->load();
     }
 
-    juce::File storageFolderOverride;
-
     struct FactoryPreset
     {
         const char* name;
@@ -156,16 +154,9 @@ void UiSettings::set (const char* key, const juce::var& value)
     saveGlobal();
 }
 
-juce::File UiSettings::getStorageFolder()
-{
-    if (storageFolderOverride != juce::File())
-        return storageFolderOverride;
+juce::File UiSettings::getStorageFolder() { return storage::folder(); }
 
-    return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
-               .getChildFile ("Maki plugins").getChildFile ("WaveRef");
-}
-
-void UiSettings::setStorageFolder (const juce::File& folder) { storageFolderOverride = folder; }
+void UiSettings::setStorageFolder (const juce::File& folder) { storage::setFolder (folder); }
 juce::File UiSettings::getPresetFolder() { return getStorageFolder().getChildFile ("Presets"); }
 juce::File UiSettings::getGlobalFile()    { return getStorageFolder().getChildFile ("Settings.xml"); }
 
@@ -1623,7 +1614,7 @@ void SlotButton::paint (juce::Graphics& g)
 
     g.setColour (selected ? pal.accent : pal.textDim);
     g.setFont (klaud::font (13.0f, true));
-    g.drawText (juce::String (index + 1), 8, 0, 16, getHeight(), juce::Justification::centredLeft, false);
+    g.drawText (juce::String (index + 1), 8, 0, 20, getHeight(), juce::Justification::centredLeft, false);
 
     juce::String text;
     juce::Colour colour = pal.text;
@@ -1635,7 +1626,7 @@ void SlotButton::paint (juce::Graphics& g)
 
     g.setColour (colour);
     g.setFont (klaud::font (12.0f));
-    g.drawText (text, 26, 0, getWidth() - 32, getHeight(), juce::Justification::centredLeft, true);
+    g.drawText (text, 30, 0, getWidth() - 36, getHeight(), juce::Justification::centredLeft, true);
 }
 
 SlotBar::SlotBar (WaveRefProcessor& p) : processor (p)
@@ -1644,7 +1635,7 @@ SlotBar::SlotBar (WaveRefProcessor& p) : processor (p)
     {
         buttons[(size_t) i] = std::make_unique<SlotButton> (processor, i);
         addAndMakeVisible (*buttons[(size_t) i]);
-        buttons[(size_t) i]->setTooltip ("Click to play this reference. Right-click for more. You can also drop a file here.");
+        buttons[(size_t) i]->setTooltip ("Click to play this reference. Right-click for more. You can also drop a file here. Keys 1-8 pick the top row, Shift+1-8 the bottom one");
     }
 
     processor.addChangeListener (this);
@@ -1658,11 +1649,12 @@ SlotBar::~SlotBar()
 
 void SlotBar::resized()
 {
-    constexpr int gap = 6;
-    const int width = (getWidth() - gap * (numSlots - 1)) / numSlots;
+    constexpr int gap = 6, perRow = numSlots / 2;
+    const int width = (getWidth() - gap * (perRow - 1)) / perRow;
+    const int height = (getHeight() - gap) / 2;
 
     for (int i = 0; i < numSlots; ++i)
-        buttons[(size_t) i]->setBounds (i * (width + gap), 0, width, getHeight());
+        buttons[(size_t) i]->setBounds ((i % perRow) * (width + gap), (i / perRow) * (height + gap), width, height);
 }
 
 void SlotBar::repaintAll()
@@ -2345,6 +2337,9 @@ void ControlPanel::showOptions()
     menu.addItem (1, "Restart the reference when it is switched in", true, getParameter (apvts, ids::restartSwitch) > 0.5f);
     menu.addItem (2, "Restart the reference when playback starts", true, getParameter (apvts, ids::restartPlay) > 0.5f);
     menu.addSeparator();
+    menu.addItem (5, "Remember my references for new instances", true, processor.isRememberingReferences());
+    menu.addItem (6, "Forget the remembered references");
+    menu.addSeparator();
     menu.addItem (3, "Reset curve colours");
     menu.addItem (4, "Reset blind test score");
 
@@ -2352,6 +2347,8 @@ void ControlPanel::showOptions()
     {
         if (result == 1)       setParameter (apvts, ids::restartSwitch, getParameter (apvts, ids::restartSwitch) > 0.5f ? 0.0f : 1.0f);
         else if (result == 2)  setParameter (apvts, ids::restartPlay, getParameter (apvts, ids::restartPlay) > 0.5f ? 0.0f : 1.0f);
+        else if (result == 5)  processor.setRememberReferences (! processor.isRememberingReferences());
+        else if (result == 6)  processor.forgetRememberedReferences();
         else if (result == 3)  { settings.resetColours(); getParentComponent()->repaint(); }
         else if (result == 4)  { processor.resetBlindScore(); resultText = {}; }
     });

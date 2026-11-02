@@ -1,3 +1,4 @@
+#include <map>
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
@@ -25,6 +26,74 @@ namespace
     }
 
     inline bool isOn (const std::atomic<float>* p) { return p->load() > 0.5f; }
+
+    // ---- the remembered references file ----
+    struct Library
+    {
+        bool enabled = true;
+        std::map<int, WaveRefProcessor::SlotInfo> slots;
+    };
+
+    juce::File libraryFile() { return storage::folder().getChildFile ("References.xml"); }
+
+    Library readLibrary()
+    {
+        Library library;
+
+        if (auto xml = juce::XmlDocument::parse (libraryFile()))
+        {
+            library.enabled = xml->getBoolAttribute ("enabled", true);
+
+            for (auto* node : xml->getChildWithTagNameIterator ("SLOT"))
+            {
+                const int index = node->getIntAttribute ("index", -1);
+
+                if (! juce::isPositiveAndBelow (index, numSlots))
+                    continue;
+
+                WaveRefProcessor::SlotInfo info;
+                info.path = node->getStringAttribute ("path");
+                info.loopStart = node->getDoubleAttribute ("loopStart");
+                info.loopEnd = node->getDoubleAttribute ("loopEnd");
+                info.loopOn = node->getBoolAttribute ("loopOn");
+                info.bpm = node->getDoubleAttribute ("bpm");
+                info.downbeat = node->getDoubleAttribute ("downbeat");
+
+                for (int i = 0; i < 4; ++i)
+                    info.cues[i] = node->getDoubleAttribute ("cue" + juce::String (i), -1.0);
+
+                if (info.path.isNotEmpty())
+                    library.slots[index] = info;
+            }
+        }
+
+        return library;
+    }
+
+    void writeLibrary (const Library& library)
+    {
+        juce::XmlElement xml ("WaveRefReferences");
+        xml.setAttribute ("enabled", library.enabled ? 1 : 0);
+
+        for (const auto& [index, info] : library.slots)
+        {
+            auto* node = xml.createNewChildElement ("SLOT");
+            node->setAttribute ("index", index);
+            node->setAttribute ("path", info.path);
+            node->setAttribute ("loopStart", info.loopStart);
+            node->setAttribute ("loopEnd", info.loopEnd);
+            node->setAttribute ("loopOn", info.loopOn ? 1 : 0);
+            node->setAttribute ("bpm", info.bpm);
+            node->setAttribute ("downbeat", info.downbeat);
+
+            for (int i = 0; i < 4; ++i)
+                node->setAttribute ("cue" + juce::String (i), info.cues[i]);
+        }
+
+        const auto file = libraryFile();
+        file.getParentDirectory().createDirectory();
+        xml.writeTo (file);
+    }
 }
 
 WaveRefProcessor::WaveRefProcessor()
@@ -58,10 +127,15 @@ WaveRefProcessor::WaveRefProcessor()
 
     for (auto& s : slots)
         s.info = {};
+
+    restoreLibrary();
 }
 
 WaveRefProcessor::~WaveRefProcessor()
 {
+    cancelPendingUpdate();
+    stopTimer();
+    flushLibrary();
     loader.removeAllJobs (true, 10000);
 }
 
@@ -535,8 +609,12 @@ void WaveRefProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
 
 void WaveRefProcessor::loadAllSlots()
 {
-    for (int i = 0; i < numSlots; ++i)
+    // The selected slot first: the loader works through its queue in order.
+    const int selected = juce::jlimit (0, numSlots - 1, (int) std::lround (params.slot->load()));
+
+    for (int n = 0; n < numSlots; ++n)
     {
+        const int i = (selected + n) % numSlots;
         juce::String path;
         {
             const juce::ScopedLock lock (slotLock);
@@ -570,6 +648,7 @@ void WaveRefProcessor::loadFile (int slot, const juce::File& file)
     }
 
     writeSlotState (slot);
+    updateLibrary (slot, true);
     startLoad (slot, file, false, nullptr);
 }
 
@@ -593,6 +672,7 @@ bool WaveRefProcessor::loadFileBlocking (int slot, const juce::File& file, juce:
     }
 
     writeSlotState (slot);
+    updateLibrary (slot, true);
 
     juce::String message;
     startLoad (slot, file, true, &message);
@@ -703,7 +783,10 @@ void WaveRefProcessor::installTrack (int slot, std::shared_ptr<TrackData> shared
         }
 
         if (adopted)
+        {
             writeSlotState (slot);
+            markLibraryDirty (slot);
+        }
     }
 
     publishLoop (slot);
@@ -722,6 +805,7 @@ void WaveRefProcessor::clearSlot (int slot)
     }
 
     writeSlotState (slot);
+    updateLibrary (slot, true);
     installTrack (slot, makeEmptyTrack (currentRate.load()));
 }
 
@@ -775,6 +859,7 @@ void WaveRefProcessor::setLoop (int slot, double startSeconds, double endSeconds
     }
 
     writeSlotState (slot);
+    markLibraryDirty (slot);
     publishLoop (slot);
     sendChangeMessage();
 }
@@ -790,6 +875,7 @@ void WaveRefProcessor::setCue (int slot, int index, double seconds)
     }
 
     writeSlotState (slot);
+    markLibraryDirty (slot);
     sendChangeMessage();
 }
 
@@ -846,6 +932,7 @@ void WaveRefProcessor::setGrid (int slot, double bpm, double downbeatSeconds)
     }
 
     writeSlotState (slot);
+    markLibraryDirty (slot);
     publishLoop (slot);
     sendChangeMessage();
 }
@@ -955,6 +1042,92 @@ void WaveRefProcessor::writeSlotState (int slot)
 
     for (int i = 0; i < 4; ++i)
         node.setProperty (cueProp (i), info.cues[i], nullptr);
+}
+
+void WaveRefProcessor::restoreLibrary()
+{
+    const auto library = readLibrary();
+
+    if (! library.enabled)
+        return;
+
+    for (const auto& [index, info] : library.slots)
+    {
+        {
+            const juce::ScopedLock lock (slotLock);
+            slots[(size_t) index].info = info;
+        }
+
+        writeSlotState (index);   // so the project saves what it starts with
+    }
+}
+
+void WaveRefProcessor::updateLibrary (int slot, bool replaceEntry)
+{
+    auto library = readLibrary();
+
+    if (! library.enabled)
+        return;
+
+    const auto info = getSlotInfo (slot);
+
+    if (replaceEntry)
+    {
+        if (info.path.isEmpty()) library.slots.erase (slot);
+        else                     library.slots[slot] = info;
+    }
+    else
+    {
+        // An edit only follows the file it was made on.
+        const auto entry = library.slots.find (slot);
+
+        if (entry == library.slots.end() || entry->second.path != info.path)
+            return;
+
+        entry->second = info;
+    }
+
+    writeLibrary (library);
+}
+
+void WaveRefProcessor::markLibraryDirty (int slot)
+{
+    libraryDirty.fetch_or (1u << slot);
+    triggerAsyncUpdate();
+}
+
+void WaveRefProcessor::flushLibrary()
+{
+    const uint32_t dirty = libraryDirty.exchange (0);
+
+    for (int slot = 0; slot < numSlots; ++slot)
+        if ((dirty >> slot) & 1u)
+            updateLibrary (slot, false);
+}
+
+bool WaveRefProcessor::isRememberingReferences() const
+{
+    return readLibrary().enabled;
+}
+
+void WaveRefProcessor::setRememberReferences (bool shouldRemember)
+{
+    Library library;
+    library.enabled = shouldRemember;
+
+    if (shouldRemember)
+        for (int slot = 0; slot < numSlots; ++slot)
+            if (const auto info = getSlotInfo (slot); info.path.isNotEmpty())
+                library.slots[slot] = info;
+
+    writeLibrary (library);
+}
+
+void WaveRefProcessor::forgetRememberedReferences()
+{
+    auto library = readLibrary();
+    library.slots.clear();
+    writeLibrary (library);
 }
 
 void WaveRefProcessor::applySlotState()

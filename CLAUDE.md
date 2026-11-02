@@ -106,7 +106,7 @@ AI-made VST plugins for testing and fun.
   the sine kit, with 4-point monotone curves: tones alone overfit OTT's quirks.
 
 ## WaveRef (plugins/WaveRef)
-- Reference A/B on the master bus: "Mix" = the DAW's signal, "Ref" = a loaded file (8 slots, WAV/AIFF/FLAC/OGG/MP3
+- Reference A/B on the master bus: "Mix" = the DAW's signal, "Ref" = a loaded file (16 slots in two rows, WAV/AIFF/FLAC/OGG/MP3
   through JUCE, decoded once and resampled to the host rate with a windowed sinc, kept in RAM as float: about 90 MB
   per 4 minutes). Both are always analysed; A/B only chooses what is heard. Zero latency, bit-exact when A is selected
   and monitoring is off (`WaveRef_Tests` checks it).
@@ -126,7 +126,14 @@ AI-made VST plugins for testing and fun.
 - Editor settings (colours, FFT size, speed, smoothing, tilt, range...) live in the state tree child `UI` and in
   `<user app data>/Maki plugins/WaveRef/Settings.xml`, which new instances start from. Tests have no message loop: they
   use `loadFileBlocking`, `hasLoadsInFlight()` + `drainFinishedLoads()` and `WaveRefEditor::refresh()` (what the timers do).
-- Parameter IDs in `Parameters.h` are saved in projects: never rename or remove them.
+- Parameter IDs in `Parameters.h` are saved in projects: never rename or remove them. `numSlots` is 16 (the `slot` choice
+  list only grew, so saved indices keep their meaning); keys 1-8 pick the top row, Shift+1-8 the bottom one.
+- Remembered references: every file loaded into a slot (path, loop, cues, bpm, bar start) is written to
+  `<user app data>/Maki plugins/WaveRef/References.xml` (`Storage.h` holds the folder; tests redirect it), and a new instance
+  fills its slots from it in its constructor (selected slot decodes first). Each update is a read-modify-write of one slot so
+  several instances don't clobber each other; loop/cue/tempo edits are debounced (AsyncUpdater + timer) and only follow the
+  file they were made on. A project's saved state always replaces the remembered slots. Toggle and "forget" are in the
+  options menu; paths only, the audio files are not copied. RAM: every loaded slot is decoded (about 90 MB per 4 minutes).
 - Reference transport (`ref_play`, `ref_mode`): Free = own transport (play/stop holds the position, 4 cue points per slot,
   double-click on the waveform plays from there, space bar, Q W E R). A seek goes through `seekRequest`; `RefPlayer` keeps the
   loop rules (before the loop it plays on into it, after it it runs to the file end and comes back; `inLoop` per voice).

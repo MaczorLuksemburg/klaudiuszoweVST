@@ -7,7 +7,7 @@ class WaveRefMainView : public juce::Component
 {
 public:
     static constexpr int baseWidth = 1280;
-    static constexpr int baseHeight = 766;
+    static constexpr int baseHeight = 802;
 
     WaveRefMainView (WaveRefProcessor&, klaud::LookAndFeel&);
     ~WaveRefMainView() override;

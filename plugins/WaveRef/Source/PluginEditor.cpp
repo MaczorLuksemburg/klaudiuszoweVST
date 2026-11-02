@@ -80,7 +80,7 @@ void WaveRefMainView::resized()
 
     controls.setBounds (area.removeFromBottom (100));
     area.removeFromBottom (gap);
-    slotBar.setBounds (area.removeFromBottom (30));
+    slotBar.setBounds (area.removeFromBottom (66));
     area.removeFromBottom (gap);
     waveform.setBounds (area.removeFromBottom (176));
     area.removeFromBottom (gap);
@@ -130,9 +130,10 @@ bool WaveRefMainView::keyPressed (const juce::KeyPress& key)
         return true;
     }
 
-    if (c >= '1' && c <= '8')
+    // 1-8: the top row of slots; Shift + 1-8: the bottom row.
+    if (key.getKeyCode() >= '1' && key.getKeyCode() <= '8')
     {
-        setParam (apvts, waveref::ids::slot, (float) (c - '1'));
+        setParam (apvts, waveref::ids::slot, (float) (key.getKeyCode() - '1' + (key.getModifiers().isShiftDown() ? 8 : 0)));
         return true;
     }
 

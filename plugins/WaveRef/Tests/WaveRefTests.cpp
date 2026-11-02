@@ -1096,6 +1096,120 @@ namespace
         folder.deleteRecursively();
     }
 
+    void testSixteenSlots()
+    {
+        std::cout << "Sixteen slots" << std::endl;
+
+        WaveRefProcessor p;
+        prepare (p);
+        p.installTrack (15, trackOf (constant (48000, 0.3f, 0.3f)));
+        p.installTrack (8, trackOf (constant (48000, -0.2f, -0.2f)));
+        setParam (p, ids::matchOn, 0.0f);
+        setParam (p, ids::ab, 1.0f);
+
+        setParam (p, ids::slot, 15.0f);
+        run (p, constant (4800, 0.0f, 0.0f));
+        const auto last = run (p, constant (4800, 0.0f, 0.0f));
+        expect (std::abs (last.getSample (0, 4000) - 0.3f) < 1.0e-4f && p.getPlayheadSlot() == 15, "the sixteenth slot plays");
+
+        setParam (p, ids::slot, 8.0f);
+        run (p, constant (4800, 0.0f, 0.0f));
+        const auto ninth = run (p, constant (4800, 0.0f, 0.0f));
+        expect (std::abs (ninth.getSample (0, 4000) - (-0.2f)) < 1.0e-4f, "and so does the first of the second row");
+
+        p.setCue (15, 1, 0.5);
+        juce::MemoryBlock state;
+        p.getStateInformation (state);
+        WaveRefProcessor q;
+        q.setStateInformation (state.getData(), (int) state.getSize());
+        expect (std::abs (q.getSlotInfo (15).cues[1] - 0.5) < 1.0e-9 && (int) std::lround (q.apvts.getRawParameterValue (ids::slot)->load()) == 8,
+                "slot data and the selected slot are saved up to slot 16");
+    }
+
+    void testRememberedReferences()
+    {
+        std::cout << "Remembered references" << std::endl;
+
+        const auto folder = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("WaveRefLibraryTest");
+        folder.createDirectory();
+        const auto first = folder.getChildFile ("one.wav");
+        const auto second = folder.getChildFile ("two.wav");
+        writeWav (first, sine (48000 * 3, 440.0f, 0.3f), sr);
+        writeWav (second, sine (48000 * 3, 880.0f, 0.3f), sr);
+
+        {
+            WaveRefProcessor a;
+            prepare (a);
+            a.setRememberReferences (true);
+            a.loadFileBlocking (15, first);
+            a.loadFileBlocking (9, second);
+            a.setLoop (15, 0.5, 1.5, true);
+            a.setCue (15, 2, 0.7);
+            a.setGrid (15, 128.0, 0.25);
+            a.flushLibrary();   // normally a moment after the edit
+        }
+
+        {
+            WaveRefProcessor b;
+            const auto info = b.getSlotInfo (15);
+            expect (info.path == first.getFullPathName() && info.loopOn && std::abs (info.loopEnd - 1.5) < 1.0e-9
+                        && std::abs (info.cues[2] - 0.7) < 1.0e-9 && std::abs (info.bpm - 128.0) < 1.0e-9 && b.getSlotInfo (9).path == second.getFullPathName(),
+                    "a new instance starts with the remembered slots, loop, cues and tempo");
+
+            prepare (b);
+            waitForLoads (b);
+            expect (b.getTrack (15) != nullptr && ! b.getTrack (15)->isEmpty() && b.getTrack (9) != nullptr && ! b.getTrack (9)->isEmpty(),
+                    "and decodes them in the background");
+
+            juce::MemoryBlock state;
+            b.getStateInformation (state);
+            WaveRefProcessor c;
+            c.setStateInformation (state.getData(), (int) state.getSize());
+            expect (c.getSlotInfo (15).path == first.getFullPathName(), "the project saves what it started with");
+        }
+
+        // With remembering off a new instance starts empty; a state saved then has no slots.
+        juce::MemoryBlock blank;
+        {
+            WaveRefProcessor off;
+            off.setRememberReferences (false);
+            WaveRefProcessor plain;
+            expect (plain.getSlotInfo (15).path.isEmpty(), "with remembering off a new instance is empty");
+            plain.getStateInformation (blank);
+        }
+
+        {
+            WaveRefProcessor seed;
+            seed.setRememberReferences (true);   // keeps only what this instance has loaded: nothing yet
+            seed.loadFileBlocking (3, first);
+
+            WaveRefProcessor project;
+            expect (project.getSlotInfo (3).path == first.getFullPathName() && project.getSlotInfo (15).path.isEmpty(), "turning it on starts a fresh memory");
+            project.setStateInformation (blank.getData(), (int) blank.getSize());
+            expect (project.getSlotInfo (3).path.isEmpty(), "a project loaded over the remembered slots wins");
+
+            project.forgetRememberedReferences();
+            WaveRefProcessor afterForget;
+            expect (afterForget.getSlotInfo (3).path.isEmpty(), "forgetting clears the remembered references");
+        }
+
+        // An edit belongs to the file it was made on.
+        {
+            WaveRefProcessor a;
+            a.setRememberReferences (true);
+            a.loadFileBlocking (1, first);
+            a.loadFileBlocking (1, second);   // replaces it
+            a.setLoop (1, 0.2, 0.9, true);
+            a.flushLibrary();
+            WaveRefProcessor b;
+            expect (b.getSlotInfo (1).path == second.getFullPathName() && std::abs (b.getSlotInfo (1).loopEnd - 0.9) < 1.0e-9, "replacing a file replaces its memory");
+        }
+
+        WaveRefProcessor done;
+        done.setRememberReferences (false);   // the other tests start from empty slots
+        folder.deleteRecursively();
+    }
+
     void testDsp()
     {
         testLoudness();
@@ -1113,6 +1227,8 @@ namespace
         testCues();
         testTempoDetection();
         testBeatSync();
+        testSixteenSlots();
+        testRememberedReferences();
         testBlind();
         testFilesAndState();
     }
@@ -1233,6 +1349,12 @@ int main (int argc, char* argv[])
     scratch.deleteRecursively();
     scratchFolder = scratch;
     ui::UiSettings::setStorageFolder (scratch);
+
+    {
+        // Other tests must start from empty slots, so nothing is remembered unless a test turns it on.
+        WaveRefProcessor processor;
+        processor.setRememberReferences (false);
+    }
 
     testDsp();
 

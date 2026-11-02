@@ -29,7 +29,7 @@ namespace waveref
         inline constexpr const char* delta       = "delta";         // listen to mix minus reference
     }
 
-    inline constexpr int numSlots = 8;
+    inline constexpr int numSlots = 16;   // two rows of eight; the first eight keep their indices
 
     enum MatchMode { matchShort, matchLong };
     enum RefMode { modeFree, modeHostTime, modeBeats };
