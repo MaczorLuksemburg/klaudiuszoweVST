@@ -178,9 +178,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
                      percentParam (ids::imSide, "Image Side", 0.0f, 200.0f, 100.0f));
 
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
-    // Dimension came after 1.0: appended last so existing parameters keep their positions.
+    // Dimension and Chorus Rate came after 1.0: appended last so existing parameters keep their positions.
     layout.add (std::move (input), std::move (dynPan), std::move (haas), std::move (chorus), std::move (image),
                 std::move (dimension));
+    layout.add (floatParam (ids::chRate, "Chorus Rate", logRange (0.25f, 4.0f), 1.0f,
+                            [] (float v, int) { return juce::String (v, 2) + "x"; },
+                            [] (const juce::String& t) { return juce::jlimit (0.25f, 4.0f, t.retainCharacters ("0123456789.").getFloatValue()); }));
     return layout;
 }
 }

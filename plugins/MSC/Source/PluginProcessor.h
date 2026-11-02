@@ -66,7 +66,7 @@ private:
         std::atomic<float> *inOn, *inShape, *inCutoff, *inSlope, *inWetSrc, *inDrySrc;
         std::atomic<float> *dpOn, *dpAmount, *dpMax, *dpShape, *dpCutoff, *dpSlope, *dpClip, *dpSource, *dpComp, *dpThresh, *dpMakeup;
         std::atomic<float> *hsOn, *hsLeft, *hsRight, *hsInvL, *hsInvR;
-        std::atomic<float> *chOn, *chMode, *chDepth, *chWidth, *chTone, *chMix;
+        std::atomic<float> *chOn, *chMode, *chDepth, *chWidth, *chTone, *chMix, *chRate;
         std::atomic<float> *imOn, *imBalance, *imMid, *imSide;
         std::atomic<float> *dmOn, *dmSize, *dmMix;
     } params {};

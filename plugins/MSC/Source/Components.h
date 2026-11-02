@@ -221,10 +221,11 @@ namespace msc::ui
     private:
         void layoutContent (juce::Rectangle<int>) override;
         void paintContent (juce::Graphics&) override;
+        float modeRate() const;
 
         std::array<juce::TextButton, 3> modes;
         std::unique_ptr<juce::ParameterAttachment> modeAttachment;
-        Knob depth, width, tone, mix;
+        Knob mix, depth, width, tone, rate;
         juce::Rectangle<int> modeCaption;
     };
 

@@ -41,6 +41,10 @@ AI-made VST plugins for testing and fun.
   highs: -4.7 instead of the measured -3.47 dB side on noise); a Size change glides between them. `MSC_Tests`
   checks the taps, the -3.47 dB level and the mono sum. The `dm_*` group was added after 1.0, so it is appended
   last in the layout (new parameters and factory presets always go at the end).
+- Chorus Rate (`ch_rate`, added after 1.0, appended last) multiplies the Juno speed of the selected mode
+  (`chorusModeRates`, 0.25-4x); its default 1x must stay bit-identical to the original chorus (tested).
+- Panels share a row grid (`splitRows` in Components.cpp): row 1 = Dynamic Pan's top block height, so every
+  row-1 knob shares the Amount knob's centre and value line; rows 2 and 3 split the rest evenly.
 - `PluginMeasure` can't reproduce DimensionExpander (its side comes out ~40 dB low, delays 4.5x short, even with
   host time info), so the measurement used renders from Reaper instead.
 - Parameter IDs in `Parameters.h` are saved in projects and presets: never rename or remove them.

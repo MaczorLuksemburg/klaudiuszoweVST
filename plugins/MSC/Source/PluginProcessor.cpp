@@ -21,9 +21,9 @@ namespace
     // Roland Juno-60 chorus: triangle LFO sweeping a BBD delay around ~3.5 ms,
     // with the right channel's LFO inverted for width.
     struct ChorusMode { float rateHz, centreMs, swingMs; };
-    constexpr ChorusMode chorusModes[] { { 0.513f, 3.5f, 1.85f },    // I
-                                         { 0.863f, 3.5f, 1.85f },    // II
-                                         { 9.75f,  3.5f, 0.25f } };  // I+II
+    constexpr ChorusMode chorusModes[] { { chorusModeRates[0], 3.5f, 1.85f },    // I
+                                         { chorusModeRates[1], 3.5f, 1.85f },    // II
+                                         { chorusModeRates[2], 3.5f, 0.25f } };  // I+II
 
     inline bool isOn (const std::atomic<float>* p) { return p->load() > 0.5f; }
     inline int  toIndex (const std::atomic<float>* p) { return (int) std::lround (p->load()); }
@@ -55,6 +55,7 @@ MscProcessor::MscProcessor()
     params.hsInvL = get (ids::hsInvL);     params.hsInvR = get (ids::hsInvR);
 
     params.chOn = get (ids::chOn);         params.chMode = get (ids::chMode);     params.chDepth = get (ids::chDepth);
+    params.chRate = get (ids::chRate);
     params.chWidth = get (ids::chWidth);   params.chTone = get (ids::chTone);     params.chMix = get (ids::chMix);
 
     params.dmOn = get (ids::dmOn);         params.dmSize = get (ids::dmSize);     params.dmMix = get (ids::dmMix);
@@ -106,7 +107,8 @@ void MscProcessor::prepareToPlay (double newSampleRate, int)
     inputAnalyzer.setSampleRate (sampleRate);
     dynPanAnalyzer.setSampleRate (sampleRate);
     modScope.prepare (sampleRate);
-    dmPhase = 0.0f;   // deterministic LFO start (tests rely on it)
+    chPhase = 0.0f;   // deterministic LFO starts (tests rely on them)
+    dmPhase = 0.0f;
 
     updateTargets (true);
 }
@@ -149,7 +151,7 @@ void MscProcessor::updateTargets (bool snap)
     set (hsPolarityR, isOn (params.hsInvR) ? -1.0f : 1.0f);
 
     const auto& mode = chorusModes[juce::jlimit (0, 2, toIndex (params.chMode))];
-    chRate = mode.rateHz;
+    chRate = mode.rateHz * params.chRate->load();   // ch_rate 1 = the Juno rate
     set (chCentre, mode.centreMs * msToSamples);
     set (chSwing,  mode.swingMs * msToSamples * params.chDepth->load() * 0.01f);
     set (chWidth,  params.chWidth->load() * 0.01f);

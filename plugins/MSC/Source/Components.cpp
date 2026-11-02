@@ -783,10 +783,11 @@ void HaasModule::paintContent (juce::Graphics& g)
 //==============================================================================
 ChorusModule::ChorusModule (APVTS& state)
     : ModulePanel (state, ids::chOn, "CHORUS", "Juno-style stereo", colours::chorus),
+      mix (state, ids::chMix, "MIX", colours::chorus, true),
       depth (state, ids::chDepth, "DEPTH", colours::chorus, true),
       width (state, ids::chWidth, "WIDTH", colours::chorus, true),
       tone (state, ids::chTone, "TONE", colours::chorus, true),
-      mix (state, ids::chMix, "MIX", colours::chorus, true)
+      rate (state, ids::chRate, "RATE", colours::chorus)
 {
     const juce::StringArray names { "I", "II", "I+II" };
 
@@ -795,42 +796,60 @@ ChorusModule::ChorusModule (APVTS& state)
         auto& button = modes[(size_t) i];
         button.setButtonText (names[i]);
         button.setColour (juce::TextButton::buttonOnColourId, colours::chorus);
-        button.setConnectedEdges ((i > 0 ? juce::Button::ConnectedOnLeft : 0) | (i < 2 ? juce::Button::ConnectedOnRight : 0));
         button.onClick = [this, i] { modeAttachment->setValueAsCompleteGesture ((float) i); };
         addAndMakeVisible (button);
     }
+
+    // RATE multiplies the Juno speed of the selected mode (1x = Juno); it shows the resulting Hz.
+    rate.slider.textFromValueFunction = [this] (double v)
+    {
+        const double hz = v * modeRate();
+        return juce::String (hz, hz < 1.0 ? 2 : (hz < 10.0 ? 2 : 1)) + " Hz";
+    };
+    rate.slider.valueFromTextFunction = [this] (const juce::String& text)
+    {
+        return juce::jlimit (0.25, 4.0, text.retainCharacters ("0123456789.").getDoubleValue() / (double) modeRate());
+    };
+    rate.slider.setTooltip ("Chorus speed. Centre (double-click) = the Juno speed of the selected mode.");
 
     modeAttachment = std::make_unique<juce::ParameterAttachment> (getParam (state, ids::chMode), [this] (float value)
     {
         const int selected = (int) std::lround (value);
         for (int i = 0; i < 3; ++i)
             modes[(size_t) i].setToggleState (i == selected, juce::dontSendNotification);
+        rate.slider.updateText();
     });
     modeAttachment->sendInitialUpdate();
 
-    for (auto* knob : { &depth, &width, &tone, &mix })
+    for (auto* knob : { &mix, &depth, &width, &tone, &rate })
         addAndMakeVisible (knob);
+}
+
+float ChorusModule::modeRate() const
+{
+    const int selected = juce::jlimit (0, 2, (int) std::lround (apvts.getRawParameterValue (ids::chMode)->load()));
+    return chorusModeRates[selected];
 }
 
 void ChorusModule::layoutContent (juce::Rectangle<int> area)
 {
     auto rows = splitRows (area);
 
-    // Mode sits on the selector line of row 1; the knobs line up with rows 2 and 3 of Image / Dimension.
+    // Row 1 like the other panels: the main knob (Mix) with the Mode selector stacked beside it,
+    // its top button on the selector line. Rows 2 and 3 line up with Image / Dimension.
+    mix.setBounds (rows.first.removeFromLeft (rows.first.getWidth() - 62));
+    rows.first.removeFromLeft (6);
     modeCaption = rows.first.removeFromTop (16);
-    auto row = rows.first.removeFromTop (26);
-    const int buttonWidth = (row.getWidth() - 8) / 3;
-
     for (auto& button : modes)
     {
-        button.setBounds (row.removeFromLeft (buttonWidth));
-        row.removeFromLeft (4);
+        button.setBounds (rows.first.removeFromTop (26));
+        rows.first.removeFromTop (6);
     }
 
     depth.setBounds (rows.second.removeFromLeft (rows.second.getWidth() / 2));
     width.setBounds (rows.second);
     tone.setBounds (rows.third.removeFromLeft (rows.third.getWidth() / 2));
-    mix.setBounds (rows.third);
+    rate.setBounds (rows.third);
 }
 
 void ChorusModule::paintContent (juce::Graphics& g)

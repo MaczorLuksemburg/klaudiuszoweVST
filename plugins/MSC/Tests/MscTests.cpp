@@ -178,6 +178,28 @@ namespace
             expect (diff > 0.01f && allFinite (out), "chorus creates stereo from a mono source");
         }
 
+        // Chorus Rate: defaults to 1x (the Juno speed), so an untouched knob sounds exactly like before;
+        // moving it changes the sweep.
+        {
+            auto* rate = p.apvts.getParameter (msc::ids::chRate);
+            expect (rate != nullptr && std::abs (rate->convertFrom0to1 (rate->getDefaultValue()) - 1.0f) < 1.0e-6f,
+                    "chorus rate defaults to 1x (Juno speed)");
+
+            const auto mono = makeNoise (48000 * 4, 6, true);
+            auto render = [&] (float rateValue)
+            {
+                resetAll (p);
+                setParam (p, msc::ids::chOn, 1.0f);
+                if (rateValue > 0.0f)
+                    setParam (p, msc::ids::chRate, rateValue);
+                return run (p, mono);
+            };
+
+            const auto juno = render (0.0f);   // untouched
+            expect (maxDifference (render (1.0f), juno) == 0.0f, "chorus rate 1x is bit-identical to the untouched default");
+            expect (maxDifference (render (2.0f), juno) > 0.01f, "chorus rate 2x changes the sweep");
+        }
+
         // Dynamic pan is perfectly mono compatible: L + R equals the input's L + R for any
         // setting (every clip mode, 1000 %, 8:1 comp, with and without the input split).
         for (int clipMode : { msc::clipOff, msc::clipHard, msc::clipSoft, msc::clipExtreme })
