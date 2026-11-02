@@ -21,9 +21,10 @@ AI-made VST plugins for testing and fun.
   panel), else the palette accent. Menus have the same 4 px rounded corners as buttons (`cornerRadius`; this needs
   `PopupMenu::backgroundColourId` slightly transparent so JUCE gives the menu a transparent window) and a combo
   box's menu opens right under it: no `withItemThatMustBeVisible`, which slides the menu up over the button.
-  `MSC_Tests` (GUI part) checks every dropdown's menu position at 1x and 1.5x. Every `showMenuAsync` needs
-  `withTargetComponent (this)` (then `.withMousePosition()` for a context menu): a menu without a target can't
-  find the plugin's look and feel and falls back to JUCE's default style.
+  `MSC_Tests` (GUI part) checks every dropdown's menu position at 1x and 1.5x. Every hand-made menu needs
+  `menu.setLookAndFeel (&getLookAndFeel())` before `showMenuAsync` (a menu does not take the look from its
+  target; only combo boxes set it themselves, otherwise it is JUCE's default style) and `withTargetComponent
+  (this)` (then `.withMousePosition()` for a context menu) so the ticked item finds the module or stage colour.
 - Choices with two or three short options use `klaud::ChoiceButtons` (`shared/KlaudChoiceButtons.h`, segments
   attached to the parameter) instead of a combo box; longer lists stay menus. `setVertical (true)` stacks them
   (MSC Chorus Mode, next to the Mix knob). Exception: a choice sitting among dropdowns stays a dropdown for

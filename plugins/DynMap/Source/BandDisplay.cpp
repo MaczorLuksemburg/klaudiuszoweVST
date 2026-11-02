@@ -589,6 +589,7 @@ void BandDisplay::showBandMenu (int position)
     const float freq = hoverX >= 0.0f ? freqForX (hoverX) : 1000.0f;
     juce::Component::SafePointer<BandDisplay> safeThis (this);
 
+    menu.setLookAndFeel (&getLookAndFeel());   // menus don't inherit it from their target
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMousePosition(), [safeThis, stage, slot, freq] (int result)
     {
         if (safeThis == nullptr || result == 0)
@@ -626,6 +627,7 @@ void BandDisplay::showSlopeMenu (int position)
     menu.addItem (10, "Remove crossover");
 
     juce::Component::SafePointer<BandDisplay> safeThis (this);
+    menu.setLookAndFeel (&getLookAndFeel());   // menus don't inherit it from their target
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMousePosition(), [safeThis, stage] (int result)
     {
         if (safeThis == nullptr || result == 0)
@@ -740,6 +742,7 @@ void SidechainTab::showMenu()
     menu.addItem (5, "Reset sidechain gain");
 
     juce::Component::SafePointer<SidechainTab> safeThis (this);
+    menu.setLookAndFeel (&getLookAndFeel());   // menus don't inherit it from their target
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this), [safeThis, listening] (int result)
     {
         if (safeThis == nullptr)
@@ -786,6 +789,7 @@ void StageTab::mouseDown (const juce::MouseEvent& e)
         menu.addItem (2, "Reset");
 
         juce::Component::SafePointer<StageTab> safeThis (this);
+        menu.setLookAndFeel (&getLookAndFeel());   // menus don't inherit it from their target
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMousePosition(), [safeThis, id, bypassed] (int result)
         {
             if (safeThis == nullptr) return;

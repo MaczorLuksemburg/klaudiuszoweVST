@@ -1348,6 +1348,46 @@ namespace
         p.apvts.state.setProperty ("selectedStage", masterStage, nullptr);
         editor.reset (p.createEditor());
         saveSnapshot (*editor, folder.getChildFile ("dynmap-linear.png"));
+
+        // Context menus (curve presets and shapes) use DynMap's look, like the dropdowns: a menu doesn't inherit it
+        // from its target, so without menu.setLookAndFeel it would be drawn in JUCE's default style.
+        {
+            editor->addToDesktop (0);
+            editor->setTopLeftPosition (60, 60);
+            editor->setVisible (true);
+
+            dynmap::ui::CurveEditor* curveEditor = nullptr;
+            std::function<void (juce::Component&)> find = [&] (juce::Component& c)
+            {
+                if (auto* ce = dynamic_cast<dynmap::ui::CurveEditor*> (&c); ce != nullptr && curveEditor == nullptr && ce->isShowing())
+                    curveEditor = ce;
+                for (auto* child : c.getChildren()) find (*child);
+            };
+            find (*editor);
+
+            bool styled = false;
+            if (curveEditor != nullptr)
+            {
+                auto& desktop = juce::Desktop::getInstance();
+                const int before = desktop.getNumComponents();
+                const auto where = curveEditor->getLocalBounds().getCentre().toFloat();
+                const juce::MouseEvent rightClick (desktop.getMainMouseSource(), where,
+                                                   juce::ModifierKeys (juce::ModifierKeys::rightButtonModifier | juce::ModifierKeys::popupMenuClickModifier),
+                                                   0.0f, 0.0f, 0.0f, 0.0f, 0.0f, curveEditor, curveEditor, juce::Time::getCurrentTime(),
+                                                   where, juce::Time::getCurrentTime(), 1, false);
+                curveEditor->mouseDown (rightClick);
+
+                if (desktop.getNumComponents() > before)
+                {
+                    auto* menu = desktop.getComponent (desktop.getNumComponents() - 1);
+                    styled = dynamic_cast<klaud::LookAndFeel*> (&menu->getLookAndFeel()) != nullptr;
+                    saveSnapshot (*menu, folder.getChildFile ("dynmap-curve-menu.png"));
+                }
+                juce::PopupMenu::dismissAllActiveMenus();
+            }
+            expect (styled, "the curve menu (presets and shapes) opens in DynMap's look");
+            editor->removeFromDesktop();
+        }
         editor.reset();
 
         // History view of the master stage after a few seconds of drums.

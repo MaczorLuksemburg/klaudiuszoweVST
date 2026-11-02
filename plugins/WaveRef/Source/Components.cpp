@@ -987,6 +987,7 @@ void WaveformView::cueClicked (int index, bool popup)
         menu.addItem (1, "Set to the playhead");
         menu.addItem (2, "Clear", isSet);
 
+        menu.setLookAndFeel (&getLookAndFeel());   // menus don't inherit it from their target
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (cueButtons[(size_t) index].get()),
                             [this, index] (int result)
         {
@@ -1567,6 +1568,7 @@ void SlotButton::mouseUp (const juce::MouseEvent& e)
         menu.addItem (2, "Clear slot", info.path.isNotEmpty());
         menu.addItem (3, "Show file in folder", info.path.isNotEmpty() && juce::File (info.path).existsAsFile());
 
+        menu.setLookAndFeel (&getLookAndFeel());   // menus don't inherit it from their target
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
                             [this] (int result)
         {
@@ -2338,6 +2340,7 @@ void ControlPanel::showOptions()
     menu.addItem (3, "Reset curve colours");
     menu.addItem (4, "Reset blind test score");
 
+    menu.setLookAndFeel (&getLookAndFeel());   // menus don't inherit it from their target
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&optionsButton), [this] (int result)
     {
         if (result == 1)       setParameter (apvts, ids::restartSwitch, getParameter (apvts, ids::restartSwitch) > 0.5f ? 0.0f : 1.0f);

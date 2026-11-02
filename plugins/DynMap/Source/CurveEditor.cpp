@@ -647,6 +647,7 @@ void CurveEditor::showSegmentMenu (int segment)
     addSnapItem (menu);
 
     juce::Component::SafePointer<CurveEditor> safeThis (this);
+    menu.setLookAndFeel (&getLookAndFeel());   // menus don't inherit it from their target
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMousePosition(), [safeThis, segment] (int result)
     {
         if (safeThis == nullptr || result == 0)
@@ -693,6 +694,7 @@ void CurveEditor::showCurveMenu()
     addSnapItem (menu);
 
     juce::Component::SafePointer<CurveEditor> safeThis (this);
+    menu.setLookAndFeel (&getLookAndFeel());   // menus don't inherit it from their target
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMousePosition(), [safeThis, k] (int result)
     {
         if (safeThis == nullptr || result == 0)
