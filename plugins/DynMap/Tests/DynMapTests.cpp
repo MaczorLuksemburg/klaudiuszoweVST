@@ -1183,6 +1183,27 @@ namespace
         }
 
         saveSnapshot (*editor, folder.getChildFile ("dynmap-active.png"));
+
+        // Hovering over a band shows the "+" (split) along the top edge.
+        {
+            dynmap::ui::BandDisplay* display = nullptr;
+            std::function<void (juce::Component&)> find = [&] (juce::Component& c)
+            {
+                if (auto* d = dynamic_cast<dynmap::ui::BandDisplay*> (&c)) display = d;
+                for (auto* child : c.getChildren()) find (*child);
+            };
+            find (*editor);
+
+            if (display != nullptr)
+            {
+                const juce::Point<float> pos ((float) display->getWidth() * 0.45f, (float) display->getHeight() * 0.5f);
+                const juce::MouseEvent move (juce::Desktop::getInstance().getMainMouseSource(), pos, {}, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                                             display, display, juce::Time::getCurrentTime(), pos, juce::Time::getCurrentTime(), 0, false);
+                display->mouseMove (move);
+                saveSnapshot (*editor, folder.getChildFile ("dynmap-split-hover.png"));
+                display->mouseExit (move);
+            }
+        }
         editor.reset();
 
         // Detector with every control shown.
@@ -1227,8 +1248,8 @@ namespace
                         enabledChoices += t->isEnabled() ? 1 : 0;
                     }
 
-            expect (dialog != nullptr && choices == 3 && enabledChoices == 2 && ! dialog->getButton ("Delete")->isEnabled(),
-                    "reset dialog lists the three custom slots (empty ones greyed out), Delete waits for a tick");
+            expect (dialog != nullptr && choices == dynmap::ui::DetectorStyleBank::numCustom && enabledChoices == 2 && ! dialog->getButton ("Delete")->isEnabled(),
+                    "reset dialog lists every custom slot (empty ones greyed out), Delete waits for a tick");
 
             if (dialog != nullptr)
             {

@@ -53,6 +53,7 @@ namespace dynmap::ui
         Hit hitTest (juce::Point<float>) const;
         juce::Rectangle<float> badgeArea (int position) const;
         juce::Rectangle<float> plusArea() const;
+        bool showsPlus() const;   // the mouse is over the graph, away from the crossover badges
 
         void showBandMenu (int position);
         void showSlopeMenu (int position);

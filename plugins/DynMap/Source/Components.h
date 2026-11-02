@@ -122,13 +122,13 @@ namespace dynmap::ui
 
     const std::vector<DetectorStyle>& detectorStyles();   // the built-in ones
 
-    // The built-in styles plus three custom slots. The slots are saved in a file on this computer
+    // The built-in styles plus six custom slots. The slots are saved in a file on this computer
     // (next to the user presets) and shared by every DynMap instance: each one re-reads the file when
     // it changes.
     class DetectorStyleBank : private juce::Timer
     {
     public:
-        static constexpr int numCustom = 3;
+        static constexpr int numCustom = 6;
 
         explicit DetectorStyleBank (DynMapProcessor&);
 
@@ -180,7 +180,7 @@ namespace dynmap::ui
 
         DynMapProcessor& processor;
         DetectorStyleBank& bank;
-        static constexpr int buttonHeight = 30, rowGap = 8, columns = 3;
+        static constexpr int buttonHeight = 26, rowGap = 6, columns = 3;   // 6 rows fit above the limits
 
         int stage = inputStage;
         int shown = -2, bankVersion = -1, emptyHint = -1;

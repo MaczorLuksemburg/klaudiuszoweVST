@@ -192,7 +192,20 @@ juce::Rectangle<float> BandDisplay::badgeArea (int position) const
 
 juce::Rectangle<float> BandDisplay::plusArea() const
 {
-    return juce::Rectangle<float> (18.0f, 18.0f).withCentre ({ hoverX, plotArea().getBottom() - 14.0f });
+    // Along the top edge, away from where bands are clicked to select them.
+    return juce::Rectangle<float> (18.0f, 18.0f).withCentre ({ hoverX, plotArea().getY() + 11.0f });
+}
+
+bool BandDisplay::showsPlus() const
+{
+    if (hoverX < 0.0f || layout.numBands >= maxBands)
+        return false;
+
+    for (int p = 1; p < layout.numBands; ++p)
+        if (std::abs (hoverX - xForFreq (layout.freqs[(size_t) p])) < 22.0f)
+            return false;
+
+    return true;
 }
 
 BandDisplay::Hit BandDisplay::hitTest (juce::Point<float> pos) const
@@ -215,7 +228,7 @@ BandDisplay::Hit BandDisplay::hitTest (juce::Point<float> pos) const
             return { Hit::level, position };
     }
 
-    if (hoverX >= 0.0f && layout.numBands < maxBands && plusArea().expanded (2.0f).contains (pos))
+    if (showsPlus() && plusArea().expanded (2.0f).contains (pos))
         return { Hit::plus, position };
 
     return { Hit::band, position };
@@ -405,7 +418,7 @@ void BandDisplay::paint (juce::Graphics& g)
     }
 
     // "+" to split the band under the mouse.
-    if (hoverX >= 0.0f && layout.numBands < maxBands && drag.type == Hit::none
+    if (showsPlus() && drag.type == Hit::none
         && hover.type != Hit::crossover && hover.type != Hit::slopeBadge && hover.type != Hit::level)
     {
         const auto plus = plusArea();
@@ -420,8 +433,11 @@ void BandDisplay::paint (juce::Graphics& g)
         if (hot)
         {
             g.setFont (klaud::font (10.5f, true));
-            g.drawText ("split at " + formatHz (freqForX (hoverX)), (int) hoverX - 60, (int) plus.getY() - 16, 120, 14,
-                        juce::Justification::centred, false);
+            // Beside the "+" (it sits on the top edge), on whichever side has room.
+            const bool leftSide = plus.getRight() + 110.0f > a.getRight();
+            g.drawText ("split at " + formatHz (freqForX (hoverX)),
+                        leftSide ? (int) plus.getX() - 110 : (int) plus.getRight() + 6, (int) plus.getY() + 2, 104, 14,
+                        leftSide ? juce::Justification::centredRight : juce::Justification::centredLeft, false);
         }
     }
 }
