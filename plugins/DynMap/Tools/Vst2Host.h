@@ -202,7 +202,11 @@ namespace vst2
             dispatch (effMainsChanged, 0, 0);
         }
 
-        void process (float** inputs, float** outputs, int frames) { effect->processReplacing (effect, inputs, outputs, frames); }
+        void process (float** inputs, float** outputs, int frames)
+        {
+            effect->processReplacing (effect, inputs, outputs, frames);
+            samplePosition += frames;
+        }
 
     private:
         intptr_t dispatch (int32_t opcode, int32_t index = 0, intptr_t value = 0, void* ptr = nullptr, float opt = 0.0f)
@@ -217,21 +221,47 @@ namespace vst2
             return juce::String (text).trim();
         }
 
+        // VST 2.4 VstTimeInfo layout. Reported as a playing transport at 120 BPM in 4/4: some plugins
+        // run their modulation from host time and stall (or freeze an LFO) when it is missing.
+        struct TimeInfo
+        {
+            double samplePos, sampleRate, nanoSeconds, ppqPos, tempo, barStartPos, cycleStartPos, cycleEndPos;
+            int32_t timeSigNumerator, timeSigDenominator, smpteOffset, smpteFrameRate, samplesToNextClock, flags;
+        };
+
+        static TimeInfo* currentTime()
+        {
+            static TimeInfo info {};
+            constexpr double tempo = 120.0;
+            info.sampleRate = currentSampleRate;
+            info.samplePos = (double) samplePosition;
+            info.nanoSeconds = info.samplePos / currentSampleRate * 1.0e9;
+            info.tempo = tempo;
+            info.ppqPos = info.samplePos / currentSampleRate * tempo / 60.0;
+            info.barStartPos = std::floor (info.ppqPos / 4.0) * 4.0;
+            info.timeSigNumerator = 4;
+            info.timeSigDenominator = 4;
+            // playing | nanos | ppq | tempo | bars | time signature
+            info.flags = 2 | (1 << 8) | (1 << 9) | (1 << 10) | (1 << 11) | (1 << 13);
+            return &info;
+        }
+
         static intptr_t hostCallback (Effect*, int32_t opcode, int32_t, intptr_t, void* ptr, float)
         {
             switch (opcode)
             {
                 case audioMasterVersion:                return 2400;
+                case audioMasterGetTime:                return (intptr_t) currentTime();
                 case audioMasterGetSampleRate:          return (intptr_t) currentSampleRate;
                 case audioMasterGetBlockSize:           return currentBlockSize;
-                case audioMasterGetCurrentProcessLevel: return 4; // offline
+                case audioMasterGetCurrentProcessLevel: return 2; // real time, like a DAW playing back
                 case audioMasterGetVendorString:        return copyString (ptr, "Maki Plugins");
                 case audioMasterGetProductString:       return copyString (ptr, "PluginMeasure");
                 case audioMasterGetVendorVersion:       return 1000;
                 case audioMasterCanDo:
                 {
                     const juce::String what (ptr != nullptr ? static_cast<const char*> (ptr) : "");
-                    return what == "sendVstEvents" || what == "sizeWindow" ? 0 : (what == "offline" ? 1 : 0);
+                    return what == "sendVstTimeInfo" ? 1 : 0;
                 }
                 default:                                return 0;
             }
@@ -247,6 +277,7 @@ namespace vst2
 
         inline static double currentSampleRate = 48000.0;
         inline static int currentBlockSize = 512;
+        inline static int64_t samplePosition = 0;
 
        #if JUCE_WINDOWS
         HMODULE module = nullptr;
