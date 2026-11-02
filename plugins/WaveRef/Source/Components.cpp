@@ -2276,19 +2276,14 @@ ControlPanel::ControlPanel (WaveRefProcessor& p, UiSettings& s)
     monoButton.onClick = [this] { if (monoButton.getToggleState()) setParameter (apvts, ids::side, 0.0f); };
     sideButton.onClick = [this] { if (sideButton.getToggleState()) setParameter (apvts, ids::mono, 0.0f); };
 
-    matchMode.addItem ("3 s", 1);
-    matchMode.addItem ("30 s", 2);
+    matchMode.attach (*apvts.getParameter (ids::matchMode), { "3 s", "30 s" });
     matchMode.setTooltip ("How much of the mix is measured to set the reference level");
-    modeAttach = std::make_unique<APVTS::ComboBoxAttachment> (apvts, ids::matchMode, matchMode);
     addAndMakeVisible (matchMode);
 
-    syncMode.addItem ("Free", 1);
-    syncMode.addItem ("Host time", 2);
-    syncMode.addItem ("Beats", 3);
+    syncMode.attach (*apvts.getParameter (ids::refMode), { "Free", "Host", "Beats" });
     syncMode.setTooltip ("Free: the reference plays on its own (play, cues, loop).\nHost time: it follows the DAW's timeline plus an offset, "
                          "for different mixes of the same song.\nBeats: its beat grid follows the DAW's beats and it is stretched to the project tempo, "
                          "for songs with the same structure at different tempos");
-    syncAttach = std::make_unique<APVTS::ComboBoxAttachment> (apvts, ids::refMode, syncMode);
     addAndMakeVisible (syncMode);
 
     alignButton.setTooltip ("Make the reference's current position line up with the DAW's current position. Host time mode: by time. Beats mode: by whole beats, "
@@ -2428,7 +2423,7 @@ void ControlPanel::resized()
 
     // Loudness match: x 182 .. 422
     matchButton.setBounds (192, top, 70, 24);
-    matchMode.setBounds (266, top, 56, 24);
+    matchMode.setBounds (266, top, 60, 24);
     trimKnob.setBounds (332, top - 4, 80, 74);
 
     // Monitor: x 428 .. 708
@@ -2440,8 +2435,8 @@ void ControlPanel::resized()
     widthKnob.setBounds (640, top - 4, 62, 74);
 
     // Sync: x 714 .. 1060
-    syncMode.setBounds (724, top, 100, 24);
-    keyLockButton.setBounds (830, top, 84, 24);
+    syncMode.setBounds (724, top, 112, 24);
+    keyLockButton.setBounds (840, top, 74, 24);
     alignButton.setBounds (724, top + 30, 100, 24);
     offsetKnob.setBounds (950, top - 4, 76, 74);
     beatKnob.setBounds (916, top - 4, 72, 74);

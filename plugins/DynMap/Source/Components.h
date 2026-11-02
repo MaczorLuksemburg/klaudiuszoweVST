@@ -2,6 +2,7 @@
 
 #include "PluginProcessor.h"
 #include <KlaudLookAndFeel.h>
+#include <KlaudChoiceButtons.h>
 #include <optional>
 
 namespace dynmap::ui
@@ -60,7 +61,11 @@ namespace dynmap::ui
     public:
         explicit Choice (const juce::String& title);
 
+        // Shows the options as segments instead of a menu (for two or three short choices); call before attach.
+        void useButtons (const juce::StringArray& shortLabels = {});
         void attach (APVTS&, const juce::String& paramId);
+        void setTooltip (const juce::String&);
+        void setAccent (juce::Colour);
 
         void paint (juce::Graphics&) override;
         void resized() override;
@@ -70,6 +75,8 @@ namespace dynmap::ui
     private:
         juce::String title;
         std::unique_ptr<APVTS::ComboBoxAttachment> attachment;
+        std::unique_ptr<klaud::ChoiceButtons> buttons;
+        juce::StringArray buttonLabels;
     };
 
     // Toggle text button; re-attachable.

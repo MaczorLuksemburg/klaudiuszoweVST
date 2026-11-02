@@ -2,6 +2,7 @@
 
 #include "PluginProcessor.h"
 #include <KlaudLookAndFeel.h>
+#include <KlaudChoiceButtons.h>
 
 namespace floormatch::ui
 {
@@ -36,8 +37,10 @@ namespace floormatch::ui
     class Choice : public juce::Component
     {
     public:
-        Choice (APVTS&, const juce::String& paramId, const juce::String& title);
+        // asButtons: every option as a segment instead of a menu (for two or three short choices).
+        Choice (APVTS&, const juce::String& paramId, const juce::String& title, bool asButtons = false);
 
+        void setTooltip (const juce::String&);
         void paint (juce::Graphics&) override;
         void resized() override;
 
@@ -46,6 +49,7 @@ namespace floormatch::ui
     private:
         juce::String title;
         std::unique_ptr<APVTS::ComboBoxAttachment> attachment;
+        klaud::ChoiceButtons buttons;
     };
 
     // Noise spectra per 1/12 octave: input noise floor, target and output noise floor, with the

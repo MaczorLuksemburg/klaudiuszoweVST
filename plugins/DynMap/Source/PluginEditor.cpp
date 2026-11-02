@@ -110,9 +110,11 @@ DynMapMainView::DynMapMainView (DynMapProcessor& p, klaud::LookAndFeel& lookAndF
     maxCut.slider.setTooltip ("Most the curves may cut");
     scFilter.slider.setTooltip ("High-pass on the detector only, so bass doesn't drive the curve");
     lookahead.box.setTooltip ("Delays the audio so the detector sees peaks coming (adds latency)");
-    stereo.box.setTooltip ("Process left/right or mid/side");
-    scSource.box.setTooltip ("What drives this stage's curves: its own signal, the same band of the sidechain input, "
-                             "or the whole sidechain (e.g. a kick ducking only the bass band)");
+    stereo.useButtons ({ "L / R", "M / S" });
+    scSource.useButtons ({ "Own", "Sidechain", "SC full" });
+    stereo.setTooltip ("Process left/right or mid/side");
+    scSource.setTooltip ("What drives this stage's curves: its own signal, the same band of the sidechain input, "
+                         "or the whole sidechain (\"SC full\", e.g. a kick ducking only the bass band)");
 
     for (auto* c : std::initializer_list<juce::Component*> {
              &presetBar, &quality, &phase, &inputTab, &masterTab, &sidechainTab, &bandDisplay, &levelEditor, &transientEditor,
@@ -220,6 +222,9 @@ void DynMapMainView::updateStageControls()
     detectorStyles.setStage (stage, stageAccent);
     styleMenu.refresh();
     advanced.setColour (juce::TextButton::buttonOnColourId, stageAccent);
+    setColour (juce::TextButton::buttonOnColourId, stageAccent);   // menus tick the current item in it
+    stereo.setAccent (stageAccent);
+    scSource.setAccent (stageAccent);
     linearScale.setColour (juce::TextButton::buttonOnColourId, stageAccent);
     levelSnap.setColour (juce::TextButton::buttonOnColourId, stageAccent);
     transientSnap.setColour (juce::TextButton::buttonOnColourId, stageAccent);

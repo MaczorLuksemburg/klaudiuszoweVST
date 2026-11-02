@@ -81,15 +81,28 @@ void Knob::resized()
 }
 
 //==============================================================================
-Choice::Choice (APVTS& state, const juce::String& paramId, const juce::String& titleText)
+Choice::Choice (APVTS& state, const juce::String& paramId, const juce::String& titleText, bool asButtons)
     : title (titleText)
 {
+    if (asButtons)
+    {
+        buttons.attach (getParam (state, paramId));
+        addAndMakeVisible (buttons);
+        return;
+    }
+
     if (auto* choice = dynamic_cast<juce::AudioParameterChoice*> (&getParam (state, paramId)))
         box.addItemList (choice->choices, 1);
 
     box.setScrollWheelEnabled (true);
     addAndMakeVisible (box);
     attachment = std::make_unique<APVTS::ComboBoxAttachment> (state, paramId, box);
+}
+
+void Choice::setTooltip (const juce::String& text)
+{
+    box.setTooltip (text);
+    buttons.setTooltip (text);
 }
 
 void Choice::paint (juce::Graphics& g)
@@ -100,6 +113,7 @@ void Choice::paint (juce::Graphics& g)
 void Choice::resized()
 {
     box.setBounds (getLocalBounds().withTrimmedTop (18).withHeight (26));
+    buttons.setBounds (box.getBounds());
 }
 
 //==============================================================================
@@ -583,7 +597,7 @@ FloorMatchMainView::FloorMatchMainView (FloorMatchProcessor& p, klaud::LookAndFe
       maxReduction (p.apvts, ids::maxReduction, "MAX REDUCTION", true),
       match (p.apvts, ids::match, "COLOUR MATCH", true),
       lookahead (p.apvts, ids::lookahead, "LOOKAHEAD"),
-      listen (p.apvts, ids::listen, "LISTEN")
+      listen (p.apvts, ids::listen, "LISTEN", true)
 {
     for (auto* c : std::initializer_list<juce::Component*> { &spectrum, &timelineView, &meter, &target, &maxReduction, &match, &lookahead, &listen,
                                                              &learnButton, &quietestButton, &resetQuietestButton, &fillButton,
@@ -596,7 +610,7 @@ FloorMatchMainView::FloorMatchMainView (FloorMatchProcessor& p, klaud::LookAndFe
                              "100 %: the noise is also shaped like the learned profile.");
     lookahead.box.setTooltip ("How far ahead the plugin looks. 1 s follows cuts between takes exactly, at 1 s of latency "
                               "(compensated by the DAW). Off: low latency, but a cut to louder noise is followed 0.4 s late.");
-    listen.box.setTooltip ("Removed: hear only what is taken out. It should be noise, never words.");
+    listen.setTooltip ("Removed: hear only what is taken out. It should be noise, never words.");
 
     learnButton.setTooltip ("Play the take whose background you want (usually the quietest), click Learn, and click again "
                             "to store it. Sets the target level and the noise colour.");

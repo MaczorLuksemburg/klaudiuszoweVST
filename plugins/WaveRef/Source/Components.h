@@ -2,6 +2,7 @@
 
 #include "PluginProcessor.h"
 #include <KlaudLookAndFeel.h>
+#include <KlaudChoiceButtons.h>
 
 namespace waveref::ui
 {
@@ -369,12 +370,11 @@ namespace waveref::ui
         ABButton mixButton, refButton;
         juce::ToggleButton matchButton { "MATCH" }, monoButton { "MONO" }, sideButton { "SIDE" }, deltaButton { "DELTA" },
                            bandButton { "BAND" }, blindButton { "BLIND" }, keyLockButton { "KEY LOCK" };
-        juce::ComboBox matchMode, syncMode;
+        klaud::ChoiceButtons matchMode, syncMode;
         juce::TextButton optionsButton { "..." }, guessX { "X is the ref" }, guessY { "Y is the ref" }, alignButton { "ALIGN" };
         Knob trimKnob, freqKnob, widthKnob, offsetKnob, beatKnob, nudgeKnob;
 
         std::unique_ptr<APVTS::ButtonAttachment> matchAttach, monoAttach, sideAttach, deltaAttach, bandAttach, blindAttach, keyLockAttach;
-        std::unique_ptr<APVTS::ComboBoxAttachment> modeAttach, syncAttach;
 
         juce::String matchText, resultText, syncText;
         bool wasBlind = false;

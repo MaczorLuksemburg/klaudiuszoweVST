@@ -154,8 +154,41 @@ Choice::Choice (const juce::String& titleText) : title (titleText)
     addAndMakeVisible (box);
 }
 
+void Choice::useButtons (const juce::StringArray& shortLabels)
+{
+    buttonLabels = shortLabels;
+    buttons = std::make_unique<klaud::ChoiceButtons>();
+    box.setVisible (false);
+    addAndMakeVisible (*buttons);
+    resized();
+}
+
+void Choice::setTooltip (const juce::String& text)
+{
+    box.setTooltip (text);
+    if (buttons != nullptr)
+        buttons->setTooltip (text);
+}
+
+void Choice::setAccent (juce::Colour accent)
+{
+    // Ticked item in the menu (see klaud::LookAndFeel::menuAccent) or the selected segment.
+    box.setColour (juce::TextButton::buttonOnColourId, accent);
+    if (buttons != nullptr)
+    {
+        buttons->setColour (juce::TextButton::buttonOnColourId, accent);
+        buttons->repaint();
+    }
+}
+
 void Choice::attach (APVTS& state, const juce::String& paramId)
 {
+    if (buttons != nullptr)
+    {
+        buttons->attach (getParam (state, paramId), buttonLabels);
+        return;
+    }
+
     attachment.reset();
 
     if (box.getNumItems() == 0)
@@ -177,6 +210,8 @@ void Choice::resized()
     if (title.isNotEmpty())
         area.removeFromTop (16);
     box.setBounds (area.removeFromTop (24));
+    if (buttons != nullptr)
+        buttons->setBounds (box.getBounds());
 }
 
 //==============================================================================

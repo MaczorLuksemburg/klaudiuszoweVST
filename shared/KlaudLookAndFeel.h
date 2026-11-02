@@ -260,7 +260,127 @@ namespace klaud
             label.setFont (getComboBoxFont (box));
         }
 
-        juce::Font getPopupMenuFont() override { return font (13.5f); }
+        juce::Font getPopupMenuFont() override { return font (13.0f); }
+
+        // Menus: flat panel with a hairline, neutral hover, the ticked (current) item in the accent with a bar on its
+        // left. The accent is the first TextButton::buttonOnColourId set on the menu's target or one of its parents
+        // (so a plugin can colour menus per module or stage), otherwise the palette's.
+        juce::PopupMenu::Options getOptionsForComboBoxPopupMenu (juce::ComboBox& box, juce::Label& label) override
+        {
+            return juce::LookAndFeel_V4::getOptionsForComboBoxPopupMenu (box, label).withStandardItemHeight (24);
+        }
+
+        int getPopupMenuBorderSizeWithOptions (const juce::PopupMenu::Options&) override { return 4; }
+
+        void drawPopupMenuBackgroundWithOptions (juce::Graphics& g, int width, int height, const juce::PopupMenu::Options&) override
+        {
+            g.fillAll (palette.panel.brighter (0.05f));
+            g.setColour (palette.panelOutline.brighter (0.3f));
+            g.drawRect (0, 0, width, height, 1);
+        }
+
+        void getIdealPopupMenuItemSizeWithOptions (const juce::String& text, bool isSeparator, int standardHeight,
+                                                   int& idealWidth, int& idealHeight, const juce::PopupMenu::Options&) override
+        {
+            if (isSeparator)
+            {
+                idealWidth = 50;
+                idealHeight = 9;
+                return;
+            }
+
+            idealHeight = standardHeight > 0 ? juce::jmax (22, standardHeight) : 24;
+            idealWidth = juce::roundToInt (juce::GlyphArrangement::getStringWidth (getPopupMenuFont(), text)) + 40;
+        }
+
+        void getIdealPopupMenuSectionHeaderSizeWithOptions (const juce::String& text, int, int& idealWidth, int& idealHeight,
+                                                            const juce::PopupMenu::Options&) override
+        {
+            idealHeight = 24;
+            idealWidth = juce::roundToInt (juce::GlyphArrangement::getStringWidth (font (11.5f, true), text)) + 32;
+        }
+
+        void drawPopupMenuSectionHeaderWithOptions (juce::Graphics& g, const juce::Rectangle<int>& area, const juce::String& name,
+                                                    const juce::PopupMenu::Options&) override
+        {
+            g.setFont (font (11.5f, true));
+            g.setColour (palette.textDim);
+            g.drawFittedText (name, area.withTrimmedLeft (12).withTrimmedRight (6).withTrimmedBottom (3),
+                              juce::Justification::bottomLeft, 1);
+        }
+
+        void drawPopupMenuItemWithOptions (juce::Graphics& g, const juce::Rectangle<int>& area, bool isHighlighted,
+                                           const juce::PopupMenu::Item& item, const juce::PopupMenu::Options& options) override
+        {
+            if (item.isSeparator)
+            {
+                g.setColour (palette.panelOutline.brighter (0.2f));
+                g.fillRect (area.reduced (8, 0).withSizeKeepingCentre (area.getWidth() - 16, 1));
+                return;
+            }
+
+            const auto accent = menuAccent (options);
+            const auto row = area.toFloat().reduced (0.0f, 1.0f);
+
+            if (item.isTicked)
+            {
+                g.setColour (accent.withAlpha (isHighlighted && item.isEnabled ? 0.24f : 0.15f));
+                g.fillRoundedRectangle (row, 3.0f);
+                g.setColour (accent);
+                g.fillRect (row.withWidth (2.0f));
+            }
+            else if (isHighlighted && item.isEnabled)
+            {
+                g.setColour (palette.text.withAlpha (0.08f));
+                g.fillRoundedRectangle (row, 3.0f);
+            }
+
+            auto textColour = item.colour != juce::Colour() ? item.colour : palette.text;
+            if (item.isTicked)
+                textColour = accent.brighter (0.15f);
+            if (! item.isEnabled)
+                textColour = palette.textDim.withAlpha (0.6f);
+
+            auto r = area.withTrimmedLeft (12).withTrimmedRight (8);
+
+            if (item.image != nullptr)
+            {
+                item.image->drawWithin (g, r.removeFromLeft (r.getHeight()).reduced (4).toFloat(),
+                                        juce::RectanglePlacement::centred | juce::RectanglePlacement::onlyReduceInSize, 1.0f);
+                r.removeFromLeft (4);
+            }
+
+            if (item.subMenu != nullptr && (item.itemID == 0 || item.subMenu->getNumItems() > 0))
+            {
+                const auto arrow = r.removeFromRight (10).toFloat();
+                const float cx = arrow.getCentreX(), cy = arrow.getCentreY();
+                juce::Path chevron;
+                chevron.startNewSubPath (cx - 1.5f, cy - 3.5f);
+                chevron.lineTo (cx + 2.0f, cy);
+                chevron.lineTo (cx - 1.5f, cy + 3.5f);
+                g.setColour (palette.textDim);
+                g.strokePath (chevron, juce::PathStrokeType (1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            }
+
+            g.setFont (getPopupMenuFont());
+            g.setColour (textColour);
+            g.drawFittedText (item.text, r, juce::Justification::centredLeft, 1);
+
+            if (item.shortcutKeyDescription.isNotEmpty())
+            {
+                g.setFont (font (11.5f));
+                g.setColour (palette.textDim);
+                g.drawText (item.shortcutKeyDescription, r, juce::Justification::centredRight, true);
+            }
+        }
+
+        juce::Colour menuAccent (const juce::PopupMenu::Options& options) const
+        {
+            for (auto* c = options.getTargetComponent(); c != nullptr; c = c->getParentComponent())
+                if (c->isColourSpecified (juce::TextButton::buttonOnColourId))
+                    return c->findColour (juce::TextButton::buttonOnColourId);
+            return palette.accent;
+        }
 
         // ---- buttons ---------------------------------------------------------------------------
 

@@ -1276,6 +1276,72 @@ namespace
         editor.reset();
         dynmap::ui::CurveEditor::setSnapOn (p, false);
 
+        // The menu look (popups can't be snapshotted here): rows drawn through the editor's look and feel, aimed
+        // at one of its combo boxes so the ticked item takes the stage colour.
+        {
+            editor.reset (p.createEditor());
+            auto& lf = editor->getLookAndFeel();
+            juce::ComboBox* target = nullptr;
+            std::function<void (juce::Component&)> findBox = [&] (juce::Component& c)
+            {
+                for (auto* child : c.getChildren())
+                {
+                    if (target == nullptr)
+                        if (auto* box = dynamic_cast<juce::ComboBox*> (child); box != nullptr && box->isVisible())
+                            target = box;
+                    findBox (*child);
+                }
+            };
+            findBox (*editor);
+            const auto options = juce::PopupMenu::Options().withTargetComponent (target);
+
+            juce::PopupMenu sub;
+            sub.addItem (1, "x");
+            auto item = [] (const char* text, bool ticked, bool enabled)
+            {
+                juce::PopupMenu::Item i (text);
+                i.isTicked = ticked;
+                i.isEnabled = enabled;
+                return i;
+            };
+            juce::PopupMenu::Item more ("Submenu");
+            more.subMenu = std::make_unique<juce::PopupMenu> (sub);
+
+            const int width = 200, border = lf.getPopupMenuBorderSizeWithOptions (options);
+            juce::Image image (juce::Image::ARGB, 2 * (width + 2 * border), 2 * (6 * 24 + 9 + 2 * border), true);
+            {
+                juce::Graphics g (image);
+                g.addTransform (juce::AffineTransform::scale (2.0f));
+                lf.drawPopupMenuBackgroundWithOptions (g, width + 2 * border, 6 * 24 + 9 + 2 * border, options);
+                int y = border;
+                lf.drawPopupMenuSectionHeaderWithOptions (g, { border, y, width, 24 }, "Section header", options);
+                y += 24;
+                for (auto [i, highlighted] : { std::pair { item ("Plain item", false, true), false },
+                                               std::pair { item ("Current (ticked)", true, true), false },
+                                               std::pair { item ("Hovered item", false, true), true } })
+                {
+                    lf.drawPopupMenuItemWithOptions (g, { border, y, width, 24 }, highlighted, i, options);
+                    y += 24;
+                }
+                juce::PopupMenu::Item separator;
+                separator.isSeparator = true;
+                lf.drawPopupMenuItemWithOptions (g, { border, y, width, 9 }, false, separator, options);
+                y += 9;
+                lf.drawPopupMenuItemWithOptions (g, { border, y, width, 24 }, false, item ("Disabled item", false, false), options);
+                y += 24;
+                lf.drawPopupMenuItemWithOptions (g, { border, y, width, 24 }, false, more, options);
+            }
+            juce::FileOutputStream out (folder.getChildFile ("dynmap-menu.png"));
+            if (out.openedOk())
+            {
+                out.setPosition (0);
+                out.truncate();
+                juce::PNGImageFormat().writeImageToStream (image, out);
+            }
+            expect (target != nullptr, "the editor has a combo box to aim the menu preview at");
+            editor.reset();
+        }
+
         // Linear (Maximus-style) level map on the master stage.
         loadPresetNamed (p, "Lift & Limit Master");
         p.apvts.state.setProperty ("detectorAdvanced", false, nullptr);
