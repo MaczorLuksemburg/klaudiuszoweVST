@@ -497,11 +497,9 @@ void DynMapMainView::resized()
             stereo.setBounds (combos.removeFromLeft (w));
             combos.removeFromLeft (6);
             scSource.setBounds (combos);
-            area.removeFromBottom (2);
-            sidechainNote = area.removeFromBottom (30).reduced (6, 0);
+            sidechainNote = area.removeFromBottom (28).reduced (6, 0);
             row (area.removeFromBottom (knobH), { &maxBoost, &maxCut, &scFilter }, knobW + 6);
-            area.removeFromBottom (4);
-            detectorStyles.setBounds (area.reduced (6, 2));
+            detectorStyles.setBounds (area.reduced (6, 0));
         }
         else
         {

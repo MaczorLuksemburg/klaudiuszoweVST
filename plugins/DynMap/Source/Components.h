@@ -180,8 +180,10 @@ namespace dynmap::ui
 
         DynMapProcessor& processor;
         DetectorStyleBank& bank;
-        static constexpr int buttonHeight = 26, rowGap = 6, columns = 3;   // 6 rows fit above the limits
+        // Buttons grow into whatever the description (textHeight) leaves, between the two heights.
+        static constexpr int minButtonHeight = 26, maxButtonHeight = 32, rowGap = 6, columns = 3, textHeight = 70;
 
+        int buttonHeight = minButtonHeight;
         int stage = inputStage;
         int shown = -2, bankVersion = -1, emptyHint = -1;
         juce::Colour accent;

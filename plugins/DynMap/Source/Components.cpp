@@ -621,6 +621,8 @@ void DetectorStylePicker::resized()
 {
     auto area = getLocalBounds();
     const int columnWidth = (area.getWidth() - 2 * 8) / columns;
+    const int rows = (buttons.size() + columns - 1) / columns;
+    buttonHeight = juce::jlimit (minButtonHeight, maxButtonHeight, (area.getHeight() - textHeight - (rows - 1) * rowGap) / rows);
 
     for (int i = 0; i < buttons.size(); ++i)
         buttons[i]->setBounds (area.getX() + (i % columns) * (columnWidth + 8), area.getY() + (i / columns) * (buttonHeight + rowGap),
