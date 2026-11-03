@@ -98,9 +98,13 @@ void MscProcessor::prepareToPlay (double newSampleRate, int)
     dimensionDelay.prepare ((int) std::ceil (dsp::dimension::maxDelayMs * 0.001 * sampleRate) + 8);
     dmMix.reset (sampleRate, 0.02);
 
-    // Modulator level follower: instant attack, 150 ms release.
-    modRelease = std::exp (-1.0f / (0.150f * (float) sampleRate));
+    // Modulator level follower: instant attack, 20 ms hold, 50 ms release. The hold spans a cycle of
+    // anything above 25 Hz, so steady tones read flat (no ripple, so no added harmonics), and the short
+    // release catches up with a drum's body, so it pans as wide as the transient.
+    modRelease = std::exp (-1.0f / (0.050f * (float) sampleRate));
+    modHoldSamples = (int) std::lround (0.020 * sampleRate);
     modEnvelope = 0.0f;
+    modHold = 0;
 
     inputAnalyzer.setSampleRate (sampleRate);
     dynPanAnalyzer.setSampleRate (sampleRate);
@@ -271,6 +275,7 @@ void MscProcessor::processChunk (float* left, float* right, int n)
         {
             dynPanFilter.reset();
             modEnvelope = 0.0f;
+            modHold = 0;
         }
 
         const bool feedScope = modScope.isEnabled();
@@ -297,7 +302,25 @@ void MscProcessor::processChunk (float* left, float* right, int n)
             // Level the modulator by its peak (instant attack, so it never passes +-1), floored at the
             // threshold so silence and quiet tails fade out instead of swinging.
             const float level = std::abs (mod);
-            modEnvelope = level > modEnvelope ? level : level + modRelease * (modEnvelope - level);
+            if (level >= modEnvelope)
+            {
+                modEnvelope = level;
+                modHold = modHoldSamples;
+            }
+            else if (level > 0.99f * modEnvelope)
+            {
+                // A peak within 0.1 dB renews the hold too: a tone's sampled peaks differ by rounding,
+                // and one falling a hair short must not let the level release between cycles.
+                modHold = modHoldSamples;
+            }
+            else if (modHold > 0)
+            {
+                --modHold;
+            }
+            else
+            {
+                modEnvelope = level + modRelease * (modEnvelope - level);
+            }
             const float floor = std::exp (dpThreshold.getNextValue() * dbToLog);
             const float p = dpDepth.getNextValue() * mod / juce::jmax (modEnvelope, floor);
 

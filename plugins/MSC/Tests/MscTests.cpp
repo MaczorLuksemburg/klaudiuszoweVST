@@ -315,6 +315,74 @@ namespace
             expect (quietPeak <= 1.001f && loudPeak <= 1.001f,
                     "dynamic pan never passes Amount (peak p " + juce::String (quietPeak, 4) + ", " + juce::String (loudPeak, 4) + ")");
 
+            // A steady tone reads a flat level (the hold spans its cycle), so the side is only the tone
+            // times itself (DC and 2f): a rippling level would add 4f, 6f...
+            {
+                juce::AudioBuffer<float> tone (2, 48000);
+                for (int i = 0; i < tone.getNumSamples(); ++i)
+                    tone.setSample (0, i, 0.5f * std::sin (juce::MathConstants<float>::twoPi * 40.0f * (float) i / 48000.0f));
+                tone.copyFrom (1, 0, tone, 0, 0, tone.getNumSamples());
+
+                resetAll (p);
+                setParam (p, msc::ids::dpOn, 1.0f);
+                setParam (p, msc::ids::dpMax, 100.0f);
+                setParam (p, msc::ids::dpAmount, 1.0f);
+                const auto out = run (p, tone);
+                auto sideAt = [&] (float hz)   // DFT magnitude over the last 0.5 s (20 whole cycles)
+                {
+                    double re = 0.0, im = 0.0;
+                    for (int i = 24000; i < 48000; ++i)
+                    {
+                        const double side = 0.5 * (out.getSample (1, i) - out.getSample (0, i));
+                        const double phase = juce::MathConstants<double>::twoPi * hz * i / 48000.0;
+                        re += side * std::cos (phase);
+                        im += side * std::sin (phase);
+                    }
+                    return std::hypot (re, im);
+                };
+                const double extra = juce::Decibels::gainToDecibels (std::max (sideAt (160.0f), sideAt (240.0f)) / sideAt (80.0f), -200.0);
+                expect (extra < -80.0, "a steady 40 Hz tone gets no level ripple harmonics (4f/6f at " + juce::String (extra, 1) + " dB)");
+            }
+
+            // A kick-like hit: the body (20-150 ms after the hit) pans about as wide as the transient.
+            {
+                juce::Random random (9);
+                juce::AudioBuffer<float> kicks (2, 96000);
+                kicks.clear();
+                for (int start = 0; start < 96000 - 19200; start += 24000)
+                    for (int i = 0; i < 19200; ++i)
+                    {
+                        const float t = (float) i / 48000.0f;
+                        const float v = 0.5f * std::sin (juce::MathConstants<float>::twoPi * 60.0f * t) * std::exp (-t / 0.15f)
+                                        + (random.nextFloat() * 2.0f - 1.0f) * 1.7f * std::exp (-t / 0.003f);
+                        kicks.setSample (0, start + i, 0.5f * v);
+                    }
+                kicks.copyFrom (1, 0, kicks, 0, 0, kicks.getNumSamples());
+
+                resetAll (p);
+                setParam (p, msc::ids::dpOn, 1.0f);
+                setParam (p, msc::ids::dpMax, 100.0f);
+                setParam (p, msc::ids::dpAmount, 1.0f);
+                const auto out = run (p, kicks);
+                auto meanPan = [&] (int from, int to)
+                {
+                    double sum = 0.0;
+                    int count = 0;
+                    for (int start = 24000; start < 96000 - 19200; start += 24000)
+                        for (int i = start + from; i < start + to; ++i)
+                        {
+                            const float mid = kicks.getSample (0, i);
+                            if (std::abs (mid) < 1.0e-3f) continue;
+                            sum += std::abs (0.5f * (out.getSample (1, i) - out.getSample (0, i)) / mid);
+                            ++count;
+                        }
+                    return (float) (sum / juce::jmax (1, count));
+                };
+                const float transient = meanPan (0, 240), body = meanPan (960, 7200);
+                expect (body > 0.8f * transient, "a drum's body pans about as wide as its transient (mean p " + juce::String (transient, 3)
+                                                      + " -> " + juce::String (body, 3) + ")");
+            }
+
             // Below the floor it fades out.
             auto silentish = makeNoise (48000, 8, true);
             silentish.applyGain (0.0005f);   // about -66 dB

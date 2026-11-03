@@ -87,6 +87,7 @@ private:
     Linear dpShape, dpDepth, dpThreshold;
     int dpSlope = 0, modSource = msc::modSum;
     float modEnvelope = 0.0f, modRelease = 0.0f;
+    int modHold = 0, modHoldSamples = 0;
 
     // Haas
     msc::dsp::DelayLine haasLeft, haasRight;

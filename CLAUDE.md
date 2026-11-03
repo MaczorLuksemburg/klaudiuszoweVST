@@ -43,13 +43,16 @@ AI-made VST plugins for testing and fun.
   -> dynamic pan -> Haas -> Juno-style chorus -> dimension -> image, then the unprocessed band is added back.
 - Modules default off; touching any control in a module switches it on. Off modules are skipped (15 ms fades).
 - Dynamic pan: modulator = filter(mod source, read from the plugin input, not the input module's band)
-  / max(its own peak level (instant attack, 150 ms release), floor `dp_thresh`) -> x amount = p, then
+  / max(its own peak level, floor `dp_thresh`) -> x amount = p, then
   side += mid * p (mono: L = x(1-p), R = x(1+p)). So peaks reach exactly Amount at any loudness and the
   panning fades out below the floor. Mid is untouched, so the effect cancels exactly in mono: this is the
   module's core promise, keep it. Never process L/R separately there. The modulator compressor and clipper
   were removed (they only added harmonics; the plugin should add as few as possible): `dp_clip`, `dp_comp`,
   `dp_makeup` stay in the layout as "(unused)" so old projects load, and are tested to change nothing.
-  Above 100 % it overpans (one side flips polarity); stereo peaks can rise up to +6 dB at |p| = 1.
+  Above 100 % it overpans (one side flips polarity, kept on purpose); stereo peaks can rise up to +6 dB at |p| = 1.
+  Level follower: instant attack, 20 ms hold (a peak within 0.1 dB renews it), 50 ms release. The hold makes
+  steady tones above 25 Hz read flat (tested: no 4f/6f ripple harmonics on 40 Hz); the short release makes a
+  drum's body pan as wide as its transient (tested; with the old 150 ms release the body got about half).
 - Dimension = Xfer's DimensionExpander (the Dimension half of Serum's Hyper/Dimension), measured by deconvolving
   Reaper renders of noise (`dsp::dimension` in `DSP.h`): mid -> 4 whole-sample delays (15 ms + 99.5 ms x size,
   then x1.18 each) -> gains 0.500 sin, -0.445 cos, -0.484 sin, +0.470 cos of one 0.4547 Hz LFO -> x mix -> added
