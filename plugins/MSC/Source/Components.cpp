@@ -631,11 +631,12 @@ DynamicPanModule::DynamicPanModule (APVTS& state, SpectrumAnalyzer& analyzer, Mo
     maxBox.setMouseDragSensitivity (200);   // wide 10-1000 % range: twice the speed of the other boxes
     sliderAttachments.push_back (std::make_unique<APVTS::SliderAttachment> (state, ids::dpMax, maxBox));
 
-    setUpNumberBox (thresholdBox, "Compressor threshold. Everything below it is lifted by the ratio.");
+    setUpNumberBox (thresholdBox, "Compressor threshold. Everything below it is lifted by the ratio. With Normalize, the panning fades out below it.");
     sliderAttachments.push_back (std::make_unique<APVTS::SliderAttachment> (state, ids::dpThresh, thresholdBox));
 
     setUpCombo (source, ids::dpSource, "Which channel drives the panning: the sum of both, left or right");
-    setUpCombo (comp, ids::dpComp, "Compresses the modulator (10 ms attack, 150 ms release, auto makeup) so quiet parts pan as hard as loud ones");
+    setUpCombo (comp, ids::dpComp, "Compresses the modulator (10 ms attack, 150 ms release, auto makeup) so quiet parts pan as hard as loud ones. "
+                                     "Normalize: every part above the threshold pans as far as Amount, at any loudness (makeup unused).");
     setUpCombo (clip, ids::dpClip, "Limits the pan movement to hard left/right. Shapes the modulation, not the audio.");
     setUpCombo (makeup, ids::dpMakeup, "How much of the compressor's auto makeup gain to apply. 100 % keeps full scale at full scale and lifts everything below it the most.");
 

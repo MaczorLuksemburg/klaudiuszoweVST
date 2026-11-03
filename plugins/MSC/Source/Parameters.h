@@ -64,6 +64,11 @@ namespace msc
     // (16:1 and Brickwall added after 1.0; Brickwall = infinite ratio).
     inline constexpr float modCompRatios[] { 1.0f, 2.0f, 4.0f, 8.0f, 16.0f, std::numeric_limits<float>::infinity() };
 
+    // The "Normalize" choice (after the ratios): the modulator is divided by its own peak level, so its
+    // peaks always reach +-1 and Amount alone sets the pan depth at any loudness. Below the threshold it
+    // fades out (the level is floored there) so silence and noise tails don't swing. Makeup is unused.
+    inline constexpr int modCompNormalize = 6;
+
     // Share of the full auto makeup (the gain that keeps 0 dBFS at 0 dBFS), matching the "Makeup" choices.
     inline constexpr float modMakeupAmounts[] { 0.0f, 0.25f, 0.5f, 0.75f, 1.0f };
 

@@ -310,6 +310,39 @@ namespace
             expect (with16 > with && brickwall > with16, "16:1 and Brickwall lift a quiet signal further (8:1 " + juce::String (with, 5)
                                                              + ", 16:1 " + juce::String (with16, 5) + ", brickwall " + juce::String (brickwall, 5) + ")");
 
+            // Normalize: pan depth no longer depends on loudness, and p never passes Amount.
+            auto normalizedPan = [&] (float gain, float& peak)
+            {
+                auto in = makeNoise (48000, 7, true);
+                in.applyGain (gain);
+                resetAll (p);
+                setParam (p, msc::ids::dpOn, 1.0f);
+                setParam (p, msc::ids::dpMax, 100.0f);
+                setParam (p, msc::ids::dpAmount, 1.0f);
+                setParam (p, msc::ids::dpClip, (float) msc::clipOff);
+                setParam (p, msc::ids::dpComp, (float) msc::modCompNormalize);
+                setParam (p, msc::ids::dpThresh, -60.0f);
+                const auto out = run (p, in);
+                double sumSide = 0.0, sumMid = 0.0;
+                peak = 0.0f;
+                for (int i = 4800; i < in.getNumSamples(); ++i)
+                {
+                    const float mid = 0.5f * (out.getSample (0, i) + out.getSample (1, i));
+                    const float side = 0.5f * (out.getSample (1, i) - out.getSample (0, i));
+                    sumSide += std::abs (side);
+                    sumMid += std::abs (mid);
+                    if (std::abs (mid) > 1.0e-4f * gain)
+                        peak = std::max (peak, std::abs (side / mid));
+                }
+                return (float) (sumSide / sumMid);
+            };
+            float quietPeak = 0.0f, loudPeak = 0.0f;
+            const float quietPan = normalizedPan (0.02f, quietPeak), loudPan = normalizedPan (0.5f, loudPeak);
+            expect (std::abs (quietPan / loudPan - 1.0f) < 0.05f && quietPan > 0.2f,
+                    "Normalize pans a -34 dB and a -6 dB signal alike (mean |side/mid| " + juce::String (quietPan, 3) + " vs " + juce::String (loudPan, 3) + ")");
+            expect (quietPeak <= 1.001f && loudPeak <= 1.001f,
+                    "Normalize never pans past Amount (peak p " + juce::String (quietPeak, 4) + ", " + juce::String (loudPeak, 4) + ")");
+
             float previous = 0.0f;
             bool increasing = true;
             for (int makeupIndex = 0; makeupIndex <= 4; ++makeupIndex)

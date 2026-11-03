@@ -141,7 +141,9 @@ void MscProcessor::updateTargets (bool snap)
     dpSlope   = toIndex (params.dpSlope);
     clipMode  = toIndex (params.dpClip);
     modSource = toIndex (params.dpSource);
-    compRatio = modCompRatios[juce::jlimit (0, (int) std::size (modCompRatios) - 1, toIndex (params.dpComp))];
+    const int compChoice = toIndex (params.dpComp);
+    compNormalize = compChoice == modCompNormalize;
+    compRatio = compNormalize ? 1.0f : modCompRatios[juce::jlimit (0, (int) std::size (modCompRatios) - 1, compChoice)];
     compMakeup = modMakeupAmounts[juce::jlimit (0, 4, toIndex (params.dpMakeup))];
 
     const float msToSamples = (float) sampleRate * 0.001f;
@@ -303,7 +305,14 @@ void MscProcessor::processChunk (float* left, float* right, int n)
             float mod = dynPanFilter.process (0, source);
             const float threshold = dpThreshold.getNextValue();
 
-            if (compress)
+            if (compNormalize)
+            {
+                // Instant attack, so |mod| never exceeds the envelope: the result peaks at exactly +-1.
+                const float level = std::abs (mod);
+                compEnvelope = level > compEnvelope ? level : level + compRelease * (compEnvelope - level);
+                mod /= juce::jmax (compEnvelope, std::exp (threshold * dbToLog));
+            }
+            else if (compress)
             {
                 const float level = std::abs (mod);
                 const float coeff = level > compEnvelope ? compAttack : compRelease;

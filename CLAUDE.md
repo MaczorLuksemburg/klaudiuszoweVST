@@ -47,6 +47,9 @@ AI-made VST plugins for testing and fun.
   R = x(1+p)). Mid is untouched, so the effect cancels exactly in mono: this is the module's core promise,
   keep it. Never clip or otherwise process L/R separately there; the clipper shapes p only. Stereo peaks can
   rise up to +6 dB at |p| = 1.
+- Mod comp choices: Off, 2:1-16:1, Brickwall (infinite ratio), then Normalize (`modCompNormalize`, appended last):
+  modulator / max(its own instant-attack peak level, threshold), so peaks reach exactly +-1 and Amount alone
+  sets the depth at any loudness (tested: -34 and -6 dB noise pan alike); makeup is unused there.
 - Dimension = Xfer's DimensionExpander (the Dimension half of Serum's Hyper/Dimension), measured by deconvolving
   Reaper renders of noise (`dsp::dimension` in `DSP.h`): mid -> 4 whole-sample delays (15 ms + 99.5 ms x size,
   then x1.18 each) -> gains 0.500 sin, -0.445 cos, -0.484 sin, +0.470 cos of one 0.4547 Hz LFO -> x mix -> added

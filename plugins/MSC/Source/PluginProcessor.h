@@ -86,6 +86,7 @@ private:
     Multiplicative dpCutoff;
     Linear dpShape, dpDepth, dpThreshold;
     int dpSlope = 0, clipMode = msc::clipSoft, modSource = msc::modSum;
+    bool compNormalize = false;
     float compRatio = 1.0f, compMakeup = 0.5f, compEnvelope = 0.0f, compAttack = 0.0f, compRelease = 0.0f;
 
     // Haas
