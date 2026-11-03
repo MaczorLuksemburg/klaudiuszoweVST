@@ -128,8 +128,8 @@ namespace msc
     public:
         struct Column { float preMin = 0, preMax = 0, postMin = 0, postMax = 0; };
 
-        static constexpr int numColumns = 320;
-        static constexpr double secondsPerColumn = 0.008;   // ~2.5 s of history
+        static constexpr int numColumns = 480;
+        static constexpr double secondsPerColumn = 0.008;   // ~3.8 s of history
 
         ModScope() { fifoColumns.resize ((size_t) fifo.getTotalSize()); }
 

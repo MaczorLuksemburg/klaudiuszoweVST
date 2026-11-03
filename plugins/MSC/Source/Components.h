@@ -119,8 +119,7 @@ namespace msc::ui
     };
 
     //==============================================================================
-    // FreeClip-style view of the dynamic-pan modulation: scrolling waveform before (dim)
-    // and after (accent) the mod clipper, plus the clipper's transfer curve.
+    // Scrolling view of the dynamic-pan position (+-1 = hard right/left, beyond that overpanning).
     class ModScopeDisplay : public juce::Component, public juce::SettableTooltipClient, private juce::Timer
     {
     public:
@@ -134,8 +133,6 @@ namespace msc::ui
 
         ModScope& scope;
         juce::Colour accent;
-        std::atomic<float>* clipMode;
-        float lastClipMode = -1.0f;
     };
 
     //==============================================================================
@@ -187,16 +184,14 @@ namespace msc::ui
         void setUpCombo (juce::ComboBox&, const char* paramId, const juce::String& tooltip);
 
         Knob amount;
-        juce::Slider maxBox, thresholdBox;
-        juce::ComboBox source, comp, clip, makeup;
+        juce::Slider maxBox, floorBox;
+        juce::ComboBox source;
         std::vector<std::unique_ptr<APVTS::SliderAttachment>> sliderAttachments;
         std::vector<std::unique_ptr<APVTS::ComboBoxAttachment>> comboAttachments;
         std::unique_ptr<juce::ParameterAttachment> maxWatcher;
         ModScopeDisplay scope;
         FilterSection filter;
-        juce::Rectangle<int> sourceCaption, compCaption, thresholdCaption, maxCaption, clipCaption, makeupCaption,
-                             scopeCaption, filterCaption;
-        int dividerX = 0;
+        juce::Rectangle<int> sourceCaption, maxCaption, floorCaption, scopeCaption, filterCaption;
     };
 
     class HaasModule : public ModulePanel

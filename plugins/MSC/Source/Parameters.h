@@ -22,10 +22,12 @@ namespace msc
         inline constexpr const char* dpShape  = "dp_shape";
         inline constexpr const char* dpCutoff = "dp_cutoff";
         inline constexpr const char* dpSlope  = "dp_slope";
-        inline constexpr const char* dpClip   = "dp_clip";    // clips the modulation (pan position), not the audio
         inline constexpr const char* dpSource = "dp_src";
+        inline constexpr const char* dpThresh = "dp_thresh";  // floor of the modulator's level (was the comp threshold)
+        // The modulator clipper and compressor were removed (they added harmonics); their parameters stay,
+        // unused and hidden, so old projects still load.
+        inline constexpr const char* dpClip   = "dp_clip";
         inline constexpr const char* dpComp   = "dp_comp";
-        inline constexpr const char* dpThresh = "dp_thresh";
         inline constexpr const char* dpMakeup = "dp_makeup";
 
         // Module 2: Haas delay and polarity.
@@ -57,20 +59,8 @@ namespace msc
     }
 
     enum Source   { sourceStereo, sourceMono, sourceLeft, sourceRight };
-    enum ClipMode  { clipOff, clipHard, clipSoft, clipExtreme };
+    enum ClipMode  { clipOff, clipHard, clipSoft, clipExtreme };   // dp_clip, unused since the comp and clip were removed
     enum ModSource { modSum, modLeft, modRight };
-
-    // Compressor ratios for the dynamic-pan modulator, matching the "Comp" choices
-    // (16:1 and Brickwall added after 1.0; Brickwall = infinite ratio).
-    inline constexpr float modCompRatios[] { 1.0f, 2.0f, 4.0f, 8.0f, 16.0f, std::numeric_limits<float>::infinity() };
-
-    // The "Normalize" choice (after the ratios): the modulator is divided by its own peak level, so its
-    // peaks always reach +-1 and Amount alone sets the pan depth at any loudness. Below the threshold it
-    // fades out (the level is floored there) so silence and noise tails don't swing. Makeup is unused.
-    inline constexpr int modCompNormalize = 6;
-
-    // Share of the full auto makeup (the gain that keeps 0 dBFS at 0 dBFS), matching the "Makeup" choices.
-    inline constexpr float modMakeupAmounts[] { 0.0f, 0.25f, 0.5f, 0.75f, 1.0f };
 
     // Juno-60 chorus LFO rates for modes I, II, I+II (Hz); ch_rate multiplies them.
     inline constexpr float chorusModeRates[] { 0.513f, 0.863f, 9.75f };

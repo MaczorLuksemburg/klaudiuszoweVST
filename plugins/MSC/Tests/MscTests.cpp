@@ -201,8 +201,8 @@ namespace
         }
 
         // Dynamic pan is perfectly mono compatible: L + R equals the input's L + R for any
-        // setting (every clip mode, 1000 %, 8:1 comp, with and without the input split).
-        for (int clipMode : { msc::clipOff, msc::clipHard, msc::clipSoft, msc::clipExtreme })
+        // setting (100 % and 1000 %, with and without the input split).
+        for (float maxPercent : { 100.0f, 1000.0f })
         {
             for (bool split : { false, true })
             {
@@ -211,10 +211,7 @@ namespace
                 setParam (p, msc::ids::inCutoff, 1500.0f);
                 setParam (p, msc::ids::dpOn, 1.0f);
                 setParam (p, msc::ids::dpAmount, 1.0f);
-                setParam (p, msc::ids::dpMax, 1000.0f);
-                setParam (p, msc::ids::dpComp, 3.0f);
-                setParam (p, msc::ids::dpMakeup, 4.0f);
-                setParam (p, msc::ids::dpClip, (float) clipMode);
+                setParam (p, msc::ids::dpMax, maxPercent);
                 const auto out = run (p, noise);
 
                 float monoDiff = 0.0f, sideChange = 0.0f;
@@ -228,7 +225,7 @@ namespace
                 }
 
                 expect (allFinite (out, 64.0f) && monoDiff < 1.0e-5f && sideChange > 0.1f,
-                        "dynamic pan (clip " + juce::String (clipMode) + (split ? ", split on" : "")
+                        "dynamic pan (" + juce::String (maxPercent, 0) + " %" + (split ? ", split on" : "")
                             + ") changes the side but leaves the mono sum identical (max diff " + juce::String (monoDiff) + ")");
             }
         }
@@ -236,7 +233,6 @@ namespace
         {
             resetAll (p);
             setParam (p, msc::ids::dpOn, 1.0f);
-            setParam (p, msc::ids::dpClip, (float) msc::clipOff);
             expect (maxDifference (run (p, noise), noise) < 1.0e-6f, "dynamic pan at 0 % is transparent");
         }
 
@@ -287,31 +283,9 @@ namespace
                                        + juce::String (width, 3) + ")");
         }
 
-        // Comp lifts quiet modulators: a -40 dB signal pans much harder with 8:1.
+        // The modulator is levelled: pan depth doesn't depend on loudness, and p never passes Amount.
         {
-            juce::AudioBuffer<float> quiet (noise);
-            quiet.applyGain (0.02f);
-
-            auto panAmount = [&] (float compIndex, float makeupIndex)
-            {
-                resetAll (p);
-                setParam (p, msc::ids::dpOn, 1.0f);
-                setParam (p, msc::ids::dpAmount, 0.5f);
-                setParam (p, msc::ids::dpComp, compIndex);
-                setParam (p, msc::ids::dpMakeup, makeupIndex);
-                return maxDifference (run (p, quiet), quiet, 4800);
-            };
-
-            const float without = panAmount (0.0f, 4.0f), with = panAmount (3.0f, 4.0f);
-            expect (with > without * 10.0f, "8:1 mod comp at 100 % makeup makes a quiet signal pan harder (" + juce::String (without, 5)
-                                                + " -> " + juce::String (with, 5) + ")");
-
-            const float with16 = panAmount (4.0f, 4.0f), brickwall = panAmount (5.0f, 4.0f);
-            expect (with16 > with && brickwall > with16, "16:1 and Brickwall lift a quiet signal further (8:1 " + juce::String (with, 5)
-                                                             + ", 16:1 " + juce::String (with16, 5) + ", brickwall " + juce::String (brickwall, 5) + ")");
-
-            // Normalize: pan depth no longer depends on loudness, and p never passes Amount.
-            auto normalizedPan = [&] (float gain, float& peak)
+            auto levelledPan = [&] (float gain, float& peak)
             {
                 auto in = makeNoise (48000, 7, true);
                 in.applyGain (gain);
@@ -319,8 +293,6 @@ namespace
                 setParam (p, msc::ids::dpOn, 1.0f);
                 setParam (p, msc::ids::dpMax, 100.0f);
                 setParam (p, msc::ids::dpAmount, 1.0f);
-                setParam (p, msc::ids::dpClip, (float) msc::clipOff);
-                setParam (p, msc::ids::dpComp, (float) msc::modCompNormalize);
                 setParam (p, msc::ids::dpThresh, -60.0f);
                 const auto out = run (p, in);
                 double sumSide = 0.0, sumMid = 0.0;
@@ -337,21 +309,31 @@ namespace
                 return (float) (sumSide / sumMid);
             };
             float quietPeak = 0.0f, loudPeak = 0.0f;
-            const float quietPan = normalizedPan (0.02f, quietPeak), loudPan = normalizedPan (0.5f, loudPeak);
+            const float quietPan = levelledPan (0.02f, quietPeak), loudPan = levelledPan (0.5f, loudPeak);
             expect (std::abs (quietPan / loudPan - 1.0f) < 0.05f && quietPan > 0.2f,
-                    "Normalize pans a -34 dB and a -6 dB signal alike (mean |side/mid| " + juce::String (quietPan, 3) + " vs " + juce::String (loudPan, 3) + ")");
+                    "dynamic pan moves a -34 dB and a -6 dB signal alike (mean |side/mid| " + juce::String (quietPan, 3) + " vs " + juce::String (loudPan, 3) + ")");
             expect (quietPeak <= 1.001f && loudPeak <= 1.001f,
-                    "Normalize never pans past Amount (peak p " + juce::String (quietPeak, 4) + ", " + juce::String (loudPeak, 4) + ")");
+                    "dynamic pan never passes Amount (peak p " + juce::String (quietPeak, 4) + ", " + juce::String (loudPeak, 4) + ")");
 
-            float previous = 0.0f;
-            bool increasing = true;
-            for (int makeupIndex = 0; makeupIndex <= 4; ++makeupIndex)
-            {
-                const float amount = panAmount (3.0f, (float) makeupIndex);
-                increasing = increasing && amount > previous;
-                previous = amount;
-            }
-            expect (increasing, "more makeup (0 -> 100 %) pans a quiet signal progressively harder");
+            // Below the floor it fades out.
+            auto silentish = makeNoise (48000, 8, true);
+            silentish.applyGain (0.0005f);   // about -66 dB
+            resetAll (p);
+            setParam (p, msc::ids::dpOn, 1.0f);
+            setParam (p, msc::ids::dpAmount, 1.0f);
+            setParam (p, msc::ids::dpThresh, -30.0f);
+            const float below = maxDifference (run (p, silentish), silentish, 4800) / 0.0005f;
+            expect (below < 0.2f, "a signal far below the floor barely pans (" + juce::String (below, 4) + ")");
+
+            // The removed clipper and compressor parameters (kept for old projects) change nothing.
+            resetAll (p);
+            setParam (p, msc::ids::dpOn, 1.0f);
+            setParam (p, msc::ids::dpAmount, 0.7f);
+            const auto reference = run (p, noise);
+            setParam (p, msc::ids::dpClip, (float) msc::clipHard);
+            setParam (p, msc::ids::dpComp, 3.0f);
+            setParam (p, msc::ids::dpMakeup, 4.0f);
+            expect (maxDifference (run (p, noise), reference) == 0.0f, "old mod clip / comp / makeup settings are ignored");
         }
 
         // Dimension: only the side changes, so the mono sum is the input for any size and mix.
@@ -579,7 +561,6 @@ namespace
         for (const char* id : { msc::ids::dpOn, msc::ids::hsOn, msc::ids::chOn, msc::ids::dmOn })
             setParam (p, id, 1.0f);
         setParam (p, msc::ids::dpAmount, 0.6f);
-        setParam (p, msc::ids::dpComp, 2.0f);
         setParam (p, msc::ids::dpShape, 0.25f);
         setParam (p, msc::ids::dpCutoff, 600.0f);
         setParam (p, msc::ids::hsRight, 12.0f);

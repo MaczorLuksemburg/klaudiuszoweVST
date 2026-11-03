@@ -64,7 +64,7 @@ private:
     struct Params
     {
         std::atomic<float> *inOn, *inShape, *inCutoff, *inSlope, *inWetSrc, *inDrySrc;
-        std::atomic<float> *dpOn, *dpAmount, *dpMax, *dpShape, *dpCutoff, *dpSlope, *dpClip, *dpSource, *dpComp, *dpThresh, *dpMakeup;
+        std::atomic<float> *dpOn, *dpAmount, *dpMax, *dpShape, *dpCutoff, *dpSlope, *dpSource, *dpThresh;
         std::atomic<float> *hsOn, *hsLeft, *hsRight, *hsInvL, *hsInvR;
         std::atomic<float> *chOn, *chMode, *chDepth, *chWidth, *chTone, *chMix, *chRate;
         std::atomic<float> *imOn, *imBalance, *imMid, *imSide;
@@ -85,9 +85,8 @@ private:
     msc::dsp::MorphFilter<1> dynPanFilter;
     Multiplicative dpCutoff;
     Linear dpShape, dpDepth, dpThreshold;
-    int dpSlope = 0, clipMode = msc::clipSoft, modSource = msc::modSum;
-    bool compNormalize = false;
-    float compRatio = 1.0f, compMakeup = 0.5f, compEnvelope = 0.0f, compAttack = 0.0f, compRelease = 0.0f;
+    int dpSlope = 0, modSource = msc::modSum;
+    float modEnvelope = 0.0f, modRelease = 0.0f;
 
     // Haas
     msc::dsp::DelayLine haasLeft, haasRight;

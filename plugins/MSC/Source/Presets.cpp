@@ -53,11 +53,11 @@ namespace
 
             { "Bass-Driven Pan",
               { { ids::dpOn, 1.0f }, { ids::dpAmount, 0.5f }, { ids::dpMax, 200.0f },
-                { ids::dpShape, 0.0f }, { ids::dpCutoff, 250.0f }, { ids::dpSlope, 1.0f }, { ids::dpClip, (float) clipSoft } } },
+                { ids::dpShape, 0.0f }, { ids::dpCutoff, 250.0f }, { ids::dpSlope, 1.0f } } },
 
             { "Transient Spread",
               { { ids::dpOn, 1.0f }, { ids::dpAmount, 0.35f }, { ids::dpMax, 200.0f },
-                { ids::dpShape, 1.0f }, { ids::dpCutoff, 2000.0f }, { ids::dpSlope, 0.0f }, { ids::dpClip, (float) clipSoft } } },
+                { ids::dpShape, 1.0f }, { ids::dpCutoff, 2000.0f }, { ids::dpSlope, 0.0f } } },
 
             { "Mix Bus Width",
               { { ids::inOn, 1.0f }, { ids::inShape, 1.0f }, { ids::inCutoff, 120.0f }, { ids::inSlope, 2.0f },

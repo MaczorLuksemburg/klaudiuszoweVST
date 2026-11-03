@@ -48,8 +48,7 @@ MscProcessor::MscProcessor()
 
     params.dpOn = get (ids::dpOn);         params.dpAmount = get (ids::dpAmount); params.dpMax = get (ids::dpMax);
     params.dpShape = get (ids::dpShape);   params.dpCutoff = get (ids::dpCutoff); params.dpSlope = get (ids::dpSlope);
-    params.dpClip = get (ids::dpClip);     params.dpSource = get (ids::dpSource); params.dpComp = get (ids::dpComp);
-    params.dpThresh = get (ids::dpThresh); params.dpMakeup = get (ids::dpMakeup);
+    params.dpSource = get (ids::dpSource); params.dpThresh = get (ids::dpThresh);
 
     params.hsOn = get (ids::hsOn);         params.hsLeft = get (ids::hsLeft);     params.hsRight = get (ids::hsRight);
     params.hsInvL = get (ids::hsInvL);     params.hsInvR = get (ids::hsInvR);
@@ -99,10 +98,9 @@ void MscProcessor::prepareToPlay (double newSampleRate, int)
     dimensionDelay.prepare ((int) std::ceil (dsp::dimension::maxDelayMs * 0.001 * sampleRate) + 8);
     dmMix.reset (sampleRate, 0.02);
 
-    // Modulator compressor: moderate 10 ms attack, 150 ms release.
-    compAttack  = std::exp (-1.0f / (0.010f * (float) sampleRate));
-    compRelease = std::exp (-1.0f / (0.150f * (float) sampleRate));
-    compEnvelope = 0.0f;
+    // Modulator level follower: instant attack, 150 ms release.
+    modRelease = std::exp (-1.0f / (0.150f * (float) sampleRate));
+    modEnvelope = 0.0f;
 
     inputAnalyzer.setSampleRate (sampleRate);
     dynPanAnalyzer.setSampleRate (sampleRate);
@@ -139,12 +137,7 @@ void MscProcessor::updateTargets (bool snap)
     set (dpDepth,  params.dpAmount->load() * params.dpMax->load() * 0.01f);
     set (dpThreshold, params.dpThresh->load());
     dpSlope   = toIndex (params.dpSlope);
-    clipMode  = toIndex (params.dpClip);
     modSource = toIndex (params.dpSource);
-    const int compChoice = toIndex (params.dpComp);
-    compNormalize = compChoice == modCompNormalize;
-    compRatio = compNormalize ? 1.0f : modCompRatios[juce::jlimit (0, (int) std::size (modCompRatios) - 1, compChoice)];
-    compMakeup = modMakeupAmounts[juce::jlimit (0, 4, toIndex (params.dpMakeup))];
 
     const float msToSamples = (float) sampleRate * 0.001f;
     set (hsDelayL, params.hsLeft->load() * msToSamples);
@@ -268,22 +261,19 @@ void MscProcessor::processChunk (float* left, float* right, int n)
 
     // ---- 1: dynamic pan -------------------------------------------------------------------
     // The signal drives its own pan position at audio rate:
-    //   modulator = filter(source taken from the plugin input) -> optional compressor -> * amount
-    //   p = modClip(modulator), then side += mid * p (for a mono input: L = x(1-p), R = x(1+p)).
-    //   Mid is untouched, so L + R is exactly the input: the effect cancels perfectly in mono.
-    //   The clipper shapes p (+-1 = hard left/right), never the audio, since clipping the
-    //   channels would break that cancellation.
+    //   modulator = filter(source taken from the plugin input) / its own peak level, so it peaks at
+    //   +-1 at any loudness; p = modulator * amount, then side += mid * p (for a mono input:
+    //   L = x(1-p), R = x(1+p)). Mid is untouched, so L + R is exactly the input: the effect cancels
+    //   perfectly in mono. Nothing is clipped (it would only add harmonics): past 100 % it overpans.
     if (beginModule (dynPan, justStarted))
     {
         if (justStarted)
         {
             dynPanFilter.reset();
-            compEnvelope = 0.0f;
+            modEnvelope = 0.0f;
         }
 
         const bool feedScope = modScope.isEnabled();
-        const bool compress = compRatio > 1.0f;
-        const float compSlope = 1.0f - 1.0f / compRatio;
         constexpr float dbToLog = 0.11512925f;   // ln(10) / 20
 
         for (int i = 0; i < n; ++i)
@@ -302,34 +292,17 @@ void MscProcessor::processChunk (float* left, float* right, int n)
             const float source = modSource == modLeft ? inL : modSource == modRight ? inR : 0.5f * (inL + inR);
             scratch[(size_t) i] = source;
 
-            float mod = dynPanFilter.process (0, source);
-            const float threshold = dpThreshold.getNextValue();
+            const float mod = dynPanFilter.process (0, source);
 
-            if (compNormalize)
-            {
-                // Instant attack, so |mod| never exceeds the envelope: the result peaks at exactly +-1.
-                const float level = std::abs (mod);
-                compEnvelope = level > compEnvelope ? level : level + compRelease * (compEnvelope - level);
-                mod /= juce::jmax (compEnvelope, std::exp (threshold * dbToLog));
-            }
-            else if (compress)
-            {
-                const float level = std::abs (mod);
-                const float coeff = level > compEnvelope ? compAttack : compRelease;
-                compEnvelope = level + coeff * (compEnvelope - level);
-
-                // Gain reduction above the threshold plus a share of the makeup that would keep
-                // 0 dBFS at 0 dBFS; the makeup lifts everything below it, so quiet parts pan harder.
-                const float envelopeDb = juce::Decibels::gainToDecibels (compEnvelope, -120.0f);
-                const float gainDb = -threshold * compSlope * compMakeup - juce::jmax (0.0f, envelopeDb - threshold) * compSlope;
-                mod *= std::exp (gainDb * dbToLog);
-            }
-
-            const float pre = dpDepth.getNextValue() * mod;
-            const float p = dsp::clip (pre, clipMode);
+            // Level the modulator by its peak (instant attack, so it never passes +-1), floored at the
+            // threshold so silence and quiet tails fade out instead of swinging.
+            const float level = std::abs (mod);
+            modEnvelope = level > modEnvelope ? level : level + modRelease * (modEnvelope - level);
+            const float floor = std::exp (dpThreshold.getNextValue() * dbToLog);
+            const float p = dpDepth.getNextValue() * mod / juce::jmax (modEnvelope, floor);
 
             if (feedScope)
-                modScope.push (pre, p);
+                modScope.push (p, p);
 
             const float sideAdd = 0.5f * (l + r) * p;
             const float pl = l - sideAdd;
