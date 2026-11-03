@@ -562,6 +562,9 @@ DynamicPanModule::DynamicPanModule (APVTS& state, SpectrumAnalyzer& analyzer, Mo
     {
         return juce::jlimit (0.0, 1.0, text.retainCharacters ("0123456789.").getDoubleValue() / (double) maxPercent());
     };
+    amount.slider.setTooltip ("How far the signal pans itself. At 100 % its peaks reach hard left/right; above that it overpans "
+                              "(one side flips polarity). The pan follows the waveform, so higher amounts add harmonics, a "
+                              "gritty, distorted edge; a lower modulator filter cutoff keeps it smoother. Mono stays untouched.");
     addAndMakeVisible (amount);
 
     setUpNumberBox (maxBox, "Maximum of the Amount knob. Drag or double-click to type.");
