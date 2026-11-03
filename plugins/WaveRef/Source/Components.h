@@ -323,7 +323,7 @@ namespace waveref::ui
             : juce::Button (name), settings (s), colourChannel (channelForColour) {}
 
         void paintButton (juce::Graphics&, bool highlighted, bool down) override;
-        void setLabels (const juce::String& big, const juce::String& small, bool neutral);
+        void setLabels (const juce::String& big, const juce::String& small, bool neutral, int channelForColour);
 
     private:
         UiSettings& settings;
@@ -367,7 +367,7 @@ namespace waveref::ui
         UiSettings& settings;
         APVTS& apvts;
 
-        ABButton mixButton, refButton;
+        ABButton abButton;
         juce::ToggleButton matchButton { "MATCH" }, monoButton { "MONO" }, sideButton { "SIDE" }, deltaButton { "DELTA" },
                            bandButton { "BAND" }, blindButton { "BLIND" }, keyLockButton { "KEY LOCK" };
         klaud::ChoiceButtons matchMode, syncMode;

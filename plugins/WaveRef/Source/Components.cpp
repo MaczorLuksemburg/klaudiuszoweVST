@@ -2173,13 +2173,14 @@ void PresetBar::showDeleteDialog()
 //==============================================================================
 // Switch, loudness, monitor, blind test
 
-void ABButton::setLabels (const juce::String& big, const juce::String& small, bool neutral)
+void ABButton::setLabels (const juce::String& big, const juce::String& small, bool neutral, int channelForColour)
 {
-    if (big != bigText || small != smallText || neutral != neutralColour)
+    if (big != bigText || small != smallText || neutral != neutralColour || channelForColour != colourChannel)
     {
         bigText = big;
         smallText = small;
         neutralColour = neutral;
+        colourChannel = channelForColour;
         repaint();
     }
 }
@@ -2189,28 +2190,18 @@ void ABButton::paintButton (juce::Graphics& g, bool highlighted, bool down)
     const auto& pal = palette();
     const auto bounds = getLocalBounds().toFloat().reduced (1.0f);
     const auto colour = neutralColour ? pal.accent : settings.getColour (colourChannel);
-    const bool on = getToggleState();
 
-    if (on)
-    {
-        g.setGradientFill (juce::ColourGradient (colour.brighter (highlighted ? 0.2f : 0.05f), 0.0f, bounds.getY(),
-                                                 colour.darker (0.35f), 0.0f, bounds.getBottom(), false));
-        g.fillRoundedRectangle (bounds, 7.0f);
-    }
-    else
-    {
-        g.setColour (pal.panel.brighter (down ? 0.2f : highlighted ? 0.1f : 0.03f));
-        g.fillRoundedRectangle (bounds, 7.0f);
-        g.setColour (colour.withAlpha (highlighted ? 0.8f : 0.4f));
-        g.drawRoundedRectangle (bounds.reduced (0.5f), 7.0f, 1.2f);
-    }
+    // One button for both sides: it is filled in the colour of what you hear now.
+    g.setGradientFill (juce::ColourGradient (colour.brighter (down ? 0.3f : highlighted ? 0.2f : 0.05f), 0.0f, bounds.getY(),
+                                             colour.darker (0.35f), 0.0f, bounds.getBottom(), false));
+    g.fillRoundedRectangle (bounds, 7.0f);
 
-    g.setColour (on ? juce::Colour (0xff12151b) : colour.withAlpha (0.9f));
+    g.setColour (juce::Colour (0xff12151b));
     g.setFont (klaud::font (22.0f, true));
     g.drawText (bigText, getLocalBounds().withTrimmedBottom (14), juce::Justification::centred, false);
 
     g.setFont (klaud::font (10.5f, true));
-    g.setColour (on ? juce::Colour (0xff12151b).withAlpha (0.7f) : pal.textDim);
+    g.setColour (juce::Colour (0xff12151b).withAlpha (0.7f));
     g.drawText (smallText, getLocalBounds().withTop (getHeight() - 20).withHeight (16), juce::Justification::centred, false);
 }
 
@@ -2240,16 +2231,14 @@ void Knob::resized()
 
 ControlPanel::ControlPanel (WaveRefProcessor& p, UiSettings& s)
     : processor (p), settings (s), apvts (p.apvts),
-      mixButton (s, SpectrumAnalyser::mixMid, "mix"), refButton (s, SpectrumAnalyser::refMid, "ref"),
+      abButton (s, SpectrumAnalyser::mixMid, "ab"),
       trimKnob (p.apvts, ids::trim, "Trim"), freqKnob (p.apvts, ids::filterFreq, "Band"), widthKnob (p.apvts, ids::filterWidth, "Width"),
       offsetKnob (p.apvts, ids::syncOffset, "Offset"),
       beatKnob (p.apvts, ids::beatOffset, "Beats"),
       nudgeKnob (p.apvts, ids::nudge, "Nudge")
 {
-    mixButton.onClick = [this] { setAb (false); };
-    refButton.onClick = [this] { setAb (true); };
-    mixButton.setTooltip ("Hear the mix coming from the DAW");
-    refButton.setTooltip ("Hear the loaded reference");
+    abButton.onClick = [this] { setAb (getParameter (apvts, ids::ab) < 0.5f); };
+    abButton.setTooltip ("Switch between the mix coming from the DAW (A) and the loaded reference (B). Keys: A / B, or Tab to toggle");
 
     for (auto* b : { &matchButton, &monoButton, &sideButton, &deltaButton, &bandButton, &blindButton, &keyLockButton })
     {
@@ -2300,8 +2289,7 @@ ControlPanel::ControlPanel (WaveRefProcessor& p, UiSettings& s)
     for (auto* k : { &trimKnob, &freqKnob, &widthKnob, &offsetKnob, &beatKnob, &nudgeKnob })
         addAndMakeVisible (k);
 
-    for (auto* b : { &mixButton, &refButton })
-        addAndMakeVisible (b);
+    addAndMakeVisible (abButton);
 
     optionsButton.onClick = [this] { showOptions(); };
     guessX.onClick = [this] { guess (true); };
@@ -2369,10 +2357,12 @@ void ControlPanel::timerCallback()
         }
     }
 
-    mixButton.setToggleState (! ref, juce::dontSendNotification);
-    refButton.setToggleState (ref, juce::dontSendNotification);
-    mixButton.setLabels (blind ? "X" : "MIX", blind ? "" : "A", blind);
-    refButton.setLabels (blind ? "Y" : "REF", blind ? "" : "B", blind);
+    if (blind)
+        abButton.setLabels (ref ? "Y" : "X", "click to switch", true, SpectrumAnalyser::mixMid);
+    else if (ref)
+        abButton.setLabels ("REF", "B  -  click for A", false, SpectrumAnalyser::refMid);
+    else
+        abButton.setLabels ("MIX", "A  -  click for B", false, SpectrumAnalyser::mixMid);
 
     guessX.setVisible (blind);
     guessY.setVisible (blind);
@@ -2421,8 +2411,7 @@ void ControlPanel::resized()
 
     // Switch: x 0 .. 176
     optionsButton.setBounds (146, 4, 28, 18);
-    mixButton.setBounds (8, top, 78, 66);
-    refButton.setBounds (92, top, 78, 66);
+    abButton.setBounds (8, top, 162, 66);
 
     // Loudness match: x 182 .. 422
     matchButton.setBounds (192, top, 70, 24);
