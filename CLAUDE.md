@@ -21,7 +21,7 @@ AI-made VST plugins for testing and fun.
   panel), else the palette accent. Menus have the same 4 px rounded corners as buttons (`cornerRadius`; this needs
   `PopupMenu::backgroundColourId` slightly transparent so JUCE gives the menu a transparent window) and a combo
   box's menu opens right under it: no `withItemThatMustBeVisible`, which slides the menu up over the button.
-  `MSC_Tests` (GUI part) checks every dropdown's menu position at 1x and 1.5x. Every hand-made menu needs
+  `MSC_Tests` (GUI part) checks every dropdown's menu position at 1x and 1.25x. Every hand-made menu needs
   `menu.setLookAndFeel (&getLookAndFeel())` before `showMenuAsync` (a menu does not take the look from its
   target; only combo boxes set it themselves, otherwise it is JUCE's default style) and `withTargetComponent
   (this)` (then `.withMousePosition()` for a context menu) so the ticked item finds the module or stage colour.
@@ -37,6 +37,9 @@ AI-made VST plugins for testing and fun.
 - Plugins with a `Tests/` folder build an offline test program (`<Plugin>_Tests`); `ctest --test-dir build -C Release`
   runs the DSP checks, and CI runs them on all three OSes.
 - `MSC_Tests --snapshot <folder>` also renders the editor to PNG: use it to check the UI after layout changes.
+- Tests that need a real on-screen window (menu tests) place it with `klaud::testWindowPosition()`
+  (`shared/KlaudTestWindow.h`): the rightmost display, so it never flashes on the user's main monitor.
+  That screen is 1920x1080 (MSC at 1.5x doesn't fit: the menu check runs at 1x and 1.25x).
 
 ## MSC (plugins/MSC)
 - Chain: input band split (processed = filter(x), unprocessed = x - filter(x), so it always sums back to x)

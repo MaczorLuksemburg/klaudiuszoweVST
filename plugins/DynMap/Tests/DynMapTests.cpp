@@ -4,6 +4,7 @@
 //        DynMap_Tests --kit <file.wav> | --compare <render.wav> [--preset <name>] [--out <file.wav>]  (see Measure.h)
 #include "../Source/PluginEditor.h"
 #include "../Source/PluginProcessor.h"
+#include "KlaudTestWindow.h"
 #include "Measure.h"
 
 #include <iostream>
@@ -1353,7 +1354,7 @@ namespace
         // from its target, so without menu.setLookAndFeel it would be drawn in JUCE's default style.
         {
             editor->addToDesktop (0);
-            editor->setTopLeftPosition (60, 60);
+            editor->setTopLeftPosition (klaud::testWindowPosition());
             editor->setVisible (true);
 
             dynmap::ui::CurveEditor* curveEditor = nullptr;

@@ -2,6 +2,7 @@
 // screenshot of the editor.  Usage: MSC_Tests [--no-gui] [--snapshot <dir>]
 #include "../Source/PluginEditor.h"
 #include "../Source/PluginProcessor.h"
+#include "KlaudTestWindow.h"
 
 #include <iostream>
 
@@ -573,12 +574,12 @@ namespace
 
         // Dropdown menus open right under their button (top-left corner on the button's bottom-left), at the
         // base size and with the window scaled up.
-        for (const float scale : { 1.0f, 1.5f })
+        for (const float scale : { 1.0f, 1.25f })
         {
             std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
             editor->setSize (juce::roundToInt (MscMainView::baseWidth * scale), juce::roundToInt (MscMainView::baseHeight * scale));
             editor->addToDesktop (0);
-            editor->setTopLeftPosition (60, 60);
+            editor->setTopLeftPosition (klaud::testWindowPosition());
             editor->setVisible (true);
 
             std::vector<juce::ComboBox*> boxes;
@@ -604,7 +605,11 @@ namespace
 
                 const auto boxArea = box->getScreenBounds();
                 const auto menuArea = menu->getScreenBounds();
-                const int offset = std::max (std::abs (menuArea.getY() - boxArea.getBottom()), std::abs (menuArea.getX() - boxArea.getX()));
+                // On a short screen JUCE flips a menu that doesn't fit below to just above the button.
+                const auto screen = desktop.getDisplays().getDisplayForRect (boxArea)->userArea;
+                const bool fitsBelow = boxArea.getBottom() + menuArea.getHeight() <= screen.getBottom();
+                const int edge = fitsBelow ? menuArea.getY() - boxArea.getBottom() : menuArea.getBottom() - boxArea.getY();
+                const int offset = std::max (std::abs (edge), std::abs (menuArea.getX() - boxArea.getX()));
                 if (offset >= worst)
                 {
                     worst = offset;
@@ -619,7 +624,7 @@ namespace
                 box->hidePopup();
             }
 
-            expect (! boxes.empty() && worst <= 1, "dropdown menus open under their button at " + juce::String (scale, 1)
+            expect (! boxes.empty() && worst <= 1, "dropdown menus open under their button at " + juce::String (scale, 2)
                                                        + "x (largest offset " + juce::String (worst) + " px: " + worstName + ")");
             editor->removeFromDesktop();
         }
