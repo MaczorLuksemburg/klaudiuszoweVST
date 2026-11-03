@@ -615,7 +615,7 @@ void ModScopeDisplay::paint (juce::Graphics& g)
 
 //==============================================================================
 DynamicPanModule::DynamicPanModule (APVTS& state, SpectrumAnalyzer& analyzer, ModScope& modScope)
-    : ModulePanel (state, ids::dpOn, "DYNAMIC PAN", "the signal pans itself", colours::dynPan),
+    : ModulePanel (state, ids::dpOn, "DYNAMIC PAN", "the signal pans itself, mono-safe", colours::dynPan),
       amount (state, ids::dpAmount, "AMOUNT", colours::dynPan),
       scope (state, modScope, colours::dynPan),
       filter (state, ids::dpShape, ids::dpCutoff, ids::dpSlope, analyzer, colours::dynPan)

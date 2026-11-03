@@ -60,8 +60,9 @@ namespace msc
     enum ClipMode  { clipOff, clipHard, clipSoft, clipExtreme };
     enum ModSource { modSum, modLeft, modRight };
 
-    // Compressor ratios for the dynamic-pan modulator, matching the "Comp" choices.
-    inline constexpr float modCompRatios[] { 1.0f, 2.0f, 4.0f, 8.0f };
+    // Compressor ratios for the dynamic-pan modulator, matching the "Comp" choices
+    // (16:1 and Brickwall added after 1.0; Brickwall = infinite ratio).
+    inline constexpr float modCompRatios[] { 1.0f, 2.0f, 4.0f, 8.0f, 16.0f, std::numeric_limits<float>::infinity() };
 
     // Share of the full auto makeup (the gain that keeps 0 dBFS at 0 dBFS), matching the "Makeup" choices.
     inline constexpr float modMakeupAmounts[] { 0.0f, 0.25f, 0.5f, 0.75f, 1.0f };

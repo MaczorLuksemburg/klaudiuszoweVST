@@ -306,6 +306,10 @@ namespace
             expect (with > without * 10.0f, "8:1 mod comp at 100 % makeup makes a quiet signal pan harder (" + juce::String (without, 5)
                                                 + " -> " + juce::String (with, 5) + ")");
 
+            const float with16 = panAmount (4.0f, 4.0f), brickwall = panAmount (5.0f, 4.0f);
+            expect (with16 > with && brickwall > with16, "16:1 and Brickwall lift a quiet signal further (8:1 " + juce::String (with, 5)
+                                                             + ", 16:1 " + juce::String (with16, 5) + ", brickwall " + juce::String (brickwall, 5) + ")");
+
             float previous = 0.0f;
             bool increasing = true;
             for (int makeupIndex = 0; makeupIndex <= 4; ++makeupIndex)

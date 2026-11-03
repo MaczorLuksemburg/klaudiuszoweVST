@@ -141,7 +141,7 @@ void MscProcessor::updateTargets (bool snap)
     dpSlope   = toIndex (params.dpSlope);
     clipMode  = toIndex (params.dpClip);
     modSource = toIndex (params.dpSource);
-    compRatio = modCompRatios[juce::jlimit (0, 3, toIndex (params.dpComp))];
+    compRatio = modCompRatios[juce::jlimit (0, (int) std::size (modCompRatios) - 1, toIndex (params.dpComp))];
     compMakeup = modMakeupAmounts[juce::jlimit (0, 4, toIndex (params.dpMakeup))];
 
     const float msToSamples = (float) sampleRate * 0.001f;
