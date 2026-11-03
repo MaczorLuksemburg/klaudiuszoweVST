@@ -7,7 +7,7 @@ namespace
     constexpr int gap = 10;
 
     // Module widths in chain order: input, dynamic pan, Haas, chorus, dimension, image.
-    constexpr int moduleWidths[] { 300, 350, 180, 206, 160, 140 };
+    constexpr int moduleWidths[] { 300, 280, 180, 206, 160, 140 };
 
     const juce::Identifier uiWidthId { "uiWidth" };
 }

@@ -6,7 +6,7 @@
 class MscMainView : public juce::Component
 {
 public:
-    static constexpr int baseWidth = 1410;
+    static constexpr int baseWidth = 1340;
     static constexpr int baseHeight = 540;
 
     MscMainView (MscProcessor&, klaud::LookAndFeel&);
