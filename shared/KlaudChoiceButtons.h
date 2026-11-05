@@ -32,6 +32,18 @@ namespace klaud
             attachment->sendInitialUpdate();
         }
 
+        // Without a parameter (apps): plain options, the selection is reported through onChange.
+        void setOptions (const juce::StringArray& options, int initiallySelected = 0)
+        {
+            attachment.reset();
+            labels = options;
+            selected = initiallySelected;
+            repaint();
+        }
+
+        void setSelected (int index) { if (index != selected) { selected = index; repaint(); } }  // no onChange
+        std::function<void (int)> onChange;
+
         int getSelected() const { return selected; }
 
         // Stack the segments top to bottom, each the same height (e.g. next to a knob).
@@ -101,8 +113,17 @@ namespace klaud
         void mouseDown (const juce::MouseEvent& e) override
         {
             const int index = segmentAt (e.getPosition());
-            if (attachment != nullptr && index >= 0 && index != selected)
+            if (index < 0 || index == selected || ! isEnabled())
+                return;
+            if (attachment != nullptr)
                 attachment->setValueAsCompleteGesture ((float) index);
+            else
+            {
+                selected = index;
+                repaint();
+                if (onChange)
+                    onChange (index);
+            }
         }
 
     private:

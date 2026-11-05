@@ -14,7 +14,8 @@ AI-made VST plugins for testing and fun.
 - Never commit build output; keep `build/` directories out of git.
 
 ## Build
-- JUCE is fetched by CMake (root `CMakeLists.txt`); each plugin is a subdirectory under `plugins/`, added from the root.
+- JUCE is fetched by CMake (root `CMakeLists.txt`); each plugin is a subdirectory under `plugins/`, standalone apps
+  under `apps/` (LavAlign), all added from the root.
 - Shared UI look (FabFilter-inspired, keep it minimal) lives in `shared/KlaudLookAndFeel.h`; reuse it for new plugins.
   It also draws every popup menu: the ticked item takes the first `TextButton::buttonOnColourId` set on the menu's
   target or its parents (DynMap sets the stage colour on its main view, MSC the module colour on each module
@@ -210,6 +211,55 @@ AI-made VST plugins for testing and fun.
   `--trace in.wav <from s> <to s> [lookahead] [--bin k]` prints the estimator's per-band decisions over time.
   Keep these numbers passing when tuning: the thresholds encode the quality bar.
 
+## LavAlign (apps/LavAlign)
+- Standalone app (`juce_add_gui_app`, not a plugin), a free alternative to Sound Radix Auto-Align Post: aligns
+  lav mics to the boom in recorder files and writes aligned copies. Made for the same film-dialogue friends as
+  FloorMatch (one of them uses Pro Tools, so files in / files out suits every DAW). The Windows build copies
+  `LavAlign.exe` to `C:\gen plugins`; CI ships `.exe` / `.app` / Linux binary in the zips and both installers
+  (Program Files\Maki Plugins + Start menu, /Applications).
+- Engine (`Source/Align.*`, no GUI): delay convention out[n] = polarity * lav[n - delay(n)], delay > 0 = lav early.
+  1. Coarse offset (`Settings::maxOffsetMs`, UI "Search"): sum of per-segment PHAT-0.8 correlation magnitudes
+     (one whole-file correlation smeared when the delay moves and picked wrong peaks), slight preference for
+     small offsets. 2. Polarity: evidence-weighted vote of every third frame's strongest peak.
+  3. Frames (~43 ms window, hop/4, cross-spectra averaged over +-`contextMs` = 70 ms, coherence-weighted
+     gamma^2/(1-gamma^2) GCC on a half-sample lag grid, 120 Hz - 8 kHz) -> Viterbi over 0.08 ms cells with an L1
+     cost per change and a fixed cost for a jump (cuts, other talker; crossfaded 10 ms when rendering) ->
+     sub-sample refine near the path -> Whittaker smoother per segment (`smoothingMs` 80; UI Follow
+     Steady/Normal/Fast = 160/80/40), held flat before the first / after the last confident frame.
+     `found` needs >= 12 frames with weight >= 0.2, otherwise the lav is left untouched.
+  4. Render: 64-tap Kaiser (beta 9) windowed sinc, 1024 phases; integer delays are an exact copy (tested).
+  5. Spectral phase correction (`correctPhase`): block stats every 0.25 s, +-1.5 s Hann, 1/6-octave (>= 60 Hz)
+     complex smoothing, coherence-gated phase-only filter, IR tapered to +-8 ms, WOLA with interpolated filters.
+     Magnitude untouched (tested: <= 0.12 dB per octave).
+- Quality metric (`measureQuality`): power-weighted mean cos(phase) of boom vs lav per 1/3 octave 150 Hz - 8 kHz
+  over short frames; the UI shows it as "phase match" %.
+- Tuning data (not in git): `C:\Users\user\Documents\LavAlign test data` (Zenodo 10.5281/zenodo.10844598 lav DPA
+  6060 + cardioid at 50 cm, CC BY-NC-ND; AMI meetings lapel vs table array; `real_pairs.txt`, `listen/`) plus the
+  friends' Zoom F6 AAF media in `Downloads\AAF_NEW` (boom Tr1 = A3, lavs Tr4/Tr5 = A4/A5, both lavs polarity
+  inverted). `LavAlign_Tests --tune [smooth= context= phase= ...] real=<list>` prints synthetic delay error and
+  real time-only quality. Measured on 16 real pairs: untreated ~0, one fixed offset 0.48, dynamic 0.67,
+  dynamic + phase correction 0.80. Real data prefers faster tracking than synthetic; don't over-smooth.
+- Files (`Source/WavFile.*`): own RIFF/RF64 reader/writer. Every non-audio chunk (bext timecode, iXML, Zoom/SD
+  notes) is copied verbatim, the sample format stays, untouched channels are copied byte for byte (tested),
+  writes go to `.partial` then rename, never over the source. Track names: iXML TRACK_LIST, else bext `xTRKn=`
+  lines (numbered by recorder slot: taken in order when the numbers run past the channel count).
+- Takes (`Source/Session.*`): files grouped by overlapping bext timecode (> 25 % of the shorter), files without
+  timecode only with files added in the same drop (mono). Roles are stored per key (track name, or a short
+  file-name prefix like `A3` for AAF media) and apply to every take; all channels with the boom's key are booms
+  (overlapping AAF clips) and each lav is compared with the boom file it overlaps most. Export: same names into
+  `Aligned/` next to the source (or a folder; optional `_aligned` suffix), poly files keep all channels, or
+  "Split lavs" mono files (bext kept, iXML dropped). Folders named `Aligned` are skipped when adding.
+- Speed: analysis is split over threads (lavs in parallel, each lav's frames in blocks); ~25x real time per lav
+  on the 12600K. `requestFullSpeed()` (Platform.cpp) opts the process out of Windows power throttling: without
+  it the 12600K's scheduler moved the work to E-cores and analysis ran 4-5x slower.
+- `LavAlign_Tests`: synthetic speech-like pairs (moving / walking / cut / wireless / offset / inverted /
+  unrelated), renderer exactness, phase correction, BWF round trips (16/24/float, RF64, Zoom names), sessions.
+  CLI: `--align boom[:ch] lav[:ch] out.wav [--curve csv]`, `--process <out dir> <files/folders> [--role key=boom]
+  [--split]`, `--tune`, `--bench`, `--snapshot <dir>` (renders the window).
+- Text built in loops must use `juce::MemoryOutputStream`, not `juce::String <<` (quadratic: a 20 min CSV hung).
+- Bash heredocs in this environment turn `\\n` / `\\x..` escapes into real characters: patch C++ with the Edit
+  tool or a Python script written with Write, not inline heredocs containing backslashes.
+
 ## Targets
 - Systems: Windows, macOS, Linux. DAWs: Logic Pro, Cubase, FL Studio, Ableton Live, Reaper.
 - Formats: VST3 everywhere + AU on macOS (Logic). Pass `${KLAUD_PLUGIN_FORMATS}` and `${KLAUD_PLUGIN_COPY_ARGS}`
@@ -227,7 +277,8 @@ AI-made VST plugins for testing and fun.
   `releases/latest/download/<name>` links always point at the newest one (README and INSTALL.md use them).
   Publishing a release from GitHub's Releases page (which creates the tag) also works: the job then attaches
   the zips to that release and appends the install guide under the notes written there.
-  Keep it up to date when plugins are added (also the plugin lists in both installers).
+  Keep it up to date when plugins are added (also the plugin lists in both installers). Apps (`.exe` / `.app`) are
+  picked up by the installers from the same folder as the plugins.
 - Windows installer: `installer/windows/build-installer.ps1 [-PluginDir] [-Version]` (Inno Setup 6, installed with
   winget) packs the .vst3 bundles found in `C:\gen plugins` into `installer/windows/output/MakiPlugins-Setup-<v>.exe`
   (installs to Common Files\VST3, per-plugin choice, uninstaller). CI builds it from its own build.

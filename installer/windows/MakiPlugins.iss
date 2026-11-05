@@ -14,6 +14,8 @@
 #endif
 
 #define Has(Name) FileExists(PluginDir + "\" + Name + ".vst3\Contents\x86_64-win\" + Name + ".vst3")
+; standalone apps (LavAlign.exe) sit next to the plugins and install to Program Files\Maki Plugins
+#define HasApp(Name) FileExists(PluginDir + "\" + Name + ".exe")
 
 [Setup]
 AppId={{6E1B7A52-3C1D-4D8E-9A57-4D61B2C0F1A7}
@@ -59,6 +61,9 @@ Name: "floormatch"; Description: "FloorMatch - dialogue noise floor matcher"; Ty
 #if Has("WaveRef")
 Name: "waveref"; Description: "WaveRef - reference A/B with loudness match and spectrum"; Types: full custom
 #endif
+#if HasApp("LavAlign")
+Name: "lavalign"; Description: "LavAlign (app) - phase-aligns lavalier mics to the boom"; Types: full custom
+#endif
 
 [Files]
 #if Has("DynMap")
@@ -75,6 +80,12 @@ Source: "{#PluginDir}\FloorMatch.vst3\*"; DestDir: "{app}\FloorMatch.vst3"; Comp
 #endif
 #if Has("WaveRef")
 Source: "{#PluginDir}\WaveRef.vst3\*"; DestDir: "{app}\WaveRef.vst3"; Components: waveref; Flags: recursesubdirs createallsubdirs ignoreversion
+#endif
+#if HasApp("LavAlign")
+Source: "{#PluginDir}\LavAlign.exe"; DestDir: "{autopf}\Maki Plugins"; Components: lavalign; Flags: ignoreversion
+
+[Icons]
+Name: "{autoprograms}\LavAlign"; Filename: "{autopf}\Maki Plugins\LavAlign.exe"; Components: lavalign
 #endif
 
 [Code]

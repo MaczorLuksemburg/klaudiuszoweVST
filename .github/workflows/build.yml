@@ -71,6 +71,11 @@ jobs:
           mkdir -p MakiPlugins
           find build/plugins -maxdepth 5 -path '*_artefacts/Release/*' \( -name '*.vst3' -o -name '*.component' \) \
             -prune -exec cp -R {} MakiPlugins/ \;
+          # standalone apps (LavAlign)
+          app=build/apps/LavAlign/LavAlign_artefacts/Release
+          if [ "$RUNNER_OS" = "macOS" ]; then ditto "$app/LavAlign.app" MakiPlugins/LavAlign.app
+          elif [ "$RUNNER_OS" = "Windows" ]; then cp "$app/LavAlign.exe" MakiPlugins/
+          else cp "$app/LavAlign" MakiPlugins/; fi
           cp docs/INSTALL.md MakiPlugins/INSTALL.md
           cp LICENSE MakiPlugins/LICENSE.txt
           ls -la MakiPlugins
@@ -94,6 +99,8 @@ jobs:
               if [ -d "$f" ]; then echo "installed: $f"; else echo "MISSING: $f"; failed=1; fi
             done
           done
+          if [ -d /Applications/LavAlign.app ]; then echo "installed: /Applications/LavAlign.app"; else echo "MISSING: /Applications/LavAlign.app"; failed=1; fi
+          lipo -archs /Applications/LavAlign.app/Contents/MacOS/LavAlign || failed=1
           pkgutil --pkgs | grep makiplugins
           killall -9 AudioComponentRegistrar 2>/dev/null || true
           units=$(auval -a | awk '$3 == "Klau" { print $1, $2, $3 }')

@@ -32,6 +32,7 @@ describe() {
         MSC)         echo "Multistage stereo control: band split, dynamic pan, Haas, Juno-style chorus, mid/side image." ;;
         StereoScale) echo "Left / right / mid / side gain, 0-200 %." ;;
         WaveRef)     echo "Reference A/B: loaded tracks, loudness match, mid/side spectrum, host sync with time-stretch." ;;
+        LavAlign)    echo "Standalone app (in Applications): phase-aligns lavalier mics to the boom in recorder files." ;;
         *)           echo "$1 by Maki Plugins." ;;
     esac
 }
@@ -98,6 +99,51 @@ EOF
     choices+="    <pkg-ref id=\"$pkg_id\" version=\"$version\" onConclusion=\"none\">$id.pkg</pkg-ref>"$'\n'
 done
 
+# Standalone apps (LavAlign) go to /Applications.
+for app in "$plugin_dir"/*.app; do
+    [ -d "$app" ] || continue
+    name=$(basename "$app" .app)
+    id=$(echo "$name" | tr '[:upper:]' '[:lower:]')
+    pkg_id="com.makiplugins.pkg.$id"
+
+    root="$work/roots/$name"
+    mkdir -p "$root"
+    ditto "$app" "$root/$name.app"
+    plist="$work/$id-components.plist"
+    pkgbuild --analyze --root "$root" "$plist" > /dev/null
+    i=0
+    while /usr/libexec/PlistBuddy -c "Print :$i" "$plist" > /dev/null 2>&1; do
+        plutil -replace "$i.BundleIsRelocatable" -bool NO "$plist"
+        i=$((i + 1))
+    done
+    scripts="$work/scripts/$name"
+    mkdir -p "$scripts"
+    cat > "$scripts/preinstall" <<EOF
+#!/bin/bash
+rm -rf "\$2/$name.app"
+exit 0
+EOF
+    cat > "$scripts/postinstall" <<EOF
+#!/bin/bash
+xattr -dr com.apple.quarantine "\$2/$name.app" 2> /dev/null
+exit 0
+EOF
+    chmod +x "$scripts/preinstall" "$scripts/postinstall"
+    pkgbuild --root "$root" \
+             --component-plist "$plist" \
+             --scripts "$scripts" \
+             --identifier "$pkg_id" \
+             --version "$version" \
+             --install-location /Applications \
+             "$work/packages/$id.pkg"
+
+    outline+="        <line choice=\"$id\"/>"$'\n'
+    choices+="    <choice id=\"$id\" title=\"$name (app)\" description=\"$(describe "$name")\">"$'\n'
+    choices+="        <pkg-ref id=\"$pkg_id\"/>"$'\n'
+    choices+="    </choice>"$'\n'
+    choices+="    <pkg-ref id=\"$pkg_id\" version=\"$version\" onConclusion=\"none\">$id.pkg</pkg-ref>"$'\n'
+done
+
 if [ $found -eq 0 ]; then
     echo "No .vst3 bundles in $plugin_dir" >&2
     exit 1
@@ -113,6 +159,7 @@ cat > "$work/resources/welcome.html" <<EOF
 <ul>
 <li><b>Audio Unit</b> (Logic Pro, GarageBand): /Library/Audio/Plug-Ins/Components</li>
 <li><b>VST3</b> (Cubase, Ableton Live, FL Studio, Reaper): /Library/Audio/Plug-Ins/VST3</li>
+<li><b>LavAlign</b> (standalone app, aligns lav mics to the boom): /Applications</li>
 </ul>
 <p><b>Please quit your DAW before continuing.</b> Running the installer again updates the plugins;
 click <i>Customize</i> on the Installation Type page to pick which ones to install.</p>

@@ -1,6 +1,6 @@
 # klaudiuszoweVST
 
-AI-made audio plugins by **Maki Plugins**, for testing and fun. Free, open source, VST3 on Windows, macOS
+AI-made audio plugins (and one app) by **Maki Plugins**, for testing and fun. Free, open source, VST3 on Windows, macOS
 and Linux, plus AU on macOS for Logic Pro.
 
 | Plugin | What it does |
@@ -10,6 +10,10 @@ and Linux, plus AU on macOS for Logic Pro.
 | **MSC** | Multistage stereo control: band split, dynamic pan, Haas, Juno-style chorus, dimension, mid/side image |
 | **WaveRef** | Reference A/B switcher: 16 loaded tracks that are remembered for new songs, loop, cues, loudness match, mid/side spectrum and stereo view of mix and reference, tempo and host sync with time-stretch, delta/side/mono listening, blind test |
 | **StereoScale** | Left / right / mid / side gain, 0–200 % |
+
+| App | What it does |
+|---|---|
+| **LavAlign** | Standalone app for film dialogue: phase-aligns lavalier mics to the boom in recorder files (poly WAV or mono AAF media), following the delay as people move, fixing flipped polarity and the remaining phase difference, and writes aligned copies with all timecode and metadata kept |
 
 ## Download
 - **Mac** (Logic, Ableton, Cubase, FL Studio, Reaper): [MakiPlugins-macOS-Installer.pkg](https://github.com/MaczorLuksemburg/klaudiuszoweVST/releases/latest/download/MakiPlugins-macOS-Installer.pkg)

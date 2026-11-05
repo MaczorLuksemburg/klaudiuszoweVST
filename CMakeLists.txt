@@ -47,3 +47,6 @@ add_subdirectory(plugins/MSC)
 add_subdirectory(plugins/DynMap)
 add_subdirectory(plugins/WaveRef)
 add_subdirectory(plugins/FloorMatch)
+
+# Standalone apps
+add_subdirectory(apps/LavAlign)
