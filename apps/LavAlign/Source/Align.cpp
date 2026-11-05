@@ -658,6 +658,36 @@ DelayCurve analyse (const float* boom, const float* lav, int64_t n, double fs, c
     std::reverse (steps.begin(), steps.end());
     back.clear(); back.shrink_to_fit(); jumped.clear(); jumped.shrink_to_fit();
 
+    // A step is rendered as a 10 ms crossfade between two shifted copies of the lav, which can be heard as a
+    // flam inside a word. The Viterbi puts it where the evidence switches; move it to the quietest moment of the
+    // lav within +-150 ms (an edited dialogue track had 4 of 22 steps mid-speech, up to 8.5 ms apart).
+    if (! steps.empty())
+    {
+        const int reach = std::max (1, (int) std::lround (0.15 * fs / hop));
+        auto energyBefore = [&] (int t)  // the crossfade sits between frames t-1 and t
+        {
+            const int64_t c = (int64_t) t * hop;
+            double e = 0;
+            for (int64_t i = std::max<int64_t> (0, c - hop); i < std::min<int64_t> (n, c); ++i) e += (double) lav[i] * lav[i];
+            return e;
+        };
+        for (size_t i = 0; i < steps.size(); ++i)
+        {
+            const int lo = std::max (i > 0 ? steps[i - 1] + 1 : 1, steps[i] - reach);
+            const int hi = std::min (i + 1 < steps.size() ? steps[i + 1] - 1 : T - 1, steps[i] + reach);
+            int best = steps[i];
+            const double here = energyBefore (best);
+            double bestE = here;
+            for (int t = lo; t <= hi; ++t)
+                if (const double e = energyBefore (t); e < bestE) { bestE = e; best = t; }
+            if (bestE > here * 0.25) best = steps[i];  // not clearly quieter (6 dB): keep the step where it was
+            // frames that change sides follow their new segment's path
+            if (best > steps[i]) for (int t = steps[i]; t < best; ++t) path[(size_t) t] = path[(size_t) steps[i] - 1];
+            else                 for (int t = best; t < steps[i]; ++t) path[(size_t) t] = path[(size_t) steps[i]];
+            steps[i] = best;
+        }
+    }
+
     lap ("viterbi");
     // 3. refine: sub-sample peak near the path in every frame
     std::vector<double> meas ((size_t) T), wts ((size_t) T);

@@ -223,7 +223,9 @@ AI-made VST plugins for testing and fun.
      small offsets. 2. Polarity: evidence-weighted vote of every third frame's strongest peak.
   3. Frames (~43 ms window, hop/4, cross-spectra averaged over +-`contextMs` = 70 ms, coherence-weighted
      gamma^2/(1-gamma^2) GCC on a half-sample lag grid, 120 Hz - 8 kHz) -> Viterbi over 0.08 ms cells with an L1
-     cost per change and a fixed cost for a jump (cuts, other talker; crossfaded 10 ms when rendering) ->
+     cost per change and a fixed cost for a jump (cuts, other talker; crossfaded 10 ms when rendering; each
+     jump then moves to the quietest lav moment within +-150 ms if that is >= 6 dB quieter, so it doesn't
+     flam mid-word: on an edited Pro Tools dialogue scene 4 of 22 jumps were mid-speech, 1 after) ->
      sub-sample refine near the path -> Whittaker smoother per segment (`smoothingMs` 80; UI Follow
      Steady/Normal/Fast = 160/80/40), held flat before the first / after the last confident frame.
      `found` needs >= 25 frames with weight >= 0.2 (booth silence reached 38), otherwise the lav is left untouched.

@@ -271,7 +271,9 @@ namespace
             { "static 1.6 ms",            [] (double) { return 1.6; }, false, 40 },
             { "moving 0.6..3 ms",         [] (double t) { return 1.8 + 1.2 * std::sin (2 * pi * t / 7) + 0.4 * std::sin (2 * pi * t / 2.3 + 1); }, true, 50 },
             { "walking away 1..5 ms",     [] (double t) { return 1.0 + 4.0 * (0.5 - 0.5 * std::cos (2 * pi * t / 10)); }, false, 50 },
-            { "cut: 1.2 -> 3.4 ms",       [] (double t) { return (t < 15 ? 1.2 : 3.4) + 0.02 * t; }, false, 120 },
+            // the cut falls mid-syllable: steps move to the nearest quiet moment (up to 150 ms), so a few frames
+            // around it keep the old delay. p95 stays ~25 us.
+            { "cut: 1.2 -> 3.4 ms",       [] (double t) { return (t < 15 ? 1.2 : 3.4) + 0.02 * t; }, false, 200 },
             { "wireless lav late 2.9 ms", [] (double t) { return -2.9 + 0.8 * std::sin (2 * pi * t / 9); }, false, 50 },
             { "sync offset 31 ms",        [] (double t) { return 31.0 + 0.5 * std::sin (2 * pi * t / 6); }, false, 50 },
         };
