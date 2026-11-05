@@ -103,19 +103,31 @@ sound of comb filtering. It works on files, outside the DAW, so it suits any DAW
 1. **Drop files or folders** onto the window: poly WAVs straight from the recorder, or mono files that share
    timecode (the media of an AAF export, or stems rendered from the DAW with the same start). Files whose
    timecode overlaps become one take.
-2. **Check the roles** of each take's channels: *Boom* (the reference, never changed), *Lav* (aligned to the
-   boom; any mic can be, e.g. a second boom or a plant) or *Off* (mixes). They are guessed from the track names
-   and follow the name in every take, so setting them once covers the whole shoot.
+2. **Check the roles** of each take's channels: *Ref* (the reference, never changed: usually the boom),
+   *Align* (moved in time and phase to match the Ref: lavs, a second boom, a plant mic) or *Off* (mix tracks).
+   They are guessed from the track names and follow the name in every take, so setting them once covers the
+   whole shoot. **Lav-to-lav sync** (no boom, or no usable boom): make one lav the *Ref* and the others *Align*.
 3. **Listen**: the graph shows how the delay changes over the take; *Play* with *Original* / *Aligned* (or the
-   **A** key) lets you hear boom + lavs before and after. *Phase match* shows how well each lav now sums with
-   the boom (100 % = perfectly in phase).
+   **A** key, **Space** to play) lets you hear everything mixed before and after; *Aligned mics* plays only the
+   mics LavAlign moved. *Phase match* shows how well each mic now sums with the Ref (100 % = perfectly in phase).
+   Low numbers after aligning usually mean the two mics hear little of the same sound (mostly the other actor,
+   room or noise), not that the alignment failed. *Polarity flipped* means the mic was wired or set inverted:
+   LavAlign turns it back.
 4. **Align & export all** writes aligned copies: by default with the same file names into an *Aligned* folder
-   next to the originals, so a DAW session or AAF can be relinked to them. Everything except the lav audio
-   (boom, mix tracks, timecode, scene/take, track names) stays as it was. The originals are never changed.
+   next to the originals, so a DAW session or AAF can be relinked to them (*Show files* opens the folder).
+   Everything except the aligned mics' audio (the Ref, mix tracks, timecode, scene/take, track names) stays as
+   it was. The originals are never changed.
 
-Settings: *Phase correction* (100 % recommended; 0 % = time alignment only), *Search* (how far apart boom and
-lav may be: wireless lavs arrive a few ms late, separate recorders synced by timecode can be a frame or more
-off), *Follow* (how quickly the alignment follows movement).
+Settings: *Phase correction* (100 % recommended; 0 % = time alignment only), *Search* (how far apart the Ref and
+the other mics may be: wireless lavs arrive a few ms late, separate recorders synced by timecode can be a frame
+or more off), *Follow* (how quickly the alignment follows movement: *Fast* for walk-and-talk, *Steady* for
+still scenes; *Normal* suits most).
+
+Edited dialogue tracks work too (render the boom and lav tracks of a scene from the DAW with the same start):
+the alignment jumps where the clip or the talker changes, and those jumps are placed in pauses where possible.
+
+On Windows, `LavAlign.exe` is a single file that runs without installing anything. Windows may warn
+*"Windows protected your PC"* the first time (free, unsigned program): click **More info > Run anyway**.
 
 ---
 Free and open source under the GNU AGPLv3. WaveRef includes the Rubber Band library (GPL v2 or later). Source code: https://github.com/MaczorLuksemburg/klaudiuszoweVST

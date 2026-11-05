@@ -585,6 +585,7 @@ namespace
         const int pi_ = args.indexOf ("--phase"); if (pi_ > 0) s.phaseCorrection = (float) args[pi_ + 1].getDoubleValue();
         const int ri = args.indexOf ("--range"); if (ri > 0) s.maxOffsetMs = args[ri + 1].getDoubleValue();
         const int si = args.indexOf ("--smooth"); if (si > 0) s.smoothingMs = args[si + 1].getDoubleValue();
+        if (args.contains ("--noseg")) s.phaseBySegment = false;
         AudioFileInfo bi, li;
         auto err = readInfo (bf, bi); if (err.isEmpty()) err = readInfo (lf, li);
         if (err.isNotEmpty()) { std::cout << err << std::endl; return 1; }
@@ -686,6 +687,7 @@ namespace
             const double v = args[i].fromFirstOccurrenceOf ("=", false, false).getDoubleValue();
             if (key == "smooth") s.smoothingMs = v;
             else if (key == "context") s.contextMs = v;
+            else if (key == "segphase") s.phaseBySegment = v > 0;
             else if (key == "phase") s.phaseCorrection = (float) v;
             else if (key == "range") s.maxOffsetMs = v;
             else if (key == "minfreq") s.minFreq = v;
@@ -769,6 +771,7 @@ namespace
             const double v = args[i].fromFirstOccurrenceOf ("=", false, false).getDoubleValue();
             if (key == "smooth") s.smoothingMs = v;
             else if (key == "context") s.contextMs = v;
+            else if (key == "segphase") s.phaseBySegment = v > 0;
         }
         std::vector<juce::String> rows ((size_t) lines.size());
         std::atomic<int> next { 0 }, done { 0 };
@@ -798,7 +801,7 @@ namespace
                 const auto qFixed = measureQuality (b[0].data(), y.data(), n, fs);
                 renderAligned (l[0].data(), y.data(), n, curve);
                 const auto qTrack = measureQuality (b[0].data(), y.data(), n, fs);
-                if (curve.found) correctPhase (b[0].data(), y.data(), n, fs, 1.0f);
+                if (curve.found) correctPhase (b[0].data(), y.data(), n, fs, 1.0f, {}, s.phaseBySegment ? curve.stepSamples() : std::vector<int64_t> {});
                 const auto qPhase = measureQuality (b[0].data(), y.data(), n, fs);
                 double lavRms = 0;
                 for (int64_t k = 0; k < n; ++k) lavRms += (double) l[0][(size_t) k] * l[0][(size_t) k];

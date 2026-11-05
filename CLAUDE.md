@@ -233,6 +233,16 @@ AI-made VST plugins for testing and fun.
   5. Spectral phase correction (`correctPhase`): block stats every 0.25 s, +-1.5 s Hann, 1/6-octave (>= 60 Hz)
      complex smoothing, coherence-gated phase-only filter, IR tapered to +-8 ms, WOLA with interpolated filters.
      Magnitude untouched (tested: <= 0.12 dB per octave).
+- Roles in the UI are *Ref / Align / Off* (code: `Role::boom / lav / off`): the Ref is usually the boom, a lav for
+  lav-to-lav sync (tested on an edited scene: lav vs lav -0.07 -> 0.46). Phase correction statistics restart at
+  each delay step (`Settings::phaseBySegment`, made no measurable difference on that scene but is the right model).
+- Tracking is at its ceiling: a cross-validated oracle (best delay per 100 ms piece chosen from its neighbours,
+  `scratchpad/py/oracle2.py` in the session that built it) scored at or below LavAlign on every real file. Low
+  scores on some lavs come from little shared sound (bleed, room, noise), not from tracking. Aligning each mic
+  to Ref + the other aligned mics (two passes) only gave +0.008 mix coherence / +0.08 lav-lav: not built.
+  Next real comparison: the same files rendered through Auto-Align Post 2's trial.
+- The app links the MSVC runtime statically (`MSVC_RUNTIME_LIBRARY`): `LavAlign.exe` is one file that runs on a
+  PC without the VC++ redistributable (the plugins still need it).
 - Quality metric (`measureQuality`): power-weighted mean cos(phase) of boom vs lav per 1/3 octave 150 Hz - 8 kHz
   over short frames; the UI shows it as "phase match" %.
 - Tuning data (not in git): `C:\Users\user\Documents\LavAlign test data` (Zenodo 10.5281/zenodo.10844598 lav DPA

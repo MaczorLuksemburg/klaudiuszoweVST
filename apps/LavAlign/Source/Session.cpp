@@ -71,8 +71,8 @@ juce::String Take::problem() const
     for (auto& f : files)
         if (std::abs (f.info.sampleRate - sampleRate) > 0.5)
             return "The files have different sample rates";
-    if (lavChannels().empty()) return "Nothing to align (no lav)";
-    if (boomChannel() < 0) return "No boom: mark one channel as the boom";
+    if (lavChannels().empty()) return "Nothing to align";
+    if (boomChannel() < 0) return "No Ref: mark one channel as Ref (usually the boom)";
     return {};
 }
 

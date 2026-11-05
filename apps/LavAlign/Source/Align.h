@@ -31,6 +31,7 @@ namespace lavalign
         bool   allowSteps      = true;  // delay may jump at cuts / speaker changes (crossfaded)
         float  phaseCorrection = 1.0f;  // 0..1, spectral phase correction strength
         int    threads         = 0;     // analysis threads, 0 = one per CPU core
+        bool   phaseBySegment  = true;  // phase correction statistics restart at each delay step
     };
 
     // Delay over time, one value per analysis frame (frame k is centred on sample k * hop + firstFrameCentre).
@@ -52,6 +53,7 @@ namespace lavalign
         int    confidentFrames = 0;     // frames with a clear correlation peak
 
         double delayAtSample (double samplePos) const;  // linear interpolation between frames
+        std::vector<int64_t> stepSamples() const;       // where each step (new segment) starts, in samples
         float  medianDelayMs() const;
         float  minDelayMs() const;
         float  maxDelayMs() const;
@@ -67,9 +69,10 @@ namespace lavalign
     void renderAligned (const float* lav, float* out, int64_t numSamples, const DelayCurve& curve);
 
     // Turns the remaining phase difference between 'lav' (already time-aligned) and 'boom' towards zero.
-    // In place on 'lav'. strength 0..1.
+    // In place on 'lav'. strength 0..1. 'segmentStarts' (samples, sorted): where the delay jumped (a cut, or the lav
+    // switching to another talker); the statistics behind the correction are not averaged across them.
     void correctPhase (const float* boom, float* lav, int64_t numSamples, double sampleRate, float strength,
-                       const Progress& progress = {});
+                       const Progress& progress = {}, const std::vector<int64_t>& segmentStarts = {});
 
     // How well two signals sum: per 1/3-octave band from 150 Hz to 8 kHz, the power-weighted mean cosine of the
     // phase difference between them over short frames (1 = in phase, 0 = unrelated, -1 = cancelling).

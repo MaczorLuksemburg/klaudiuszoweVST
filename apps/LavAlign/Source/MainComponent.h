@@ -118,6 +118,8 @@ namespace lavalign
         juce::TextButton folderButton, exportButton { "Align & export all" };
         juce::File exportFolder;  // empty: "Aligned" next to the sources
         juce::Label statusLabel;
+        juce::TextButton openFolderButton { "Show files" };
+        juce::File lastExportFolder;  // where the last export wrote ("Show files")
         bool dragOver = false;
 
         std::unique_ptr<juce::FileChooser> chooser;

@@ -26,6 +26,10 @@ target_sources(LavAlign PRIVATE
 
 target_compile_definitions(LavAlign PRIVATE ${LAVALIGN_DEFINITIONS})
 
+# One self-contained .exe: the C++ runtime is linked in, so it runs on PCs without the
+# Visual C++ redistributable (it is handed around as a single file).
+set_property(TARGET LavAlign PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
 target_link_libraries(LavAlign
     PRIVATE
         klaud_shared

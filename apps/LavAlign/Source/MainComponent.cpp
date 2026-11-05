@@ -121,9 +121,10 @@ public:
             {
                 auto row = std::make_unique<Row>();
                 row->index = (int) i;
-                row->role.setOptions ({ "Boom", "Lav", "Off" }, roleIndex (take->channels[i].role));
-                row->role.setTooltip ("Boom: the reference, never changed.\nLav: aligned to the boom (any mic can be, e.g. a second boom or a plant).\n"
-                                      "Off: left out.\nRoles follow the track name in every take.");
+                row->role.setOptions ({ "Ref", "Align", "Off" }, roleIndex (take->channels[i].role));
+                row->role.setTooltip ("Ref: the reference everything is aligned to, never changed. Usually the boom; for lav-to-lav sync, one of the lavs.\n"
+                                      "Align: moved in time (and phase) to match the Ref: lavs, a second boom, a plant mic.\n"
+                                      "Off: left out (mix tracks).\nRoles follow the track name in every take, so setting them once covers the shoot.");
                 const int idx = (int) i;
                 row->role.onChange = [this, idx] (int sel)
                 {
@@ -166,8 +167,8 @@ public:
         g.setColour (juce::Colour (0xff7d8794));
         g.drawText ("CHANNEL", 12, 0, nameW, headerH, juce::Justification::centredLeft);
         g.drawText ("ROLE", nameW + 12, 0, 150, headerH, juce::Justification::centredLeft);
-        g.drawText ("DELAY TO BOOM", resultX(), 0, 140, headerH, juce::Justification::centredLeft);
-        g.drawText ("PHASE MATCH (SUM WITH BOOM)", resultX() + 150, 0, 260, headerH, juce::Justification::centredLeft);
+        g.drawText ("DELAY TO REF", resultX(), 0, 140, headerH, juce::Justification::centredLeft);
+        g.drawText ("PHASE MATCH WITH REF  (BEFORE / AFTER)", resultX() + 150, 0, 300, headerH, juce::Justification::centredLeft);
 
         if (owner.selectedTake < 0 || owner.selectedTake >= owner.session.numTakes()) return;
         const auto& take = owner.session.take (owner.selectedTake);
@@ -217,7 +218,7 @@ public:
                 if (! c.found)
                 {
                     g.setColour (juce::Colour (0xfff0b35a));
-                    g.drawText ("no common sound with the boom: left unchanged", resultX(), y, 400, rowH, juce::Justification::centredLeft);
+                    g.drawText ("no common sound with the Ref: left unchanged", resultX(), y, 400, rowH, juce::Justification::centredLeft);
                     continue;
                 }
                 juce::String d = juce::String (c.medianDelayMs(), 2) + " ms";
@@ -486,8 +487,9 @@ MainComponent::MainComponent() : lnf (makePalette())
     abButtons.setOptions ({ "Original", "Aligned" }, 1);
     abButtons.setTooltip ("Hear the lavs as recorded or aligned (switches smoothly). Shortcut: A");
     abButtons.onChange = [this] (int i) { preview.setAligned (i == 1); };
-    listenButtons.setOptions ({ "Boom + lavs", "Lavs", "Boom" }, 0);
-    listenButtons.setTooltip ("Boom + lavs: what a mix of both sounds like (levels matched). Comb filtering shows up as a hollow, phasey sound.");
+    listenButtons.setOptions ({ "All", "Aligned mics", "Ref" }, 0);
+    listenButtons.setTooltip ("All: the Ref and the aligned mics mixed (levels matched), what a dialogue mix of them sounds like. "
+                              "Comb filtering shows up as a hollow, phasey sound.\nAligned mics: only the mics LavAlign moves. Ref: the reference alone.");
     listenButtons.onChange = [this] (int i) { preview.setListen ((Preview::Listen) i); };
     playButton.setClickingTogglesState (false);
     playButton.onClick = [this]
@@ -586,6 +588,9 @@ MainComponent::MainComponent() : lnf (makePalette())
     statusLabel.setFont (klaud::font (12.5f));
     statusLabel.setColour (juce::Label::textColourId, juce::Colour (0xff7d8794));
     addAndMakeVisible (statusLabel);
+    openFolderButton.setTooltip ("Opens the folder the aligned files were written to");
+    openFolderButton.onClick = [this] { if (lastExportFolder.isDirectory()) lastExportFolder.startAsProcess(); };
+    addChildComponent (openFolderButton);
 
     loadSettings();
     preview.setListen (Preview::Listen::sum);
@@ -905,8 +910,9 @@ void MainComponent::startExport()
     {
         const int n = (int) takes.size();
         int files = 0;
+        juce::File firstFolder;
         juce::StringArray errors;
-        if (skipped > 0) errors.add (juce::String (skipped) + " take(s) without a boom skipped");
+        if (skipped > 0) errors.add (juce::String (skipped) + " take(s) without a Ref skipped");
         for (int i = 0; i < n && keepGoing(); ++i)
         {
             const auto& take = *takes[(size_t) i];
@@ -922,6 +928,7 @@ void MainComponent::startExport()
                 juce::String e;
                 const auto written = exportTake (take, outs, options, e, [&] (float p) { progress = (i + 0.9 + 0.1 * p) / n; return keepGoing(); });
                 files += written.size();
+                if (firstFolder == juce::File() && ! written.isEmpty()) firstFolder = written[0].getParentDirectory();
                 if (e.isNotEmpty()) errors.add (take.name + ": " + e);
             }
             else
@@ -943,10 +950,13 @@ void MainComponent::startExport()
             });
         }
         const bool cancelled = ! keepGoing();
-        juce::MessageManager::callAsync ([safe, files, errors, cancelled]
+        juce::MessageManager::callAsync ([safe, files, errors, cancelled, firstFolder]
         {
             if (safe == nullptr) return;
             safe->exporting = false;
+            safe->lastExportFolder = firstFolder;
+            safe->openFolderButton.setVisible (files > 0 && firstFolder.isDirectory());
+            safe->resized();
             safe->progress = 0.0;
             if (cancelled) safe->setStatus ("Export cancelled after " + juce::String (files) + " file(s)", true);
             else if (! errors.isEmpty()) safe->setStatus (juce::String (files) + " file(s) written. Problems: " + errors.joinIntoString ("; "), true);
@@ -1160,6 +1170,11 @@ void MainComponent::resized()
 
     auto status = body.removeFromBottom (24);
     progressBar.setBounds (status.removeFromRight (180).reduced (0, 5));
+    if (openFolderButton.isVisible())
+    {
+        status.removeFromRight (8);
+        openFolderButton.setBounds (status.removeFromRight (96).reduced (0, 1));
+    }
     statusLabel.setBounds (status);
     body.removeFromBottom (4);
 

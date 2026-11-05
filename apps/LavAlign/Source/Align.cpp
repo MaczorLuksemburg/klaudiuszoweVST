@@ -839,7 +839,8 @@ void renderAligned (const float* lav, float* out, int64_t n, const DelayCurve& c
 }
 
 //==============================================================================
-void correctPhase (const float* boom, float* lav, int64_t n, double fs, float strength, const Progress& progress)
+void correctPhase (const float* boom, float* lav, int64_t n, double fs, float strength, const Progress& progress,
+                   const std::vector<int64_t>& segmentStarts)
 {
     if (strength <= 0.0f || n <= 0) return;
 
@@ -856,6 +857,14 @@ void correctPhase (const float* boom, float* lav, int64_t n, double fs, float st
 
     const int numFrames = (int) ((n + win) / hop) + 1;          // frame f starts at f * hop - win
     const int numBlocks = (numFrames + blockFrames - 1) / blockFrames;
+
+    // segment of each block (by its centre): statistics are only shared within a segment
+    std::vector<int> blockSegment ((size_t) numBlocks, 0);
+    for (int j = 0; j < numBlocks; ++j)
+    {
+        const auto centre = (int64_t) ((j + 0.5) * blockFrames * hop) - win / 2;
+        blockSegment[(size_t) j] = (int) (std::upper_bound (segmentStarts.begin(), segmentStarts.end(), centre) - segmentStarts.begin());
+    }
 
     // frequency smoothing width per bin: 1/6 octave, at least 60 Hz wide
     std::vector<int> lo ((size_t) nb), hi ((size_t) nb);
@@ -904,6 +913,7 @@ void correctPhase (const float* boom, float* lav, int64_t n, double fs, float st
         {
             const int b = j + i;
             if (b < statsFirst || b >= statsFirst + (int) stats.size()) continue;
+            if (blockSegment[(size_t) b] != blockSegment[(size_t) j]) continue;
             const auto& st = stats[(size_t) (b - statsFirst)];
             const double w = blockWeights[(size_t) (i + J)];
             for (int k = 0; k < nb; ++k)
@@ -1128,11 +1138,22 @@ bool alignLav (const float* boom, const float* lav, int64_t n, double fs, const 
 
     if (result.curve.found && s.phaseCorrection > 0.0f)
     {
-        correctPhase (boom, result.aligned.data(), n, fs, s.phaseCorrection, guard (sub (0.7f, 0.97f)));
+        correctPhase (boom, result.aligned.data(), n, fs, s.phaseCorrection, guard (sub (0.7f, 0.97f)),
+                      s.phaseBySegment ? result.curve.stepSamples() : std::vector<int64_t> {});
         if (cancelled) return false;
     }
     if (measure) result.after = measureQuality (boom, result.aligned.data(), n, fs);
     if (progress) progress (1.0f);
     return true;
+}
+}
+
+namespace lavalign
+{
+std::vector<int64_t> DelayCurve::stepSamples() const
+{
+    std::vector<int64_t> v;
+    for (int s : steps) v.push_back ((int64_t) std::llround (firstFrameCentre + (s - 0.5) * hop));
+    return v;
 }
 }
