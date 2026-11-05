@@ -24,6 +24,8 @@
 #include <functional>
 #include <iostream>
 #include <random>
+#include <thread>
+#include <atomic>
 
 using namespace lavalign;
 
@@ -748,6 +750,83 @@ namespace
         return 0;
     }
 
+    // Batch evaluation of many short pairs ("boom.wav[:ch]|lav.wav[:ch]" per line), several pairs at a time.
+    // One CSV row per pair: delay found, polarity, and the sum quality untreated, with one fixed offset (the
+    // median delay), with the tracked delay, and with tracking + phase correction.
+    int runBatchEval (const juce::StringArray& args)
+    {
+        if (args.size() < 3) { std::cout << "usage: --batch-eval <pairs.txt> <out.csv> [smooth=ms] [context=ms]" << std::endl; return 2; }
+        juce::StringArray lines;
+        juce::File::getCurrentWorkingDirectory().getChildFile (args[1]).readLines (lines);
+        lines.removeEmptyStrings();
+        Settings s;
+        s.threads = 1;
+        for (int i = 3; i < args.size(); ++i)
+        {
+            const auto key = args[i].upToFirstOccurrenceOf ("=", false, false);
+            const double v = args[i].fromFirstOccurrenceOf ("=", false, false).getDoubleValue();
+            if (key == "smooth") s.smoothingMs = v;
+            else if (key == "context") s.contextMs = v;
+        }
+        std::vector<juce::String> rows ((size_t) lines.size());
+        std::atomic<int> next { 0 }, done { 0 };
+        auto worker = [&]
+        {
+            for (int i; (i = next++) < lines.size();)
+            {
+                const auto& line = lines[i];
+                juce::File bf, lf; int bc, lc;
+                if (line.startsWith ("#") || ! parseSpec (line.upToFirstOccurrenceOf ("|", false, false).trim(), bf, bc)
+                    || ! parseSpec (line.fromFirstOccurrenceOf ("|", false, false).trim(), lf, lc))
+                { ++done; continue; }
+                AudioFileInfo bi, li;
+                readInfo (bf, bi); readInfo (lf, li);
+                std::vector<std::vector<float>> b, l;
+                if (readChannels (bi, { bc }, b).isNotEmpty() || readChannels (li, { lc }, l).isNotEmpty()) { ++done; continue; }
+                const auto n = (int64_t) std::min (b[0].size(), l[0].size());
+                const double fs = li.sampleRate;
+                const auto before = measureQuality (b[0].data(), l[0].data(), n, fs);
+                const auto curve = analyse (b[0].data(), l[0].data(), n, fs, s);
+                std::vector<float> y ((size_t) n);
+                // one fixed offset: the median delay, same polarity
+                DelayCurve fixed = curve;
+                std::fill (fixed.delay.begin(), fixed.delay.end(), (float) (curve.medianDelayMs() * fs / 1000.0));
+                fixed.steps.clear();
+                renderAligned (l[0].data(), y.data(), n, fixed);
+                const auto qFixed = measureQuality (b[0].data(), y.data(), n, fs);
+                renderAligned (l[0].data(), y.data(), n, curve);
+                const auto qTrack = measureQuality (b[0].data(), y.data(), n, fs);
+                if (curve.found) correctPhase (b[0].data(), y.data(), n, fs, 1.0f);
+                const auto qPhase = measureQuality (b[0].data(), y.data(), n, fs);
+                double lavRms = 0;
+                for (int64_t k = 0; k < n; ++k) lavRms += (double) l[0][(size_t) k] * l[0][(size_t) k];
+                lavRms = 10 * std::log10 (lavRms / std::max<int64_t> (1, n) + 1e-30);
+                juce::String row;
+                row << lf.getParentDirectory().getFileName() << "," << lf.getFileNameWithoutExtension() << ","
+                    << juce::String ((double) n / fs, 2) << "," << juce::String (lavRms, 1) << "," << (curve.found ? 1 : 0) << ","
+                    << (curve.polarity < 0 ? -1 : 1) << "," << juce::String (curve.medianDelayMs(), 4) << ","
+                    << juce::String (curve.minDelayMs(), 4) << "," << juce::String (curve.maxDelayMs(), 4) << ","
+                    << (int) curve.steps.size() << "," << curve.confidentFrames << ","
+                    << juce::String (before.mean, 4) << "," << juce::String (qFixed.mean, 4) << ","
+                    << juce::String (qTrack.mean, 4) << "," << juce::String (qPhase.mean, 4);
+                rows[(size_t) i] = row;
+                const int d = ++done;
+                if (d % 250 == 0) std::cout << d << " / " << lines.size() << std::endl;
+            }
+        };
+        std::vector<std::thread> pool;
+        const int nt = std::max (1, (int) std::thread::hardware_concurrency());
+        for (int i = 0; i < nt; ++i) pool.emplace_back (worker);
+        for (auto& t : pool) t.join();
+
+        juce::MemoryOutputStream csv;
+        csv << "talker,file,seconds,lav_db,found,polarity,delay_ms,min_ms,max_ms,steps,confident,q_before,q_fixed,q_track,q_phase\n";
+        for (auto& r : rows) if (r.isNotEmpty()) csv << r << "\n";
+        juce::File::getCurrentWorkingDirectory().getChildFile (args[2]).replaceWithData (csv.getData(), csv.getDataSize());
+        std::cout << "wrote " << args[2] << std::endl;
+        return 0;
+    }
+
     int runBench()
     {
         const double fs = 48000;
@@ -788,6 +867,7 @@ int main (int argc, char** argv)
     if (args[0] == "--process") return runProcess (args);
     if (args[0] == "--bench")   return runBench();
     if (args[0] == "--tune")    return runTune (args);
+    if (args[0] == "--batch-eval") return runBatchEval (args);
 #if LAVALIGN_TESTS_WITH_GUI
     if (args[0] == "--snapshot") return lavalign::renderSnapshots (juce::File::getCurrentWorkingDirectory().getChildFile (args[1]));
 #endif

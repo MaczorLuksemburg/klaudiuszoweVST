@@ -732,11 +732,12 @@ DelayCurve analyse (const float* boom, const float* lav, int64_t n, double fs, c
         curve.weight[(size_t) t] = (float) wts[(size_t) t];
     }
     curve.steps = steps;
-    // found: enough clearly correlated frames (unrelated signals only reach weights near 0.1 by chance)
+    // found: enough clearly correlated frames (~0.27 s). Unrelated signals only reach weights near 0.1 by chance;
+    // booth silence (lav at -90 dBFS) reached 12-38 frames, every real speech file of the Zenodo set >= 73.
     int confident = 0;
     for (auto w : wts) if (w >= 0.2) ++confident;
     curve.confidentFrames = confident;
-    curve.found = totalWeight > 0.5 && confident >= 12;
+    curve.found = totalWeight > 0.5 && confident >= 25;
     if (! curve.found)
     {
         std::fill (curve.delay.begin(), curve.delay.end(), 0.0f);

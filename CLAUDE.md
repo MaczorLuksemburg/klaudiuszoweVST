@@ -226,7 +226,7 @@ AI-made VST plugins for testing and fun.
      cost per change and a fixed cost for a jump (cuts, other talker; crossfaded 10 ms when rendering) ->
      sub-sample refine near the path -> Whittaker smoother per segment (`smoothingMs` 80; UI Follow
      Steady/Normal/Fast = 160/80/40), held flat before the first / after the last confident frame.
-     `found` needs >= 12 frames with weight >= 0.2, otherwise the lav is left untouched.
+     `found` needs >= 25 frames with weight >= 0.2 (booth silence reached 38), otherwise the lav is left untouched.
   4. Render: 64-tap Kaiser (beta 9) windowed sinc, 1024 phases; integer delays are an exact copy (tested).
   5. Spectral phase correction (`correctPhase`): block stats every 0.25 s, +-1.5 s Hann, 1/6-octave (>= 60 Hz)
      complex smoothing, coherence-gated phase-only filter, IR tapered to +-8 ms, WOLA with interpolated filters.
@@ -239,6 +239,12 @@ AI-made VST plugins for testing and fun.
   inverted). `LavAlign_Tests --tune [smooth= context= phase= ...] real=<list>` prints synthetic delay error and
   real time-only quality. Measured on 16 real pairs: untreated ~0, one fixed offset 0.48, dynamic 0.67,
   dynamic + phase correction 0.80. Real data prefers faster tracking than synthetic; don't over-smooth.
+  `--batch-eval <pairs.txt> <out.csv> [smooth=]` runs many short pairs in parallel (one CSV row each: delay,
+  polarity, quality untreated / fixed offset / tracked / + phase). Whole Zenodo set (5,652 files, 4.6 h, 18
+  talkers, `zenodo_pairs.txt`): -0.10 / 0.84 / 0.86 / 0.96; polarity consistent on every speech file, every
+  silence-only file rejected; per-talker delay is stable except where the talker moved between recordings.
+  Even there Follow Fast (40 ms) scored marginally best and Steady worst; Normal (80) stays the default because
+  the user approved its renders by ear.
 - Files (`Source/WavFile.*`): own RIFF/RF64 reader/writer. Every non-audio chunk (bext timecode, iXML, Zoom/SD
   notes) is copied verbatim, the sample format stays, untouched channels are copied byte for byte (tested),
   writes go to `.partial` then rename, never over the source. Track names: iXML TRACK_LIST, else bext `xTRKn=`
